@@ -1,18 +1,18 @@
-import { UserStatus } from 'src/shared/constants/auth.constant'
 import z from 'zod'
 import { RoleSchema } from './share-role.model'
 import { PermissionSchema } from './share-permission.model'
 
 export const UserSchema = z.object({
   id: z.number(),
-  email: z.string().email().nonempty(),
-  password: z.string().min(6).max(100).nonempty(),
-  name: z.string().min(1).max(100).nonempty(),
-  phoneNumber: z.string().min(10).max(15).or(z.null()),
+  email: z.string().email().min(1),
+  password: z.string().min(6).max(100).min(1),
+  fullName: z.string().min(1).max(100),
+  phone: z.string().min(10).max(15).nullable(),
   avatar: z.string().nullable(),
   totpSecret: z.string().nullable(),
-  status: z.enum([UserStatus.ACTIVE, UserStatus.INACTIVE, UserStatus.BLOCKED]),
+  isDeleted: z.boolean(),
   roleId: z.number().positive(),
+  hubId: z.number().nullable(),
   createdById: z.number().nullable(),
   updatedById: z.number().nullable(),
   deletedAt: z.date().nullable(),

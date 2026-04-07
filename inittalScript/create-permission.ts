@@ -6,10 +6,10 @@
 
 import { NestFactory } from '@nestjs/core'
 import { AppModule } from 'src/app.module'
-import { PrismaService } from 'src/shared/service/prisma.service'
-import roleName, { HTTPMethod } from 'src/shared/constants/role.constant'
+import { PrismaService } from 'src/database/prisma.service'
+import roleName, { HTTPMethod } from 'src/common/constants/role.constant'
 import { createClient } from 'redis'
-import envConfig from 'src/shared/config'
+import envConfig from 'src/config/config'
 
 const SellerModule = [
   'AUTH',
@@ -100,12 +100,12 @@ async function bootstrap() {
   }
 
   //tìm ruotes mà không tồn tại trong permissionInDb
-  const permissionToCreate = availableRoutes.filter((item) => !permissionInDbMap[`${item.method}-${item.path}`])
+  const permissionToCreate = availableRoutes.filter((item) => !permissionInDbMap[`${item.method}-${item.path}`]) as any
 
   //thêm các route vào permission db
   if (permissionToCreate.length > 0) {
     const createResult = await prisma.permission.createMany({
-      data: permissionToCreate,
+      data: permissionToCreate as any,
       skipDuplicates: true,
     })
     console.log('Created permission count:', createResult.count)
@@ -131,9 +131,9 @@ async function bootstrap() {
     .map((item) => ({ id: item.id }))
 
   await Promise.all([
-    updateRole(adminPermissionIds, roleName.Admin),
-    updateRole(sellerPermissionIds, roleName.Seller),
-    updateRole(clientPermissionIds, roleName.Client),
+    updateRole(adminPermissionIds, roleName.ADMIN),
+    updateRole(sellerPermissionIds, roleName.DRIVER),
+    updateRole(clientPermissionIds, roleName.CUSTOMER),
   ])
 
   // Clear cached role permissions in Redis

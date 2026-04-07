@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
-import roleName from 'src/shared/constants/role.constant'
-import { PrismaService } from 'src/shared/service/prisma.service'
+import roleName from 'src/common/constants/role.constant'
+import { PrismaService } from 'src/database/prisma.service'
 import { RoleType } from '../model/share-role.model'
 
 @Injectable()
@@ -23,7 +23,7 @@ export class SharedRoleRepository {
       return this.clientRoleId
     }
 
-    const role: RoleType = await this.getRole(roleName.Client)
+    const role: RoleType = await this.getRole(roleName.CUSTOMER)
     this.clientRoleId = role.id
     return role.id
   }
@@ -32,7 +32,7 @@ export class SharedRoleRepository {
       return this.adminRoleId
     }
 
-    const role: RoleType = await this.getRole(roleName.Admin)
+    const role: RoleType = await this.getRole(roleName.ADMIN)
     this.adminRoleId = role.id
     return role.id
   }

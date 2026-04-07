@@ -1,4 +1,4 @@
-import { ORDER_STATUS } from 'src/shared/constants/order.constant'
+import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import z from 'zod'
 
 export const OrderStatusSchema = z.enum([
