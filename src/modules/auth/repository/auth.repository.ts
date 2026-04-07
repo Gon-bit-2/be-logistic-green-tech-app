@@ -21,7 +21,7 @@ export class AuthRepository {
   }
   async createUserIncludeRole(
     user: Pick<UserType, 'email' | 'fullName' | 'password' | 'roleId'> & {
-      phoneNumber: string | null
+      phone: string | null
       avatar: string | null
     },
   ): Promise<UserType & { role: RoleType }> {
