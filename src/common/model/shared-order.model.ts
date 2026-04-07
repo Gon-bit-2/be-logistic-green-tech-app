@@ -2,8 +2,8 @@ import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import z from 'zod'
 
 export const OrderStatusSchema = z.enum([
-  ORDER_STATUS.UNPAID,
-  ORDER_STATUS.READY_TO_SHIP,
+  ORDER_STATUS.PENDING,
+  ORDER_STATUS.ASSIGNED,
   ORDER_STATUS.SHIPPED,
   ORDER_STATUS.COMPLETED,
   ORDER_STATUS.TO_RETURN,

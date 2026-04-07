@@ -26,20 +26,10 @@ const ConfigSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string(),
   GOOGLE_REDIRECT_URI: z.string(),
   GOOGLE_CLIENT_REDIRECT_URI: z.string(),
-  PREFIX_STATIC_ENDPOINT: z.string().url(),
-  S3_REGION: z.string(),
-  S3_ACCESS_KEY: z.string(),
-  S3_SECRET_KEY: z.string(),
-  S3_BUCKET_NAME: z.string(),
   REDIS_USERNAME: z.string(),
   REDIS_PASSWORD: z.string(),
   REDIS_HOST: z.string(),
   REDIS_PORT: z.coerce.number(),
-  PAYMENT_BANK_CODE: z.string(),
-  PAYMENT_ACCOUNT_NUMBER: z.string(),
-  CLOUDINARY_CLOUD_NAME: z.string(),
-  CLOUDINARY_API_KEY: z.string(),
-  CLOUDINARY_API_SECRET: z.string(),
 })
 
 const configServer = ConfigSchema.safeParse(process.env)

@@ -60,6 +60,9 @@ model User {
   updatedRoles            Role[]               @relation("RoleUpdatedBy")
   deletedRoles            Role[]               @relation("RoleDeletedBy")
   devices                 Device[]
+  vehicleDeletedBy        Vehicle[]            @relation("VehicleDeletedBy")
+  vehicleCreatedBy        Vehicle[]            @relation("VehicleCreatedBy")
+  vehicleUpdatedBy        Vehicle[]            @relation("VehicleUpdatedBy")
 
   @@unique([email, isDeleted])
   @@index([roleId])
@@ -167,7 +170,19 @@ model Vehicle {
   emissionRatePerKm Float // Hệ số xả thải (g CO2/km) - Dùng tính Green Tech
   isActive          Boolean     @default(true)
 
-  trips Trip[]
+  hubId Int? // Biên chế xe thuộc kho bãi nào
+  hub   Hub? @relation("HubVehicles", fields: [hubId], references: [id])
+
+  trips       Trip[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("VehicleDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdById Int?
+  createdBy   User?     @relation("VehicleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById Int?
+  updatedBy   User?     @relation("VehicleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@map("vehicles")
 }
@@ -184,6 +199,7 @@ model Hub {
   staff               User[]     @relation("HubStaff")
   tripStops           TripStop[]
   ordersCurrentlyHere Order[]    @relation("OrdersAtHub") // Hàng đang tồn kho tại đây
+  vehicles            Vehicle[]  @relation("HubVehicles") // Xe biên chế tại kho
 
   @@map("hubs")
 }
@@ -194,10 +210,14 @@ model Order {
   trackingCode String @unique @default(cuid())
   customerId   Int
 
+  senderName    String
+  senderPhone   String
   senderAddress String
   senderLat     Float
   senderLng     Float
 
+  receiverName    String
+  receiverPhone   String
   receiverAddress String
   receiverLat     Float
   receiverLng     Float
@@ -210,7 +230,8 @@ model Order {
   shippingFee       Decimal  @db.Decimal(18, 2)
   estimatedCo2Saved Decimal? @db.Decimal(18, 6) // Lượng CO2 dự kiến tiết kiệm được
 
-  currentHubId Int? // Null nếu đang đi trên đường, có ID nếu đang nằm trong kho
+  currentHubId  Int? // Null nếu đang đi trên đường, có ID nếu đang nằm trong kho
+  currentTripId Int? // Null nếu nằm trong kho, có ID nếu đang gán trên xe chờ bốc hoặc trên đường đi
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -222,6 +243,7 @@ model Order {
   // Relations
   customer       User                 @relation("CustomerOrders", fields: [customerId], references: [id])
   currentHub     Hub?                 @relation("OrdersAtHub", fields: [currentHubId], references: [id])
+  currentTrip    Trip?                @relation("OrdersOnTrip", fields: [currentTripId], references: [id])
   createdBy      User?                @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
   updatedBy      User?                @relation("OrderUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
   deletedBy      User?                @relation("OrderDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
@@ -234,6 +256,7 @@ model Order {
   @@index([customerId])
   @@index([status])
   @@index([currentHubId])
+  @@index([currentTripId])
   @@index([createdAt])
   @@index([deletedAt])
   @@map("orders")
@@ -287,10 +310,11 @@ model Trip {
   updatedAt DateTime @updatedAt
 
   // Relations
-  vehicle     Vehicle          @relation(fields: [vehicleId], references: [id])
-  driver      User             @relation("DriverTrips", fields: [driverId], references: [id])
-  stops       TripStop[]
-  emissionLog TripEmissionLog?
+  vehicle       Vehicle          @relation(fields: [vehicleId], references: [id])
+  driver        User             @relation("DriverTrips", fields: [driverId], references: [id])
+  ordersOnBoard Order[]          @relation("OrdersOnTrip") // Các đơn hàng ĐANG được chở trên chuyến xe này
+  stops         TripStop[]
+  emissionLog   TripEmissionLog?
 
   @@index([vehicleId])
   @@index([driverId])
