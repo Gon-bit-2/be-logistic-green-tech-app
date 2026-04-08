@@ -11,25 +11,62 @@ export class VehicleRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createdById: number, data: CreateVehicleBodyType) {
-    return this.prisma.vehicle.create({ data: { ...data, createdById } })
+    return await this.prisma.vehicle.create({ data: { ...data, createdById } })
   }
 
   async findAll(query: GetAllVehiclesQueryType) {
-    return this.prisma.vehicle.findMany({ where: query })
+    const { page, limit, type, fuelType, isActive, search } = query
+    const skip = (page - 1) * limit
+
+    const where = {
+      deletedAt: null,
+      ...(type && { type }),
+      ...(fuelType && { fuelType }),
+      ...(isActive !== undefined && { isActive }),
+      ...(search && {
+        licensePlate: { contains: search, mode: 'insensitive' as const },
+      }),
+    }
+
+    const [data, totalItems] = await Promise.all([
+      this.prisma.vehicle.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.vehicle.count({ where }),
+    ])
+
+    return { data, totalItems }
   }
 
   async findById(id: number) {
-    return this.prisma.vehicle.findUnique({ where: { id } })
+    return await this.prisma.vehicle.findFirst({
+      where: { id, deletedAt: null },
+    })
+  }
+
+  async findByLicensePlate(licensePlate: string) {
+    return await this.prisma.vehicle.findFirst({
+      where: { licensePlate, deletedAt: null },
+    })
   }
 
   async update(updatedById: number, id: number, data: UpdateVehicleBodyType) {
-    return this.prisma.vehicle.update({ where: { id }, data: { ...data, updatedById } })
+    return await this.prisma.vehicle.update({
+      where: { id },
+      data: { ...data, updatedById },
+    })
   }
 
   async delete({ id, deletedById }: { id: number; deletedById: number }, isHard?: boolean) {
     if (isHard) {
-      return this.prisma.vehicle.delete({ where: { id } })
+      return await this.prisma.vehicle.delete({ where: { id } })
     }
-    return this.prisma.vehicle.update({ where: { id }, data: { deletedAt: new Date(), deletedById } })
+    return await this.prisma.vehicle.update({
+      where: { id },
+      data: { deletedAt: new Date(), deletedById },
+    })
   }
 }
