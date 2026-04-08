@@ -1,9 +1,9 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 import { Module } from '@nestjs/common'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
 import { AuthModule } from 'src/modules/auth/auth.module'
+import { VehicleModule } from 'src/modules/vehicle/vehicle.module'
+import { HubModule } from 'src/modules/hub/hub.module'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { APP_GUARD } from '@nestjs/core'
 import { ThrottlerBehindProxyGuard } from 'src/common/guards/throttler-behind-proxy.guard'
@@ -14,6 +14,8 @@ import envConfig from 'src/config/config'
 @Module({
   imports: [
     AuthModule,
+    VehicleModule,
+    HubModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {
