@@ -10,12 +10,16 @@ import { ThrottlerBehindProxyGuard } from 'src/common/guards/throttler-behind-pr
 import { CacheModule } from '@nestjs/cache-manager'
 import { createKeyv } from '@keyv/redis'
 import envConfig from 'src/config/config'
+import { LanguageModule } from 'src/modules/language/language.module'
+import { VehicleTranslationModule } from 'src/modules/vehicle/vehicle-translation/vehicle-translation.module'
 
 @Module({
   imports: [
     AuthModule,
     VehicleModule,
+    VehicleTranslationModule,
     HubModule,
+    LanguageModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {
