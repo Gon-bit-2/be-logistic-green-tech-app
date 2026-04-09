@@ -17,7 +17,7 @@ export class EmailService {
     // })
     const subject = 'Mã OTP'
     return await this.resend.emails.send({
-      from: 'thiendev <no-reply@thiendev.id.vn>',
+      from: 'thiendev <no-reply@gonshoe.online>',
       to: [payload.email],
       subject: subject,
       react: <OTPVerificationEmail otpCode={payload.code} title={subject} />,
