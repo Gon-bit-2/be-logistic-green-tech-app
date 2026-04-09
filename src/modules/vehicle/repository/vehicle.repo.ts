@@ -8,10 +8,10 @@ import {
 
 @Injectable()
 export class VehicleRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prismaService: PrismaService) {}
 
   async create(createdById: number, data: CreateVehicleBodyType) {
-    return await this.prisma.vehicle.create({ data: { ...data, createdById } })
+    return await this.prismaService.vehicle.create({ data: { ...data, createdById } })
   }
 
   async findAll(query: GetAllVehiclesQueryType) {
@@ -29,32 +29,32 @@ export class VehicleRepository {
     }
 
     const [data, totalItems] = await Promise.all([
-      this.prisma.vehicle.findMany({
+      this.prismaService.vehicle.findMany({
         where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.vehicle.count({ where }),
+      this.prismaService.vehicle.count({ where }),
     ])
 
     return { data, totalItems }
   }
 
   async findById(id: number) {
-    return await this.prisma.vehicle.findFirst({
+    return await this.prismaService.vehicle.findFirst({
       where: { id, deletedAt: null },
     })
   }
 
   async findByLicensePlate(licensePlate: string) {
-    return await this.prisma.vehicle.findFirst({
+    return await this.prismaService.vehicle.findFirst({
       where: { licensePlate, deletedAt: null },
     })
   }
 
   async update(updatedById: number, id: number, data: UpdateVehicleBodyType) {
-    return await this.prisma.vehicle.update({
+    return await this.prismaService.vehicle.update({
       where: { id },
       data: { ...data, updatedById },
     })
@@ -62,11 +62,36 @@ export class VehicleRepository {
 
   async delete({ id, deletedById }: { id: number; deletedById: number }, isHard?: boolean) {
     if (isHard) {
-      return await this.prisma.vehicle.delete({ where: { id } })
+      const product = await this.prismaService.vehicle.delete({
+        where: {
+          id,
+        },
+      })
+
+      return product
     }
-    return await this.prisma.vehicle.update({
-      where: { id },
-      data: { deletedAt: new Date(), deletedById },
-    })
+    const [product] = await Promise.all([
+      this.prismaService.vehicle.update({
+        where: {
+          id,
+          deletedAt: null,
+        },
+        data: {
+          deletedAt: new Date(),
+          deletedById,
+        },
+      }),
+      this.prismaService.vehicleTranslation.updateMany({
+        where: {
+          vehicleId: id,
+          deletedAt: null,
+        },
+        data: {
+          deletedAt: new Date(),
+          deletedById,
+        },
+      }),
+    ])
+    return product
   }
 }
