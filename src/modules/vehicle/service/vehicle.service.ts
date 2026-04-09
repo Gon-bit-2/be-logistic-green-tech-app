@@ -3,6 +3,7 @@ import {
   CreateVehicleBodyType,
   GetAllVehiclesQueryType,
   UpdateVehicleBodyType,
+  VehicleSchemaType,
 } from 'src/modules/vehicle/model/vehicle.model'
 import { VehicleRepository } from 'src/modules/vehicle/repository/vehicle.repo'
 
@@ -10,7 +11,7 @@ import { VehicleRepository } from 'src/modules/vehicle/repository/vehicle.repo'
 export class VehicleService {
   constructor(private readonly vehicleRepo: VehicleRepository) {}
 
-  async create(createdById: number, data: CreateVehicleBodyType) {
+  async create(createdById: number, data: CreateVehicleBodyType): Promise<VehicleSchemaType> {
     const existing = await this.vehicleRepo.findByLicensePlate(data.licensePlate)
     if (existing) {
       throw new ConflictException('Biển số xe đã tồn tại trong hệ thống')

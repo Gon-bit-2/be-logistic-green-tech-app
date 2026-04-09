@@ -31,38 +31,54 @@ model User {
   roleId     Int // Mặc định là CUSTOMER, có thể là ADMIN, DRIVER, WAREHOUSE_STAFF
   role       Role    @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  hubId                   Int? // Phân quyền cho WAREHOUSE_STAFF thuộc kho nào
-  createdAt               DateTime             @default(now())
-  updatedAt               DateTime             @updatedAt
-  createdById             Int? // Ai tạo tài khoản này (Admin tạo cho nhân viên)
-  updatedById             Int? // Ai cập nhật lần cuối (Admin hoặc chính người dùng)
-  deletedAt               DateTime? // Thời điểm xóa tài khoản (soft delete)
+  hubId                      Int? // Phân quyền cho WAREHOUSE_STAFF thuộc kho nào
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+  createdById                Int? // Ai tạo tài khoản này (Admin tạo cho nhân viên)
+  updatedById                Int? // Ai cập nhật lần cuối (Admin hoặc chính người dùng)
+  deletedAt                  DateTime? // Thời điểm xóa tài khoản (soft delete)
   // Relations
-  createdBy               User?                @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  updatedBy               User?                @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  createdUsers            User[]               @relation("UserCreatedBy")
-  updatedUsers            User[]               @relation("UserUpdatedBy")
-  assignedHub             Hub?                 @relation("HubStaff", fields: [hubId], references: [id])
-  orders                  Order[]              @relation("CustomerOrders")
-  tripsDriven             Trip[]               @relation("DriverTrips")
-  trackingLogs            OrderTrackingEvent[] @relation("UserTrackingLogs")
-  createdPermissions      Permission[]         @relation("PermissionCreatedBy")
-  updatedPermissions      Permission[]         @relation("PermissionUpdatedBy")
-  deletedPermissions      Permission[]         @relation("PermissionDeletedBy")
-  createdTripEmissionLogs TripEmissionLog[]    @relation("TripEmissionLogCreatedBy")
-  updatedTripEmissionLogs TripEmissionLog[]    @relation("TripEmissionLogUpdatedBy")
-  deletedTripEmissionLogs TripEmissionLog[]    @relation("TripEmissionLogDeletedBy")
-  createdOrders           Order[]              @relation("OrderCreatedBy")
-  updatedOrders           Order[]              @relation("OrderUpdatedBy")
-  deletedOrders           Order[]              @relation("OrderDeletedBy")
-  refreshTokens           RefreshToken[]
-  createdRoles            Role[]               @relation("RoleCreatedBy")
-  updatedRoles            Role[]               @relation("RoleUpdatedBy")
-  deletedRoles            Role[]               @relation("RoleDeletedBy")
-  devices                 Device[]
-  vehicleDeletedBy        Vehicle[]            @relation("VehicleDeletedBy")
-  vehicleCreatedBy        Vehicle[]            @relation("VehicleCreatedBy")
-  vehicleUpdatedBy        Vehicle[]            @relation("VehicleUpdatedBy")
+  createdBy                  User?                @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedBy                  User?                @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdUsers               User[]               @relation("UserCreatedBy")
+  updatedUsers               User[]               @relation("UserUpdatedBy")
+  assignedHub                Hub?                 @relation("HubStaff", fields: [hubId], references: [id])
+  orders                     Order[]              @relation("CustomerOrders")
+  tripsDriven                Trip[]               @relation("DriverTrips")
+  trackingLogs               OrderTrackingEvent[] @relation("UserTrackingLogs")
+  createdPermissions         Permission[]         @relation("PermissionCreatedBy")
+  updatedPermissions         Permission[]         @relation("PermissionUpdatedBy")
+  deletedPermissions         Permission[]         @relation("PermissionDeletedBy")
+  createdTripEmissionLogs    TripEmissionLog[]    @relation("TripEmissionLogCreatedBy")
+  updatedTripEmissionLogs    TripEmissionLog[]    @relation("TripEmissionLogUpdatedBy")
+  deletedTripEmissionLogs    TripEmissionLog[]    @relation("TripEmissionLogDeletedBy")
+  createdOrders              Order[]              @relation("OrderCreatedBy")
+  updatedOrders              Order[]              @relation("OrderUpdatedBy")
+  deletedOrders              Order[]              @relation("OrderDeletedBy")
+  refreshTokens              RefreshToken[]
+  createdRoles               Role[]               @relation("RoleCreatedBy")
+  updatedRoles               Role[]               @relation("RoleUpdatedBy")
+  deletedRoles               Role[]               @relation("RoleDeletedBy")
+  devices                    Device[]
+  vehicleDeletedBy           Vehicle[]            @relation("VehicleDeletedBy")
+  vehicleCreatedBy           Vehicle[]            @relation("VehicleCreatedBy")
+  vehicleUpdatedBy           Vehicle[]            @relation("VehicleUpdatedBy")
+  userTranslationsCreated    UserTranslation[]    @relation("UserTranslationCreatedBy")
+  userTranslationsUpdated    UserTranslation[]    @relation("UserTranslationUpdatedBy")
+  userTranslationsDeleted    UserTranslation[]    @relation("UserTranslationDeletedBy")
+  languagesCreated           Language[]           @relation("LanguageCreatedBy")
+  languagesUpdated           Language[]           @relation("LanguageUpdatedBy")
+  languagesDeleted           Language[]           @relation("LanguageDeletedBy")
+  userTranslations           UserTranslation[]
+  vehicleTranslationsCreated VehicleTranslation[] @relation("VehicleTranslationCreatedBy")
+  vehicleTranslationsUpdated VehicleTranslation[] @relation("VehicleTranslationUpdatedBy")
+  vehicleTranslationsDeleted VehicleTranslation[] @relation("VehicleTranslationDeletedBy")
+  hubsCreated                Hub[]                @relation("HubCreatedBy")
+  hubsUpdated                Hub[]                @relation("HubUpdatedBy")
+  hubsDeleted                Hub[]                @relation("HubDeletedBy")
+  hubTranslationsCreated     HubTranslation[]     @relation("HubTranslationCreatedBy")
+  hubTranslationsUpdated     HubTranslation[]     @relation("HubTranslationUpdatedBy")
+  hubTranslationsDeleted     HubTranslation[]     @relation("HubTranslationDeletedBy")
 
   @@unique([email, isDeleted])
   @@index([roleId])
@@ -71,6 +87,53 @@ model User {
   @@index([email])
   @@index([isDeleted])
   @@map("users")
+}
+
+model UserTranslation {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  languageId  String
+  language    Language @relation(fields: [languageId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  fullName    String   @db.VarChar(255)
+  description String   @db.Text
+  address     String?  @db.VarChar(500)
+  createdById Int?
+  createdBy   User?    @relation("UserTranslationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById Int?
+  updatedBy   User?    @relation("UserTranslationUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("UserTranslationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, languageId])
+  @@map("user_translations")
+}
+
+model Language {
+  id               String            @id
+  code             String            @unique
+  name             String
+  userTranslations UserTranslation[]
+
+  createdById Int?
+  createdBy   User? @relation("LanguageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById Int?
+  updatedBy   User? @relation("LanguageUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  deletedAt           DateTime?
+  deletedById         Int?
+  deletedBy           User?                @relation("LanguageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  vehicleTranslations VehicleTranslation[]
+  hubTranslations     HubTranslation[]
+
+  @@unique([id, code])
+  @@map("languages")
 }
 
 model Role {
@@ -173,35 +236,93 @@ model Vehicle {
   hubId Int? // Biên chế xe thuộc kho bãi nào
   hub   Hub? @relation("HubVehicles", fields: [hubId], references: [id])
 
-  trips       Trip[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
-  deletedById Int?
-  deletedBy   User?     @relation("VehicleDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  createdById Int?
-  createdBy   User?     @relation("VehicleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  updatedById Int?
-  updatedBy   User?     @relation("VehicleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  trips               Trip[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  deletedAt           DateTime?
+  deletedById         Int?
+  deletedBy           User?                @relation("VehicleDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdById         Int?
+  createdBy           User?                @relation("VehicleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById         Int?
+  updatedBy           User?                @relation("VehicleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  vehicleTranslations VehicleTranslation[]
 
   @@map("vehicles")
 }
 
-model Hub {
-  id        Int    @id @default(autoincrement())
-  code      String @unique // Mã kho (VD: SGN-HUB-01)
-  name      String
-  address   String
-  latitude  Float
-  longitude Float
+model VehicleTranslation {
+  id          Int      @id @default(autoincrement())
+  vehicleId   Int
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  languageId  String   @db.VarChar(10)
+  language    Language @relation(fields: [languageId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  name        String   @db.VarChar(255)
+  description String   @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("VehicleTranslationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdById Int?
+  createdBy   User?     @relation("VehicleTranslationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById Int?
+  updatedBy   User?     @relation("VehicleTranslationUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([vehicleId, languageId])
+  @@map("vehicle_translations")
+}
+
+model Hub {
+  id                  Int              @id @default(autoincrement())
+  code                String           @unique // Mã kho (VD: SGN-HUB-01)
+  name                String
+  address             String
+  latitude            Float
+  longitude           Float
+  isActive            Boolean          @default(true)
   // Relations
-  staff               User[]     @relation("HubStaff")
+  staff               User[]           @relation("HubStaff")
   tripStops           TripStop[]
-  ordersCurrentlyHere Order[]    @relation("OrdersAtHub") // Hàng đang tồn kho tại đây
-  vehicles            Vehicle[]  @relation("HubVehicles") // Xe biên chế tại kho
+  ordersCurrentlyHere Order[]          @relation("OrdersAtHub") // Hàng đang tồn kho tại đây
+  vehicles            Vehicle[]        @relation("HubVehicles") // Xe biên chế tại kho
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  deletedAt           DateTime?
+  deletedById         Int?
+  deletedBy           User?            @relation("HubDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdById         Int?
+  createdBy           User?            @relation("HubCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById         Int?
+  updatedBy           User?            @relation("HubUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  hubTranslations     HubTranslation[]
 
   @@map("hubs")
+}
+
+model HubTranslation {
+  id          Int      @id @default(autoincrement())
+  hubId       Int
+  hub         Hub      @relation(fields: [hubId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  languageId  String
+  language    Language @relation(fields: [languageId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  name        String   @db.VarChar(255)
+  description String   @db.Text
+  address     String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("HubTranslationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdById Int?
+  createdBy   User?     @relation("HubTranslationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById Int?
+  updatedBy   User?     @relation("HubTranslationUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([hubId, languageId])
+  @@map("hub_translations")
 }
 
 // 3. MODULE: ORDER MANAGEMENT (Quản lý đơn hàng)
