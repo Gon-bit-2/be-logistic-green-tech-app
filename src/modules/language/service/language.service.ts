@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
-import { LanguageRepository } from './repository/language.repository'
-import { CreateLanguageType, UpdateLanguageType } from './language.model'
+import { LanguageRepository } from 'src/modules/language/repository/language.repository'
+import { CreateLanguageType, UpdateLanguageType } from 'src/modules/language/model/language.model'
 
 @Injectable()
 export class LanguageService {
