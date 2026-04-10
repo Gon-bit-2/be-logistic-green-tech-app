@@ -1,14 +1,15 @@
 import z from 'zod'
 import { FuelType, VehicleType } from 'src/common/constants/vehicle.constant'
+import { PaginationQuerySchema } from 'src/common/model/request.model'
 
 export const VehicleSchema = z.object({
   id: z.number(),
   licensePlate: z.string(),
   type: z.enum([VehicleType.VAN, VehicleType.TRUCK, VehicleType.ELECTRIC_VAN, VehicleType.MOTORCYCLE]),
   fuelType: z.enum([FuelType.DIESEL, FuelType.ELECTRIC, FuelType.GASOLINE]),
-  capacityWeight: z.number().int().positive(),
-  capacityVolume: z.number().int().positive(),
-  emissionRatePerKm: z.number().int().positive(),
+  capacityWeight: z.number().positive(),
+  capacityVolume: z.number().positive(),
+  emissionRatePerKm: z.number().positive(),
   isActive: z.boolean(),
   hubId: z.number().int().positive().nullable(),
   createdAt: z.date(),
@@ -18,14 +19,34 @@ export const VehicleSchema = z.object({
   createdById: z.number().nullable(),
   updatedById: z.number().nullable(),
 })
+
+export const CreateVehicleBodySchema = VehicleSchema.pick({
+  licensePlate: true,
+  type: true,
+  fuelType: true,
+  capacityWeight: true,
+  capacityVolume: true,
+  emissionRatePerKm: true,
+  hubId: true,
+}).strict()
+
+export const UpdateVehicleBodySchema = CreateVehicleBodySchema.extend({
+  isActive: z.boolean().optional(),
+}).partial()
+
+export const GetAllVehiclesQuerySchema = PaginationQuerySchema.extend({
+  type: z.enum([VehicleType.VAN, VehicleType.TRUCK, VehicleType.ELECTRIC_VAN, VehicleType.MOTORCYCLE]).optional(),
+  fuelType: z.enum([FuelType.DIESEL, FuelType.ELECTRIC, FuelType.GASOLINE]).optional(),
+  isActive: z
+    .string()
+    .transform((val) => val === 'true')
+    .optional(),
+  search: z.string().optional(),
+})
+
 export const GetAllVehiclesResSchema = z.object({
   data: z.array(VehicleSchema),
   totalItems: z.number(),
-})
-export const GetAllVehiclesQuerySchema = z.object({
-  type: z.enum([VehicleType.VAN, VehicleType.TRUCK, VehicleType.ELECTRIC_VAN, VehicleType.MOTORCYCLE]).optional(),
-  fuelType: z.enum([FuelType.DIESEL, FuelType.ELECTRIC, FuelType.GASOLINE]).optional(),
-  isActive: z.boolean().optional(),
 })
 
 export const GetVehicleParamsSchema = z
@@ -34,18 +55,9 @@ export const GetVehicleParamsSchema = z
   })
   .strict()
 
-export const CreateVehicleBodySchema = VehicleSchema.pick({
-  type: true,
-  fuelType: true,
-  capacityWeight: true,
-  capacityVolume: true,
-  emissionRatePerKm: true,
-  licensePlate: true,
-  hubId: true,
-}).strict()
-export const UpdateVehicleBodySchema = CreateVehicleBodySchema.partial()
+export const GetVehicleDetailResSchema = VehicleSchema
 
-export type VehicleType = z.infer<typeof VehicleSchema>
+export type VehicleSchemaType = z.infer<typeof VehicleSchema>
 export type GetAllVehiclesResType = z.infer<typeof GetAllVehiclesResSchema>
 export type GetAllVehiclesQueryType = z.infer<typeof GetAllVehiclesQuerySchema>
 export type GetVehicleParamsType = z.infer<typeof GetVehicleParamsSchema>
