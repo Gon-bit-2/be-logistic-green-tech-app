@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { TypeOfVerificationCodeType } from 'src/common/constants/auth.constant'
 import { PrismaService } from 'src/database/prisma.service'
-import { VerificationCodeType } from 'src/modules/auth/auth.model'
+import { VerificationCodeType } from 'src/modules/auth/model/auth.model'
 
 @Injectable()
 export class VerificationCodeRepository {

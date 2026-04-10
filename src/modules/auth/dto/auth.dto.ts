@@ -11,7 +11,7 @@ import {
   RegisterResSchema,
   SendOTPBodySchema,
   VerifyOTPBodySchema,
-} from 'src/modules/auth/auth.model'
+} from 'src/modules/auth/model/auth.model'
 //Serializer
 
 export class RegisterBodyDTO extends createZodDto(RegisterBodySchema) {}

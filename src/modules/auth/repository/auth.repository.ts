@@ -3,7 +3,7 @@ import { TypeOfVerificationCodeType } from 'src/common/constants/auth.constant'
 import { RoleType } from 'src/common/model/share-role.model'
 import { WhereUniqueUserType } from 'src/common/repositories/shared-user.repo'
 import { PrismaService } from 'src/database/prisma.service'
-import { DeviceType, UserType } from 'src/modules/auth/auth.model'
+import { DeviceType, UserType } from 'src/modules/auth/model/auth.model'
 
 @Injectable()
 export class AuthRepository {

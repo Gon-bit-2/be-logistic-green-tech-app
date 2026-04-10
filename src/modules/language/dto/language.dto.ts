@@ -5,7 +5,7 @@ import {
   GetLanguageParamsSchema,
   GetLanguageResSchema,
   UpdateLanguageSchema,
-} from '../language.model'
+} from 'src/modules/language/model/language.model'
 
 export class LanguageBodyDto extends createZodDto(CreateLanguageSchema) {}
 export class LanguageUpdateBodyDto extends createZodDto(UpdateLanguageSchema) {}

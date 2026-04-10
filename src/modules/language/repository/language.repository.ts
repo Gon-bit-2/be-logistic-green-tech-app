@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { CreateLanguageType, UpdateLanguageType } from '../language.model'
+import { CreateLanguageType, UpdateLanguageType } from 'src/modules/language/model/language.model'
 import { PrismaService } from 'src/database/prisma.service'
 
 @Injectable()
