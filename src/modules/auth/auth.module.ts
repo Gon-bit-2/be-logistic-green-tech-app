@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common'
-import { AuthService } from './auth.service'
-import { AuthController } from './auth.controller'
+import { AuthService } from 'src/modules/auth/service/auth.service'
+import { AuthController } from 'src/modules/auth/controller/auth.controller'
 
-import { GoogleService } from './google.service'
+import { GoogleService } from 'src/modules/auth/service/google.service'
 
 import { VerificationCodeRepository } from 'src/modules/auth/repository/verificationCode.repo'
 import { SharedRoleRepository } from 'src/common/repositories/shared-role.repo'

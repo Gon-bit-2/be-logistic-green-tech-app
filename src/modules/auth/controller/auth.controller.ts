@@ -1,5 +1,5 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Ip, Get, Query, Res } from '@nestjs/common'
-import { AuthService } from './auth.service'
+import { AuthService } from 'src/modules/auth/service/auth.service'
 import {
   ForgotPasswordBodyDTO,
   GetAuthorizationUrlResDTO,
@@ -12,7 +12,7 @@ import {
   VerifyOTPBodyDTO,
 } from 'src/modules/auth/dto/auth.dto'
 import { ZodSerializerDto } from 'nestjs-zod'
-import { GoogleService } from './google.service'
+import { GoogleService } from 'src/modules/auth/service/google.service'
 import { type Response } from 'express'
 import { Throttle } from '@nestjs/throttler'
 import { isPublic } from 'src/common/decorators/auth.decorator'

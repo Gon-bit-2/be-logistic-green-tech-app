@@ -15,7 +15,7 @@ import {
   RegisterBodyType,
   SendOTPBodyType,
   VerifyOTPBodyType,
-} from 'src/modules/auth/auth.model'
+} from 'src/modules/auth/model/auth.model'
 import ms, { StringValue } from 'ms'
 // import { EmailService } from 'src/shared/service/email.service'
 import { TokenService } from 'src/common/services/token.service'
@@ -178,63 +178,56 @@ export class AuthService {
     return verificationCode
   }
   async login(body: LoginBodyType & { userAgent: string; ip: string }) {
-    try {
-      const user = await this.authRepository.findUniqueIncludeRole({
-        email: body.email,
-      })
-      if (!user) {
-        throw new UnprocessableEntityException([
-          {
-            message: 'Email Không Tồn Tại',
-            path: 'email',
-          },
-        ])
-      }
-      const isMatchPassword = await this.hashingService.compare(body.password, user.password)
-      if (!isMatchPassword) {
-        throw new UnprocessableEntityException([
-          {
-            message: 'Mật Khẩu Không Đúng',
-            path: 'password',
-          },
-        ])
-      }
-      //
-      if (user.totpSecret) {
-        if (!body.code) {
-          throw new UnprocessableEntityException([
-            {
-              message: 'Mã OTP không hợp lệ',
-              path: 'code',
-            },
-          ])
-        }
-        if (body.code) {
-          await this.validateVerificationCode({
-            email: user.email,
-            code: body.code,
-            type: TypeOfVerificationCode.LOGIN,
-          })
-        }
-      }
-      const device = await this.authRepository.createDevice({
-        userId: user.id,
-        userAgent: body.userAgent,
-        ip: body.ip,
-      })
-      const tokens = await this.generateTokens({
-        userId: user.id,
-        deviceId: device.id,
-        roleId: user.roleId,
-        roleName: user.role.name,
-      })
-      return tokens
-    } catch (error) {
-      if (error instanceof Error) {
-        throw new BadRequestException('Đăng Nhập Thất Bại!', error)
-      }
-      throw error
+    const user = await this.authRepository.findUniqueIncludeRole({
+      email: body.email,
+    })
+    if (!user) {
+      throw new UnprocessableEntityException([
+        {
+          message: 'Email Không Tồn Tại',
+          path: 'email',
+        },
+      ])
     }
+    const isMatchPassword = await this.hashingService.compare(body.password, user.password)
+    if (!isMatchPassword) {
+      throw new UnprocessableEntityException([
+        {
+          message: 'Mật Khẩu Không Đúng',
+          path: 'password',
+        },
+      ])
+    }
+    //
+    if (user.totpSecret) {
+      if (!body.code) {
+        throw new UnprocessableEntityException([
+          {
+            message: 'Mã OTP không hợp lệ',
+            path: 'code',
+          },
+        ])
+      }
+      if (body.code) {
+        await this.validateVerificationCode({
+          email: user.email,
+          code: body.code,
+          type: TypeOfVerificationCode.LOGIN,
+        })
+      }
+    }
+    const device = await this.authRepository.createDevice({
+      userId: user.id,
+      userAgent: body.userAgent,
+      ip: body.ip,
+    })
+    const tokens = await this.generateTokens({
+      userId: user.id,
+      deviceId: device.id,
+      roleId: user.roleId,
+      roleName: user.role.name,
+    })
+    return tokens
   }
 
   async generateTokens({ userId, deviceId, roleId, roleName }: IAccessTokenPayload) {
@@ -253,40 +246,33 @@ export class AuthService {
     return { accessToken, refreshToken }
   }
   async refreshToken({ refreshToken, userAgent, ip }: RefreshTokenBodyType & { userAgent: string; ip: string }) {
-    try {
-      //1 check token hợp lệ
-      const { userId } = await this.tokenService.verifyRefreshToken(refreshToken)
-      //2 check refreshtoken exist
-      const tokenInDB = await this.authRepository.findUniqueRefreshTokenIncludeUserRole({
-        token: refreshToken,
-      })
-      if (!tokenInDB) {
-        throw new UnauthorizedException('Refresh Token đã sử dụng')
-      }
-      const {
-        deviceId,
-        user: {
-          roleId,
-          role: { name: roleName },
-        },
-      } = tokenInDB
-      //3. Cập nhập device
-      const $updateDevice = this.authRepository.updateDevice(deviceId, {
-        userAgent,
-        ip,
-      })
-      //4. xóa token cũ
-      const $deleteToken = this.authRepository.deleteRefreshToken({ token: refreshToken })
-      //5. tạo cặp token mới
-      const $tokens = this.generateTokens({ userId, deviceId, roleId, roleName })
-      const [, , tokens] = await Promise.all([$updateDevice, $deleteToken, $tokens])
-      return tokens
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error
-      }
-      throw new UnprocessableEntityException()
+    //1 check token hợp lệ
+    const { userId } = await this.tokenService.verifyRefreshToken(refreshToken)
+    //2 check refreshtoken exist
+    const tokenInDB = await this.authRepository.findUniqueRefreshTokenIncludeUserRole({
+      token: refreshToken,
+    })
+    if (!tokenInDB) {
+      throw new UnauthorizedException('Refresh Token đã sử dụng')
     }
+    const {
+      deviceId,
+      user: {
+        roleId,
+        role: { name: roleName },
+      },
+    } = tokenInDB
+    //3. Cập nhập device
+    const updateDevicePromise = this.authRepository.updateDevice(deviceId, {
+      userAgent,
+      ip,
+    })
+    //4. xóa token cũ
+    const deleteTokenPromise = this.authRepository.deleteRefreshToken({ token: refreshToken })
+    //5. tạo cặp token mới
+    const tokensPromise = this.generateTokens({ userId, deviceId, roleId, roleName })
+    const [, , tokens] = await Promise.all([updateDevicePromise, deleteTokenPromise, tokensPromise])
+    return tokens
   }
 
   async logout(refreshToken: string) {
