@@ -3,11 +3,21 @@ import { PaginationQuerySchema } from 'src/common/model/request.model'
 
 export const HubSchema = z.object({
   id: z.number(),
-  code: z.string(),
-  name: z.string(),
-  address: z.string(),
-  latitude: z.number(),
-  longitude: z.number(),
+  code: z
+    .string()
+    .min(1, 'Mã kho không được để trống')
+    .max(20, 'Mã kho tối đa 20 ký tự')
+    .regex(/^[A-Z0-9-]+$/, 'Mã kho chỉ được chứa chữ in hoa, số và dấu gạch ngang (VD: SGN-HUB-01)'),
+  name: z.string().min(1, 'Tên kho không được để trống').max(255, 'Tên kho tối đa 255 ký tự'),
+  address: z.string().min(1, 'Địa chỉ không được để trống').max(500, 'Địa chỉ tối đa 500 ký tự'),
+  latitude: z
+    .number({ error: 'Vĩ độ phải là số' })
+    .min(-90, 'Vĩ độ phải nằm trong khoảng -90 đến 90')
+    .max(90, 'Vĩ độ phải nằm trong khoảng -90 đến 90'),
+  longitude: z
+    .number({ error: 'Kinh độ phải là số' })
+    .min(-180, 'Kinh độ phải nằm trong khoảng -180 đến 180')
+    .max(180, 'Kinh độ phải nằm trong khoảng -180 đến 180'),
 })
 
 export const CreateHubBodySchema = HubSchema.pick({
@@ -16,12 +26,7 @@ export const CreateHubBodySchema = HubSchema.pick({
   address: true,
   latitude: true,
   longitude: true,
-})
-  .extend({
-    latitude: z.number().min(-90).max(90),
-    longitude: z.number().min(-180).max(180),
-  })
-  .strict()
+}).strict()
 
 export const UpdateHubBodySchema = CreateHubBodySchema.partial()
 

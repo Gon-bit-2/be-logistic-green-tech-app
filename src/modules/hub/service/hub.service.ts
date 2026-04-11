@@ -44,9 +44,9 @@ export class HubService {
     return this.hubRepo.update(id, data)
   }
 
-  async delete(id: number) {
+  async delete(id: number, deletedById: number) {
     await this.findById(id)
-    return this.hubRepo.delete(id)
+    return this.hubRepo.delete(id, deletedById)
   }
 
   async assignStaff(hubId: number, userId: number) {
@@ -62,5 +62,24 @@ export class HubService {
     }
 
     return this.hubRepo.assignStaff(hubId, userId)
+  }
+
+  async removeStaff(hubId: number, userId: number) {
+    await this.findById(hubId)
+
+    const user = await this.shareUserRepo.findUniqueIncludeRolePermissions({ id: userId })
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng')
+    }
+
+    if (user.role.name !== roleName.WAREHOUSE_STAFF) {
+      throw new BadRequestException('Chỉ có thể xoá nhân viên có vai trò WAREHOUSE_STAFF khỏi kho')
+    }
+
+    if (user.hubId !== hubId) {
+      throw new BadRequestException('Nhân viên này không thuộc kho trung chuyển đã chọn')
+    }
+
+    return this.hubRepo.removeStaff(userId)
   }
 }

@@ -40,12 +40,12 @@ export class LanguageService {
     return updatedLanguage
   }
 
-  async remove(id: string) {
+  async remove(id: string, deletedById: number) {
     const language = await this.languageRepository.findOne(id)
     if (!language) {
       throw new Error('Ngôn ngữ không tồn tại')
     }
-    await this.languageRepository.deleteLanguage(id, true)
+    await this.languageRepository.deleteLanguage(id, deletedById)
     return {
       message: 'Xóa Thành Công',
     }

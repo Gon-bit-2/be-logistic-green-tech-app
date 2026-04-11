@@ -40,14 +40,12 @@ export class LanguageRepository {
       },
     })
   }
-  deleteLanguage(id: string, isHard?: boolean) {
-    if (isHard) {
-      return this.prismaService.language.delete({ where: { id } })
-    }
+  deleteLanguage(id: string, deletedById: number) {
     return this.prismaService.language.update({
       where: { id, deletedAt: null },
       data: {
         deletedAt: new Date(),
+        deletedById,
       },
     })
   }

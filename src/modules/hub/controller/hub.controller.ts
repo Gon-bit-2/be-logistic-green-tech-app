@@ -44,8 +44,8 @@ export class HubController {
   @Delete(':id')
   @IsAdmin()
   @ZodSerializerDto(MessageResDTO)
-  async remove(@Param('id', ParseIntPipe) id: number) {
-    await this.hubService.delete(id)
+  async remove(@Param('id', ParseIntPipe) id: number, @ActiveUser('userId') userId: number) {
+    await this.hubService.delete(id, userId)
     return { message: 'Xóa kho trung chuyển thành công' }
   }
 
@@ -53,5 +53,13 @@ export class HubController {
   @IsAdmin()
   assignStaff(@Param('id', ParseIntPipe) id: number, @Body() body: AssignStaffBodyDTO) {
     return this.hubService.assignStaff(id, body.userId)
+  }
+
+  @Delete(':id/staff/:userId')
+  @IsAdmin()
+  @ZodSerializerDto(MessageResDTO)
+  async removeStaff(@Param('id', ParseIntPipe) id: number, @Param('userId', ParseIntPipe) userId: number) {
+    await this.hubService.removeStaff(id, userId)
+    return { message: 'Xoá nhân viên khỏi kho trung chuyển thành công' }
   }
 }

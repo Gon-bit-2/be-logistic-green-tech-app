@@ -22,6 +22,7 @@ import { TokenService } from 'src/common/services/token.service'
 import { HashingService } from 'src/common/services/hashing.service'
 import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
 import { ShareUserRepository } from 'src/common/repositories/shared-user.repo'
+import { PrismaService } from 'src/database/prisma.service'
 import { VerificationCodeRepository } from 'src/modules/auth/repository/verificationCode.repo'
 import { SharedRoleRepository } from 'src/common/repositories/shared-role.repo'
 import { TypeOfVerificationCode, TypeOfVerificationCodeType } from 'src/common/constants/auth.constant'
@@ -40,6 +41,7 @@ export class AuthService {
     private readonly shareUserRepository: ShareUserRepository,
     private readonly verificationCodeRepository: VerificationCodeRepository,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly prismaService: PrismaService,
   ) {}
 
   private getTwoFactorPendingSecretCacheKey(userId: number) {
@@ -70,18 +72,23 @@ export class AuthService {
       }
       const clientRoleId = await this.sharedRoleRepository.getClientRoleId()
       const hashedPassword = await this.hashingService.hash(body.password)
-      const [user] = await Promise.all([
-        this.authRepository.createUser({
-          email: body.email,
-          password: hashedPassword,
-          fullName: body.fullName,
-          phone: body.phone,
-          roleId: clientRoleId,
-        }),
-        this.verificationCodeRepository.deleteVerificationCode({
-          email_type: {
+      const [user] = await this.prismaService.$transaction([
+        this.prismaService.user.create({
+          data: {
             email: body.email,
-            type: TypeOfVerificationCode.REGISTER,
+            password: hashedPassword,
+            fullName: body.fullName,
+            phone: body.phone,
+            roleId: clientRoleId,
+          },
+          omit: { password: true, totpSecret: true },
+        }),
+        this.prismaService.verificationCode.delete({
+          where: {
+            email_type: {
+              email: body.email,
+              type: TypeOfVerificationCode.REGISTER,
+            },
           },
         }),
       ])
@@ -262,17 +269,33 @@ export class AuthService {
         role: { name: roleName },
       },
     } = tokenInDB
-    //3. Cập nhập device
-    const updateDevicePromise = this.authRepository.updateDevice(deviceId, {
-      userAgent,
-      ip,
-    })
-    //4. xóa token cũ
-    const deleteTokenPromise = this.authRepository.deleteRefreshToken({ token: refreshToken })
-    //5. tạo cặp token mới
-    const tokensPromise = this.generateTokens({ userId, deviceId, roleId, roleName })
-    const [, , tokens] = await Promise.all([updateDevicePromise, deleteTokenPromise, tokensPromise])
-    return tokens
+    // 3. Chuẩn bị token mới (chỉ xử lý logic JWT, không ghi CSDL)
+    const [newAccessToken, newRefreshTokenStr] = await Promise.all([
+      this.tokenService.signAccessToken({ userId, deviceId, roleId, roleName }),
+      this.tokenService.signRefreshToken({ userId }),
+    ])
+    const decodedRefreshToken = await this.tokenService.verifyRefreshToken(newRefreshTokenStr)
+
+    // 4. Chạy Transaction đảm bảo tính toàn vẹn dữ liệu
+    await this.prismaService.$transaction([
+      this.prismaService.device.update({
+        where: { id: deviceId },
+        data: { userAgent, ip },
+      }),
+      this.prismaService.refreshToken.delete({
+        where: { token: refreshToken },
+      }),
+      this.prismaService.refreshToken.create({
+        data: {
+          token: newRefreshTokenStr,
+          userId,
+          expiresAt: new Date(decodedRefreshToken.exp * 1000),
+          deviceId,
+        },
+      }),
+    ])
+
+    return { accessToken: newAccessToken, refreshToken: newRefreshTokenStr }
   }
 
   async logout(refreshToken: string) {
@@ -318,13 +341,18 @@ export class AuthService {
     //3: cập nhập và xóa đi otp
     const hashedPassword = await this.hashingService.hash(newPassword)
 
-    //việc update and delete không phụ thuộc nhau => promise all
-    await Promise.all([
-      this.shareUserRepository.update({ id: user.id }, { password: hashedPassword, updatedById: user.id }),
-      this.verificationCodeRepository.deleteVerificationCode({
-        email_type: {
-          email: body.email,
-          type: TypeOfVerificationCode.FORGOT_PASSWORD,
+    // Chạy Transaction đảm bảo an toàn nếu một trong 2 query thất bại
+    await this.prismaService.$transaction([
+      this.prismaService.user.update({
+        where: { id: user.id },
+        data: { password: hashedPassword, updatedById: user.id },
+      }),
+      this.prismaService.verificationCode.delete({
+        where: {
+          email_type: {
+            email: body.email,
+            type: TypeOfVerificationCode.FORGOT_PASSWORD,
+          },
         },
       }),
     ])

@@ -54,8 +54,15 @@ export class HubRepository {
     return await this.prisma.hub.update({ where: { id }, data })
   }
 
-  async delete(id: number) {
-    return await this.prisma.hub.delete({ where: { id } })
+  async delete(id: number, deletedById: number) {
+    return await this.prisma.hub.update({
+      where: { id },
+      data: {
+        isActive: false,
+        deletedAt: new Date(),
+        deletedById,
+      },
+    })
   }
 
   async assignStaff(hubId: number, userId: number) {

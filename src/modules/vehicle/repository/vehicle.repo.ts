@@ -60,38 +60,16 @@ export class VehicleRepository {
     })
   }
 
-  async delete({ id, deletedById }: { id: number; deletedById: number }, isHard?: boolean) {
-    if (isHard) {
-      const product = await this.prismaService.vehicle.delete({
-        where: {
-          id,
-        },
-      })
-
-      return product
-    }
-    const [product] = await Promise.all([
-      this.prismaService.vehicle.update({
-        where: {
-          id,
-          deletedAt: null,
-        },
-        data: {
-          deletedAt: new Date(),
-          deletedById,
-        },
-      }),
-      this.prismaService.vehicleTranslation.updateMany({
-        where: {
-          vehicleId: id,
-          deletedAt: null,
-        },
-        data: {
-          deletedAt: new Date(),
-          deletedById,
-        },
-      }),
-    ])
-    return product
+  async delete({ id, deletedById }: { id: number; deletedById: number }) {
+    return await this.prismaService.vehicle.update({
+      where: {
+        id,
+        deletedAt: null,
+      },
+      data: {
+        deletedAt: new Date(),
+        deletedById,
+      },
+    })
   }
 }
