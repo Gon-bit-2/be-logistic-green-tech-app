@@ -11,6 +11,7 @@ import {
 } from 'src/modules/hub/dto/hub.dto'
 import { HubService } from 'src/modules/hub/service/hub.service'
 import { MessageResDTO } from 'src/common/dtos/response.dto'
+import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 
 @Controller('hubs')
 export class HubController {

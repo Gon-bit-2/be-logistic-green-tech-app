@@ -15,6 +15,7 @@ export class OrderRepository {
       totalVolume: number
       shippingFee: number
       estimatedCo2Saved: number
+      currentHubId: number | null
     },
   ) {
     const { items, ...restPayload } = payload
