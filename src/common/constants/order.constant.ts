@@ -15,12 +15,5 @@ export const SERVICE_TYPE = {
   ECO_GREEN: 'ECO_GREEN', // Giao hàng gom chuyến, tối ưu CO2
 } as const
 
-export const STOP_TYPE = {
-  PICKUP: 'PICKUP', // Điểm lấy hàng từ khách
-  DROPOFF: 'DROPOFF', // Điểm giao hàng cho khách
-  HUB_TRANSFER: 'HUB_TRANSFER', // Điểm dừng tại kho trung chuyển
-} as const
-
 export type OrderStatusType = (typeof ORDER_STATUS)[keyof typeof ORDER_STATUS]
 export type ServiceType = (typeof SERVICE_TYPE)[keyof typeof SERVICE_TYPE]
-export type StopType = (typeof STOP_TYPE)[keyof typeof STOP_TYPE]

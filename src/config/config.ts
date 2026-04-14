@@ -30,6 +30,8 @@ const ConfigSchema = z.object({
   REDIS_PASSWORD: z.string(),
   REDIS_HOST: z.string(),
   REDIS_PORT: z.coerce.number(),
+  STRIPE_SECRET_KEY: z.string(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
 })
 
 const configServer = ConfigSchema.safeParse(process.env)

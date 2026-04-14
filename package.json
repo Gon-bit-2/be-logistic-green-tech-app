@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@keyv/redis": "^5.1.6",
+    "@nestjs/bullmq": "^11.0.4",
     "@nestjs/cache-manager": "^3.1.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
@@ -32,6 +33,7 @@
     "@react-email/components": "^1.0.10",
     "@types/jsonwebtoken": "^9.0.10",
     "bcrypt": "^6.0.0",
+    "bullmq": "^5.73.5",
     "date-fns": "^4.1.0",
     "google-auth-library": "^10.6.2",
     "googleapis": "^171.4.0",
@@ -45,6 +47,7 @@
     "reflect-metadata": "^0.2.2",
     "resend": "^6.9.4",
     "rxjs": "^7.8.1",
+    "stripe": "^22.0.1",
     "uuid": "^13.0.0",
     "zod": "^4.3.6"
   },
