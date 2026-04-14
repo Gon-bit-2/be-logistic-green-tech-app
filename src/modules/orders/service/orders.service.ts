@@ -1,10 +1,50 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { CreateOrderBodyType, GetOrderListQueryType, UpdateOrderStatusType } from '../model/order.model'
 import { OrderRepository } from '../repository/order.repo'
 import { calculateHaversineDistance } from 'src/utils/geo.util'
+import { PrismaService } from 'src/database/prisma.service'
+
 @Injectable()
 export class OrdersService {
-  constructor(private readonly orderRepo: OrderRepository) {}
+  private readonly logger = new Logger(OrdersService.name)
+
+  constructor(
+    private readonly orderRepo: OrderRepository,
+    private readonly prismaService: PrismaService,
+  ) {}
+
+  /**
+   * Tìm Hub gần nhất với tọa độ người gửi (Geo-Fencing Assignment).
+   * Sử dụng Haversine Distance để so sánh khoảng cách chim bay từ sender tới toàn bộ Hub.
+   * Giải quyết bài toán "Đơn mồ côi" - đơn hàng mới tạo không thuộc Hub nào.
+   */
+  private async findNearestHubId(senderLat: number, senderLng: number): Promise<number | null> {
+    const activeHubs = await this.prismaService.hub.findMany({
+      where: { isActive: true, deletedAt: null },
+      select: { id: true, latitude: true, longitude: true, name: true },
+    })
+
+    if (!activeHubs.length) {
+      this.logger.warn('[ORDER] Không có Hub nào đang hoạt động. Đơn hàng sẽ không được gán Hub.')
+      return null
+    }
+
+    let nearestHubId: number | null = null
+    let minDistance = Infinity
+
+    for (const hub of activeHubs) {
+      const dist = calculateHaversineDistance(senderLat, senderLng, hub.latitude, hub.longitude)
+      if (dist < minDistance) {
+        minDistance = dist
+        nearestHubId = hub.id
+      }
+    }
+
+    this.logger.log(
+      `[ORDER] Gán đơn hàng về Hub gần nhất (ID: ${nearestHubId}, khoảng cách: ${minDistance.toFixed(2)}km)`,
+    )
+    return nearestHubId
+  }
 
   async create(createdById: number, customerId: number, payload: CreateOrderBodyType) {
     let totalWeight = 0
@@ -38,12 +78,16 @@ export class OrdersService {
     // Ví dụ: Tiết kiệm được 0.05kg CO2 cho mỗi km bằng xe điện chuyên chở gom chuyến ghép.
     const estimatedCo2Saved = distanceKm * 0.05
 
-    // 5. Giao tiếp với Repository bằng Type chuẩn của Domain
+    // 5. Geo-Fencing: Tìm Hub gần nhất với tọa độ người gửi và gán vào đơn
+    const currentHubId = await this.findNearestHubId(payload.senderLat, payload.senderLng)
+
+    // 6. Giao tiếp với Repository bằng Type chuẩn của Domain
     const createdOrder = await this.orderRepo.create(createdById, customerId, payload, {
       totalWeight,
       totalVolume,
       shippingFee,
       estimatedCo2Saved,
+      currentHubId,
     })
 
     return {
