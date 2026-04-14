@@ -45,9 +45,11 @@ export const OrderSchema = z.object({
   totalWeight: z.number(),
   totalVolume: z.number(),
   shippingFee: z.number(),
-  estimatedCo2Saved: z.number().optional(),
-  currentHubId: z.number().optional(),
-  currentTripId: z.number().optional(),
+  estimatedCo2Saved: z.number().nullable().optional(),
+  currentHubId: z.number().nullable().optional(),
+  currentTripId: z.number().nullable().optional(),
+  preferredDeliveryTimeStart: z.coerce.date().nullable().optional(),
+  preferredDeliveryTimeEnd: z.coerce.date().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
   deletedAt: z.date().optional(),
@@ -103,6 +105,9 @@ export const CreateOrderBodySchema = z.object({
   receiverAddress: z.string().min(5, 'Địa chỉ người nhận không hợp lệ'),
   receiverLat: z.number(),
   receiverLng: z.number(),
+
+  preferredDeliveryTimeStart: z.coerce.date().optional(),
+  preferredDeliveryTimeEnd: z.coerce.date().optional(),
 
   serviceType: ServiceTypeSchema.default(SERVICE_TYPE.STANDARD),
 

@@ -82,16 +82,26 @@
     "typescript-eslint": "^8.20.0"
   },
   "jest": {
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/$1",
+      "^generated/(.*)$": "<rootDir>/../generated/$1",
+      "^emails/(.*)$": "<rootDir>/../emails/$1",
+      "^uuid$": "<rootDir>/../test/uuid-mock.js"
+    },
     "moduleFileExtensions": [
       "js",
       "json",
-      "ts"
+      "ts",
+      "tsx"
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)sx?$": "ts-jest"
     },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!uuid)/"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
