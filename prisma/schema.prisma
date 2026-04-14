@@ -73,6 +73,9 @@ model User {
   hubsCreated             Hub[]                @relation("HubCreatedBy")
   hubsUpdated             Hub[]                @relation("HubUpdatedBy")
   hubsDeleted             Hub[]                @relation("HubDeletedBy")
+  // Phase 4: Payment audit relations
+  createdPayments         Payment[]            @relation("PaymentCreatedBy")
+  updatedPayments         Payment[]            @relation("PaymentUpdatedBy")
 
   @@unique([email, isDeleted])
   @@index([roleId])
@@ -311,10 +314,11 @@ model Order {
   createdBy      User?                @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
   updatedBy      User?                @relation("OrderUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
   deletedBy      User?                @relation("OrderDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  items          OrderItem[]
-  trackingEvents OrderTrackingEvent[]
-  tripStops      TripStop[]
-  payment        Payment?
+  items                OrderItem[]
+  trackingEvents       OrderTrackingEvent[]
+  tripStops            TripStop[]
+  payment              Payment?
+  emissionAllocations  OrderEmissionAllocation[] // Phase 4: Phân bổ CO₂ cho từng đơn
 
   @@index([trackingCode])
   @@index([customerId])
@@ -350,12 +354,21 @@ model Payment {
   method  PaymentMethod @default(STRIPE)
   status  PaymentStatus @default(PENDING)
 
-  transactionId String?  @unique // Mã giao dịch từ Stripe (để đối soát)
+  transactionId String?  @unique // Mã giao dịch từ Stripe Payment Intent ID (để đối soát)
+  paidAt        DateTime? // Thời điểm thanh toán thành công
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // Audit trail
+  createdById   Int?
+  createdBy     User?    @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById   Int?
+  updatedBy     User?    @relation("PaymentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@index([status])
+  @@index([createdAt])
   @@map("payments")
 }
 
@@ -378,7 +391,7 @@ model Trip {
   driver        User             @relation("DriverTrips", fields: [driverId], references: [id])
   ordersOnBoard Order[]          @relation("OrdersOnTrip") // Các đơn hàng ĐANG được chở trên chuyến xe này
   stops         TripStop[]
-  emissionLog   TripEmissionLog?
+  emissionLogs  TripEmissionLog[] // Phase 4: 1-N cho versioning (tính lại nhiều lần)
 
   @@index([vehicleId])
   @@index([driverId])
@@ -413,46 +426,110 @@ model TripStop {
 }
 
 // 6. MODULE: EVENT SOURCING & POD (Theo dõi lịch sử & Bằng chứng giao hàng)
+// Production-ready: GPS tracking, Event Type separation, Failed Delivery support, POD normalization
 model OrderTrackingEvent {
-  id      Int         @id @default(autoincrement())
-  orderId Int
-  status  OrderStatus
+  id        Int @id @default(autoincrement())
+  orderId   Int
 
-  location    String?
-  description String?
+  // ===== Core Event Data =====
+  eventType TrackingEventType // Phân biệt: STATUS_CHANGE, SCAN, NOTE, POD, EXCEPTION, ETA_UPDATE
+  status    OrderStatus? // Nullable: chỉ bắt buộc khi eventType = STATUS_CHANGE
 
-  proofImageUrl String? // Hình ảnh gói hàng (POD)
-  signatureUrl  String? // Chữ ký khách hàng (POD)
+  // ===== Geo-Location (GPS) =====
+  latitude  Float? // Tọa độ GPS — hiển thị trên bản đồ, detect gian lận, tính khoảng cách
+  longitude Float? // Tọa độ GPS
+  location  String? // Địa chỉ text-friendly cho UI ("Kho Tân Bình", "123 Nguyễn Văn Cừ")
+
+  // ===== Context =====
+  description String? // Mô tả chi tiết sự kiện
+  source      EventSource // Event đến từ đâu: DRIVER_APP, HUB_SCANNER, SYSTEM, ADMIN_PORTAL
+
+  // ===== Failed Delivery Tracking =====
+  failureReasonCode FailureReasonCode? // Chuẩn hóa lý do giao thất bại (15-25% đơn ở VN)
+  attemptNumber     Int? // Lần giao thứ mấy (1, 2, 3... tối đa 3 lần trước hoàn hàng)
+
+  // ===== Timestamps (Event Sourcing chuẩn) =====
+  occurredAt DateTime @default(now()) // Khi sự kiện XẢY RA (có thể offline — driver mất mạng)
+  recordedAt DateTime @default(now()) // Khi ghi vào DB (server time — luôn chính xác)
+  // Không có updatedAt — Event Sourcing là append-only, immutable
 
   createdById Int
-  timestamp   DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  // Relations
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  createdBy   User     @relation("UserTrackingLogs", fields: [createdById], references: [id])
+
+  // ===== Relations =====
+  order     Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdBy User             @relation("UserTrackingLogs", fields: [createdById], references: [id])
+  pod       ProofOfDelivery? // 1-1 optional — chỉ có khi giao thành công
 
   @@index([orderId])
+  @@index([orderId, occurredAt]) // Composite index cho timeline query
   @@index([createdById])
-  @@index([timestamp])
-  @@index([orderId, timestamp])
+  @@index([eventType])
+  @@index([source])
   @@map("order_tracking_events")
 }
 
-// 7. MODULE: GREEN TECH METRICS (Báo cáo Môi trường)
-model TripEmissionLog {
-  id             Int   @id @default(autoincrement())
-  tripId         Int   @unique
-  actualDistance Float
-  payloadWeight  Float // Tổng tải trọng thực tế (kg)
+// Bảng POD tách riêng — hỗ trợ multi-image, receiver info, package condition
+model ProofOfDelivery {
+  id              Int              @id @default(autoincrement())
+  trackingEventId Int              @unique // 1-1 với event giao thành công
+  receiverName    String // Tên người nhận thực tế (có thể khác tên trên đơn)
+  receiverRelation String? // Quan hệ: "Chính chủ", "Người nhà", "Bảo vệ tòa nhà"
+  packageCondition PackageCondition @default(INTACT) // Tình trạng kiện hàng khi giao
+  deliveryNote    String? // Ghi chú: "Để trước cổng", "Bảo vệ ký nhận"
 
-  co2Emitted Decimal @db.Decimal(18, 6) // Lượng CO2 xả ra thực tế (kg)
-  co2Saved   Decimal @db.Decimal(18, 6) // Lượng CO2 tiết kiệm được (kg)
+  trackingEvent OrderTrackingEvent @relation(fields: [trackingEventId], references: [id], onDelete: Cascade)
+  images        ProofImage[] // Nhiều ảnh: ảnh kiện hàng, ảnh chữ ký, ảnh vị trí giao
+
+  @@map("proof_of_deliveries")
+}
+
+// Bảng ảnh POD — hỗ trợ nhiều ảnh cho 1 lần giao hàng
+model ProofImage {
+  id    Int            @id @default(autoincrement())
+  podId Int
+  url   String // URL ảnh (frontend upload lên cloud → gửi URL)
+  type  ProofImageType // PACKAGE, SIGNATURE, DELIVERY_LOCATION, DAMAGE_EVIDENCE, FAILED_ATTEMPT
+
+  pod ProofOfDelivery @relation(fields: [podId], references: [id], onDelete: Cascade)
+
+  @@index([podId])
+  @@map("proof_images")
+}
+
+// 7. MODULE: GREEN TECH METRICS (Báo cáo Môi trường)
+// Production-ready: Versioning, Emission Factor Snapshot, Decimal Precision, GHG Scope, Per-Order Allocation
+model TripEmissionLog {
+  id     Int @id @default(autoincrement())
+  tripId Int // Bỏ @unique → cho phép tính lại nhiều lần (audit trail)
+
+  // ===== Versioning (Cho phép tính lại khi dữ liệu cập nhật) =====
+  version  Int     @default(1) // Phiên bản tính toán (1, 2, 3...)
+  isLatest Boolean @default(true) // Flag đánh dấu bản tính mới nhất
+
+  // ===== Measured Data (Input — Decimal cho chính xác tuyệt đối) =====
+  actualDistance Decimal @db.Decimal(12, 4) // Khoảng cách thực tế (km)
+  payloadWeight  Decimal @db.Decimal(12, 4) // Tổng tải trọng thực tế (kg)
+
+  // ===== Calculated Results (Output) =====
+  co2Emitted Decimal @db.Decimal(18, 6) // Lượng CO₂ xả ra thực tế (kg)
+  co2Saved   Decimal @db.Decimal(18, 6) // Lượng CO₂ tiết kiệm so với baseline (kg)
+
+  // ===== Emission Factor Snapshot (ISO 14083 — ghi nhận thông số tại thời điểm tính) =====
+  emissionFactor    Float // g CO₂/km — snapshot từ Vehicle.emissionRatePerKm tại thời điểm tính
+  baselineRate      Float   @default(250) // g CO₂/km — hệ số DIESEL baseline dùng để so sánh
+  vehicleType       String // Snapshot VehicleType (VAN, TRUCK, ELECTRIC_VAN, MOTORCYCLE)
+  fuelType          String // Snapshot FuelType (ELECTRIC, DIESEL, GASOLINE)
+  calculationMethod String  @default("HAVERSINE") // HAVERSINE, GPS_ACTUAL, MANUAL
+
+  // ===== GHG Protocol Classification =====
+  ghgScope Int @default(1) // 1 = Scope 1 (xe sở hữu), 3 = Scope 3 (xe thuê ngoài)
 
   calculatedAt DateTime @default(now())
 
-  // Relations
-  trip        Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  // ===== Relations =====
+  trip        Trip                      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  allocations OrderEmissionAllocation[] // Phân bổ CO₂ cho từng order trong trip
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   updatedById Int?
@@ -463,9 +540,32 @@ model TripEmissionLog {
   deletedById Int?
   deletedBy   User?     @relation("TripEmissionLogDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
+  @@unique([tripId, version]) // Composite unique: 1 trip + 1 version = duy nhất
+  @@index([tripId, isLatest]) // Query nhanh bản tính mới nhất
   @@index([deletedAt])
   @@index([createdAt])
+  @@index([ghgScope])
   @@map("trip_emission_logs")
+}
+
+// Phân bổ CO₂ cho từng đơn hàng (GLEC Framework — Weight Ratio Allocation)
+// Cho phép khách hàng xem carbon footprint CỦA ĐƠN HÀNG CỦA HỌ
+model OrderEmissionAllocation {
+  id            Int @id @default(autoincrement())
+  emissionLogId Int
+  orderId       Int
+
+  allocatedCo2      Decimal  @db.Decimal(18, 6) // CO₂ phân bổ cho order này (kg)
+  allocatedCo2Saved Decimal  @db.Decimal(18, 6) // CO₂ tiết kiệm phân bổ (kg)
+  allocationMethod  String   @default("WEIGHT_RATIO") // WEIGHT_RATIO, DISTANCE_RATIO
+  weightRatio       Decimal? @db.Decimal(8, 6) // Tỷ lệ trọng lượng: order.weight / trip.totalWeight
+
+  emissionLog TripEmissionLog @relation(fields: [emissionLogId], references: [id], onDelete: Cascade)
+  order       Order           @relation(fields: [orderId], references: [id])
+
+  @@unique([emissionLogId, orderId])
+  @@index([orderId])
+  @@map("order_emission_allocations")
 }
 
 // ================= ENUMS =================
@@ -544,4 +644,55 @@ enum VerificationCodeType {
   REGISTER
   FORGOT_PASSWORD
   LOGIN
+}
+
+// ===== PHASE 4: Tracking Event Sourcing Enums =====
+
+// Phân biệt loại sự kiện — không phải mọi event đều thay đổi status
+enum TrackingEventType {
+  STATUS_CHANGE // Chuyển trạng thái đơn hàng (PENDING → ASSIGNED...)
+  SCAN // Quét barcode/QR tại kho (không đổi status)
+  NOTE // Ghi chú thuần thông tin
+  POD // Upload bằng chứng giao hàng
+  EXCEPTION // Sự cố: giao thất bại, hư hỏng, mất hàng
+  ETA_UPDATE // Cập nhật thời gian dự kiến giao
+}
+
+// Nguồn gốc event — biết event đến từ đâu để audit và debug
+enum EventSource {
+  DRIVER_APP // Từ ứng dụng tài xế trên điện thoại
+  HUB_SCANNER // Từ máy quét barcode tại kho bãi
+  SYSTEM // Hệ thống tự động (Bin Packing, Auto-dispatch)
+  ADMIN_PORTAL // Admin can thiệp thủ công từ dashboard
+  CUSTOMER_APP // Khách hàng thao tác (hủy đơn, yêu cầu đổi địa chỉ)
+}
+
+// Lý do giao hàng thất bại — chuẩn hóa theo industry standard
+// 15-25% đơn hàng ở VN giao thất bại lần đầu
+enum FailureReasonCode {
+  CUSTOMER_NOT_AVAILABLE // Khách không có mặt
+  INCORRECT_ADDRESS // Sai địa chỉ
+  REFUSED_BY_CUSTOMER // Khách từ chối nhận hàng
+  BUSINESS_CLOSED // Cơ sở kinh doanh đóng cửa
+  INACCESSIBLE_LOCATION // Không thể tiếp cận (ngõ hẹp, tầng cao...)
+  PACKAGE_DAMAGED // Kiện hàng hư hỏng
+  WEATHER_DELAY // Thời tiết xấu
+  VEHICLE_BREAKDOWN // Xe hỏng
+  OTHER // Lý do khác
+}
+
+// Tình trạng kiện hàng khi giao cho Proof of Delivery
+enum PackageCondition {
+  INTACT // Nguyên vẹn
+  DAMAGED // Hư hỏng
+  PARTIAL // Giao thiếu (một phần)
+}
+
+// Loại ảnh trong Proof of Delivery — phân loại để hiển thị đúng UI
+enum ProofImageType {
+  PACKAGE // Ảnh kiện hàng
+  SIGNATURE // Ảnh chữ ký khách hàng
+  DELIVERY_LOCATION // Ảnh vị trí giao (trước cổng, bàn bảo vệ...)
+  DAMAGE_EVIDENCE // Ảnh minh chứng hư hỏng
+  FAILED_ATTEMPT // Ảnh minh chứng giao thất bại (cửa đóng, không có người...)
 }
