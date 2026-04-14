@@ -253,6 +253,10 @@ model Hub {
   latitude            Float
   longitude           Float
   isActive            Boolean    @default(true)
+
+  // ===== Sức chứa Kho (Warehouse Constraints) =====
+  capacityVolume      Float      @default(10000) // Tổng thể tích kệ chứa hàng (m3)
+  
   // Relations
   staff               User[]     @relation("HubStaff")
   tripStops           TripStop[]
@@ -291,6 +295,11 @@ model Order {
 
   status      OrderStatus @default(PENDING)
   serviceType ServiceType @default(STANDARD)
+
+  // ===== Ràng buộc Vận Hành (Time Windows) =====
+  // VRPTW (Vehicle Routing Problem with Time Windows) constraint
+  preferredDeliveryTimeStart DateTime? // Khách yêu cầu giao từ giờ này
+  preferredDeliveryTimeEnd   DateTime? // Khách yêu cầu giao muộn nhất lúc này
 
   totalWeight       Float // Tổng khối lượng (kg)
   totalVolume       Float // Tổng thể tích (m3)

@@ -93,6 +93,9 @@ export class AuthService {
       ])
       return user
     } catch (error) {
+      if (error instanceof UnprocessableEntityException) {
+        throw error
+      }
       if (error instanceof Error) {
         throw new BadRequestException('Người Dùng Đã Tồn Tại')
       }

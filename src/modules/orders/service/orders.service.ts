@@ -13,16 +13,31 @@ export class OrdersService {
     private readonly prismaService: PrismaService,
   ) {}
 
+  // ====== #10: HUB GEOSPATIAL CACHE ======
+  // Thay vì query `SELECT * FROM hubs` mỗi lần tạo đơn, cache list Hub trên RAM Node.js 
+  // Node.js v8 engine thừa sức tính Haversine cho 10,000 phần tử mảng trong <2ms (cực chuẩn cho Enterprise).
+  private cachedActiveHubs: { id: number; latitude: number; longitude: number; name: string }[] | null = null
+  private lastHubsCacheTime = 0
+  private readonly HUBS_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
   /**
    * Tìm Hub gần nhất với tọa độ người gửi (Geo-Fencing Assignment).
    * Sử dụng Haversine Distance để so sánh khoảng cách chim bay từ sender tới toàn bộ Hub.
    * Giải quyết bài toán "Đơn mồ côi" - đơn hàng mới tạo không thuộc Hub nào.
    */
   private async findNearestHubId(senderLat: number, senderLng: number): Promise<number | null> {
-    const activeHubs = await this.prismaService.hub.findMany({
-      where: { isActive: true, deletedAt: null },
-      select: { id: true, latitude: true, longitude: true, name: true },
-    })
+    const now = Date.now()
+    if (!this.cachedActiveHubs || now - this.lastHubsCacheTime > this.HUBS_CACHE_TTL_MS) {
+      this.cachedActiveHubs = await this.prismaService.hub.findMany({
+        where: { isActive: true, deletedAt: null },
+        select: { id: true, latitude: true, longitude: true, name: true },
+      })
+      this.lastHubsCacheTime = now
+      this.logger.debug(`[CACHE] Refreshed Hubs Geo-Cache (${this.cachedActiveHubs.length} hubs)`)
+    }
+
+    const activeHubs = this.cachedActiveHubs
+
 
     if (!activeHubs.length) {
       this.logger.warn('[ORDER] Không có Hub nào đang hoạt động. Đơn hàng sẽ không được gán Hub.')
@@ -74,9 +89,19 @@ export class OrdersService {
     // 3. Tính Phí Vận Chuyển
     const shippingFee = this.calculateShippingFee(distanceKm, totalWeight)
 
-    // 4. Tính toán lượng CO2 tiết kiệm giả định (Green Tech)
-    // Ví dụ: Tiết kiệm được 0.05kg CO2 cho mỗi km bằng xe điện chuyên chở gom chuyến ghép.
-    const estimatedCo2Saved = distanceKm * 0.05
+    // 4. Tính toán lượng CO2 tiết kiệm ước tính (Green Tech)
+    // Hệ số tham khảo thực tế:
+    // - Xe tải Diesel nhẹ (~1 tấn) xả khoảng 0.25 kg CO2 / km
+    // - Xe điện (EV Van) xả 0 kg CO2 / km (tailpipe)
+    // Co2 tiết kiệm = (0.25 kg/km) * distanceKm * (Tỷ trọng đơn hàng / Tải trọng xe 1000kg)
+    // Note: Con số chính xác sẽ được tính lại bằng `emissionRatePerKm` của xe thực tế khi hoàn thành Trip.
+    const averageDieselEmissionPerKm = 0.25 // kg CO2 / km
+    const avgVehicleCapacityWeight = 1000 // kg
+    const loadRatio = Math.min(totalWeight / avgVehicleCapacityWeight, 1) // Tránh ratio > 1 nếu đơn quá nặng
+
+    // Đảm bảo đơn nhỏ bé không bị CO2 = 0 bằng cách chèn minimum load factor (VD: 5%)
+    const effectiveLoadRatio = Math.max(loadRatio, 0.05)
+    const estimatedCo2Saved = averageDieselEmissionPerKm * distanceKm * effectiveLoadRatio
 
     // 5. Geo-Fencing: Tìm Hub gần nhất với tọa độ người gửi và gán vào đơn
     const currentHubId = await this.findNearestHubId(payload.senderLat, payload.senderLng)

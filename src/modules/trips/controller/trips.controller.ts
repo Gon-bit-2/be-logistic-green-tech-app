@@ -35,4 +35,9 @@ export class StripsController {
   updateStatus(@Param('id', ParseIntPipe) id: number, @Body('status') status: keyof typeof TRIP_STATUS) {
     return this.stripsService.updateStatus(id, status)
   }
+
+  @Patch(':id/cancel-order/:orderId')
+  cancelOrder(@Param('id', ParseIntPipe) id: number, @Param('orderId', ParseIntPipe) orderId: number) {
+    return this.stripsService.cancelOrderFromTrip(id, orderId)
+  }
 }
