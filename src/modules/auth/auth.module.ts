@@ -18,6 +18,7 @@ import { ApiKeyGuard } from 'src/common/guards/api-key.guard'
 import { PaymentApiKeyGuard } from 'src/common/guards/payment-api-key.guard'
 import { AuthenticationGuard } from 'src/common/guards/authentication.guard'
 import { RolesGuard } from 'src/common/guards/roles.guard'
+import { ResourceAccessGuard } from 'src/common/guards/resource-access.guard'
 
 @Module({
   imports: [JwtModule.register({})],
@@ -38,7 +39,16 @@ import { RolesGuard } from 'src/common/guards/roles.guard'
     PaymentApiKeyGuard,
     AuthenticationGuard,
     RolesGuard,
+    ResourceAccessGuard,
   ],
-  exports: [TokenService, AccessTokenGuard, ApiKeyGuard, PaymentApiKeyGuard, AuthenticationGuard, RolesGuard],
+  exports: [
+    TokenService,
+    AccessTokenGuard,
+    ApiKeyGuard,
+    PaymentApiKeyGuard,
+    AuthenticationGuard,
+    RolesGuard,
+    ResourceAccessGuard,
+  ],
 })
 export class AuthModule {}

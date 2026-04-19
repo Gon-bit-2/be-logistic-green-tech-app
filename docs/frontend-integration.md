@@ -30,6 +30,7 @@ Sau bước verify token, backend còn check permission theo `role + path + meth
 ### Đọc thông tin User (Role) ở Client
 
 Payload JWT hiện tại trả về trực tiếp thông tin role của User:
+
 ```ts
 export interface AccessTokenPayload {
   userId: number
@@ -40,7 +41,9 @@ export interface AccessTokenPayload {
   iat: number
 }
 ```
+
 **Khuyến nghị:**
+
 - Frontend nên dùng thư viện như `jwt-decode` để parse trực tiếp `accessToken` và lấy `roleName` phục vụ việc rẽ nhánh UI (hiển thị menu Admin, Customer, v.v) thay vì gọi thêm API.
 - Để lấy chi tiết hơn (như họ tên, email, avatar, hubId, v.v), sử dụng endpoint `GET /auth/profile`.
 

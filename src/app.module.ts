@@ -5,7 +5,7 @@ import { AuthModule } from 'src/modules/auth/auth.module'
 import { VehicleModule } from 'src/modules/vehicle/vehicle.module'
 import { HubModule } from 'src/modules/hub/hub.module'
 import { ThrottlerModule } from '@nestjs/throttler'
-import { APP_GUARD } from '@nestjs/core'
+import { APP_GUARD, APP_FILTER } from '@nestjs/core'
 import { ThrottlerBehindProxyGuard } from 'src/common/guards/throttler-behind-proxy.guard'
 import { CacheModule } from '@nestjs/cache-manager'
 import { createKeyv } from '@keyv/redis'
@@ -19,6 +19,7 @@ import { OrdersModule } from 'src/modules/orders/orders.module'
 import { AuthenticationGuard } from 'src/common/guards/authentication.guard'
 import { RolesGuard } from 'src/common/guards/roles.guard'
 import { ResourceAccessGuard } from 'src/common/guards/resource-access.guard'
+import { AllExceptionsFilter } from 'src/common/filters/all-exceptions.filter'
 import { AnalyticsModule } from 'src/modules/analytics/analytics.module'
 import { TripsModule } from './modules/trips/trips.module'
 
@@ -80,7 +81,11 @@ import { TripsModule } from './modules/trips/trips.module'
     },
     {
       provide: APP_GUARD,
-      useClass: ResourceAccessGuard,
+      useExisting: ResourceAccessGuard,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
     },
   ],
 })

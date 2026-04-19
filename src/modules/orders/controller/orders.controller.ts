@@ -3,38 +3,48 @@ import { OrdersService } from '../service/orders.service'
 import { CreateOrderDto, GetOrderListDto, UpdateOrderStatusDto } from '../dto/order.dto'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import { ResourceAccess } from 'src/common/decorators/resource-access.decorator'
-import { IsAdmin, IsCustomer, IsWarehouseStaff } from 'src/common/decorators/roles.decorator'
+import { Roles } from 'src/common/decorators/roles.decorator'
+import roleName from 'src/common/constants/role.constant'
+import { AccessTokenPayload } from 'src/types/jwt.type'
 
 @Controller('orders')
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
+  @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
   create(@Body() createOrderDto: CreateOrderDto, @ActiveUser('userId') userId: number) {
     const customerId = createOrderDto.customerId || userId
     return this.ordersService.create(userId, customerId, createOrderDto)
   }
 
   @Get()
-  findAll(@Query() query: GetOrderListDto) {
-    return this.ordersService.findAll(query)
+  @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  findAll(@Query() query: GetOrderListDto, @ActiveUser() user: AccessTokenPayload) {
+    let customerId: number | undefined
+    if (user.roleName === roleName.CUSTOMER) {
+      customerId = user.userId
+    }
+    return this.ordersService.findAll({ ...query, customerId })
   }
 
   @Get(':id')
+  @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
   @ResourceAccess({
     model: 'order',
     paramName: 'id',
     ownerField: 'customerId', // CUSTOMER chỉ được xem đơn hàng của mình
-    hubField: 'currentHubId',  // WAREHOUSE_STAFF chỉ được xem đơn hàng tại kho của mình
+    hubField: 'currentHubId', // WAREHOUSE_STAFF chỉ được xem đơn hàng tại kho của mình
   })
   findById(@Param('id', ParseIntPipe) id: number) {
     return this.ordersService.findById(id)
   }
   @Put(':id/status')
+  @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
   @ResourceAccess({
     model: 'order',
     paramName: 'id',
-    ownerField: 'customerId', 
+    ownerField: 'customerId',
     hubField: 'currentHubId',
   })
   update(
@@ -44,6 +54,7 @@ export class OrdersController {
     return this.ordersService.update(id, payload)
   }
   @Delete(':id')
+  @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
   @ResourceAccess({
     model: 'order',
     paramName: 'id',
