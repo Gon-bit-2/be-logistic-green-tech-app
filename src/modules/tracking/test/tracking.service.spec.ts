@@ -114,7 +114,7 @@ describe('TrackingService', () => {
       // Giả lập trip đã hoàn tất tất cả đơn hàng
       prismaService.trip.findUnique.mockResolvedValue({
         id: 100,
-        status: 'SHIPPING',
+        status: 'IN_PROGRESS',
         ordersOnBoard: [
           { id: 1, status: ORDER_STATUS.DELIVERED }, 
         ]
@@ -163,9 +163,11 @@ describe('TrackingService', () => {
       const events = [
         {
           id: 1,
-          eventType: TRACKING_EVENT_TYPE.DELIVERY_ATTEMPT,
+          eventType: TRACKING_EVENT_TYPE.POD,
           status: ORDER_STATUS.DELIVERED,
           location: 'somewhere',
+          description: 'delivered',
+          occurredAt: new Date('2026-01-01T00:00:00.000Z'),
           pod: {
             receiverName: 'John',
             packageCondition: 'Good',
