@@ -1,21 +1,23 @@
 import { CanActivate, ExecutionContext, HttpException, Injectable, UnauthorizedException } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
+import { ApiKeyGuard } from './api-key.guard'
 import { PaymentApiKeyGuard } from './payment-api-key.guard'
 import { AccessTokenGuard } from 'src/common/guards/access-token.guard'
-import { AuthType } from 'src/common/constants/auth.constant'
-import { ConditionGuard } from 'src/common/decorators/custom-validator.decorator'
+import { AuthType, AuthTypeType, ConditionGuard } from 'src/common/constants/auth.constant'
 import { AUTH_TYPE_KEY, AuthTypeDecoratorPayload } from 'src/common/decorators/auth.decorator'
 
 @Injectable()
 export class AuthenticationGuard implements CanActivate {
-  private readonly authTypeGuardMap: Record<string, CanActivate>
+  private readonly authTypeGuardMap: Record<AuthTypeType, CanActivate>
   constructor(
     private readonly reflector: Reflector,
     private readonly accessTokenGuard: AccessTokenGuard,
+    private readonly apiKeyGuard: ApiKeyGuard,
     private readonly paymentApiKeyGuard: PaymentApiKeyGuard,
   ) {
     this.authTypeGuardMap = {
       [AuthType.Bearer]: this.accessTokenGuard,
+      [AuthType.APIKey]: this.apiKeyGuard,
       [AuthType.PaymentAPIKey]: this.paymentApiKeyGuard,
       [AuthType.None]: { canActivate: () => true },
     }
@@ -24,7 +26,7 @@ export class AuthenticationGuard implements CanActivate {
   async canActivate(context: ExecutionContext) {
     const authTypeValue = this.getAuthTypeValue(context)
     const authTypes = Array.isArray(authTypeValue.authTypes) ? authTypeValue.authTypes : [authTypeValue.authTypes]
-    const guards = authTypes.map((authType) => this.authTypeGuardMap[authType as keyof typeof this.authTypeGuardMap])
+    const guards = authTypes.map((authType) => this.authTypeGuardMap[authType])
     return authTypeValue.options.condition === ConditionGuard.And
       ? this.handleAndCondition(guards, context)
       : this.handleOrCondition(guards, context)
@@ -40,6 +42,9 @@ export class AuthenticationGuard implements CanActivate {
     let lastError: any = null
     //duyệt qua các guard nếu 1 guard pass thì return true
     for (const instance of guards) {
+      if (!instance) {
+        continue
+      }
       try {
         if (await instance.canActivate(context)) {
           return true
@@ -56,6 +61,9 @@ export class AuthenticationGuard implements CanActivate {
   private async handleAndCondition(guards: CanActivate[], context: ExecutionContext) {
     //duyệt qua các guard nếu tất cả guard pass thì return true
     for (const instance of guards) {
+      if (!instance) {
+        throw new UnauthorizedException()
+      }
       try {
         if (!(await instance.canActivate(context))) {
           throw new UnauthorizedException()

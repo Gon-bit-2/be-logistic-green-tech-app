@@ -1,18 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
-import { StripRepository } from '../repository/trip.repository'
+import { TripRepository } from '../repository/trip.repository'
 import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
 import { PrismaService } from 'src/database/prisma.service'
 import { GetTripListQueryType } from '../model/trip.model'
 import { TripStatusType } from 'src/common/constants/strip.constant'
 
 @Injectable()
-export class StripsService {
+export class TripsService {
   constructor(
     @InjectQueue(AUTO_DISPATCH_QUEUE_NAME)
     private readonly autoDispatchQueue: Queue,
-    private readonly stripRepo: StripRepository,
+    private readonly tripRepo: TripRepository,
     private readonly prismaService: PrismaService, // Dùng để fetch danh sách Hub khi chạy Global
   ) {}
 
@@ -62,11 +62,11 @@ export class StripsService {
   }
 
   async findAll(query: GetTripListQueryType) {
-    return this.stripRepo.findAll(query)
+    return this.tripRepo.findAll(query)
   }
 
   async findById(id: number) {
-    const trip = await this.stripRepo.findById(id)
+    const trip = await this.tripRepo.findById(id)
     if (!trip) {
       throw new NotFoundException(`Không tìm thấy Trip #${id}`)
     }
@@ -74,7 +74,7 @@ export class StripsService {
   }
 
   async updateStatus(id: number, status: TripStatusType) {
-    const trip = await this.stripRepo.findById(id)
+    const trip = await this.tripRepo.findById(id)
     if (!trip) throw new NotFoundException(`Trip #${id} không tồn tại`)
 
     // Nếu chuyển sang COMPLETED → chạy logic nghiệp vụ hoàn thành chuyến xe
@@ -83,7 +83,7 @@ export class StripsService {
     }
 
     // Các trạng thái khác chỉ cần update đơn giản
-    return this.stripRepo.updateTripStatus(id, status)
+    return this.tripRepo.updateTripStatus(id, status)
   }
 
   /**
@@ -96,18 +96,18 @@ export class StripsService {
     // Lấy danh sách tất cả Hub active để tìm Hub đích cho đơn liên tỉnh
     const allHubs = await this.prismaService.hub.findMany({
       where: { isActive: true, deletedAt: null },
-      select: { 
-        id: true, 
-        latitude: true, 
+      select: {
+        id: true,
+        latitude: true,
         longitude: true,
         capacityVolume: true,
         ordersCurrentlyHere: {
-          select: { totalVolume: true } // Lấy thể tích các đơn đang tồn kho để check sức chứa
-        }
+          select: { totalVolume: true }, // Lấy thể tích các đơn đang tồn kho để check sức chứa
+        },
       },
     })
 
-    return this.stripRepo.completeTrip(tripId, allHubs)
+    return this.tripRepo.completeTrip(tripId, allHubs)
   }
 
   /**
@@ -115,10 +115,10 @@ export class StripsService {
    * Cập nhật trạng thái Trip và Order an toàn trong Transaction.
    */
   async cancelOrderFromTrip(tripId: number, orderId: number) {
-    const trip = await this.stripRepo.findById(tripId)
+    const trip = await this.tripRepo.findById(tripId)
     if (!trip) throw new NotFoundException(`Trip #${tripId} không tồn tại`)
 
     // Gọi repo hủy đơn, reindex các stop sequence và có thể tự hủy trip luôn
-    return this.stripRepo.cancelOrderFromTrip(tripId, orderId)
+    return this.tripRepo.cancelOrderFromTrip(tripId, orderId)
   }
 }

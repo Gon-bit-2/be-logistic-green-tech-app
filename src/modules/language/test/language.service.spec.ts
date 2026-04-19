@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { LanguageService } from '../service/language.service';
 import { LanguageRepository } from '../repository/language.repository';
 
@@ -58,10 +59,10 @@ describe('LanguageService', () => {
       expect(repo.findOne).toHaveBeenCalledWith('en');
     });
 
-    it('throw Error when language not exist', async () => {
+    it('throw NotFoundException when language not exist', async () => {
       repo.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('notFound')).rejects.toThrow('Ngôn ngữ không tồn tại');
+      await expect(service.findById('notFound')).rejects.toThrow(NotFoundException);
       expect(repo.findOne).toHaveBeenCalledWith('notFound');
     });
   });
@@ -80,11 +81,11 @@ describe('LanguageService', () => {
       expect(repo.createLanguage).toHaveBeenCalledWith({ data: payload, createdById: 1 });
     });
 
-    it('throw Error when ID already exist', async () => {
+    it('throw ConflictException when ID already exist', async () => {
       repo.findOne.mockResolvedValue({ id: 'en' } as any);
 
       const payload = { id: 'en', name: 'English', icon: '', locale: 'en', isDefault: false };
-      await expect(service.createLanguage({ data: payload, createdById: 1 })).rejects.toThrow('Ngôn ngữ đã tồn tại');
+      await expect(service.createLanguage({ data: payload, createdById: 1 })).rejects.toThrow(ConflictException);
     });
   });
 
@@ -101,9 +102,9 @@ describe('LanguageService', () => {
       expect(repo.updateLanguage).toHaveBeenCalledWith({ languageId: 'en', data: updateData, updateById: 2 });
     });
 
-    it('should throw error when updating unexist language', async () => {
+    it('should throw NotFoundException when updating unexist language', async () => {
       repo.findOne.mockResolvedValue(null);
-      await expect(service.update({ languageId: 'invalid', data: { name: '123' }, updateById: 1 })).rejects.toThrow('Ngôn ngữ không tồn tại');
+      await expect(service.update({ languageId: 'invalid', data: { name: '123' }, updateById: 1 })).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -117,9 +118,9 @@ describe('LanguageService', () => {
       expect(repo.deleteLanguage).toHaveBeenCalledWith('en', 1);
     });
 
-    it('throw error if language does not exist', async () => {
+    it('throw NotFoundException if language does not exist', async () => {
       repo.findOne.mockResolvedValue(null);
-      await expect(service.remove('en', 1)).rejects.toThrow('Ngôn ngữ không tồn tại');
+      await expect(service.remove('en', 1)).rejects.toThrow(NotFoundException);
     });
   });
 });

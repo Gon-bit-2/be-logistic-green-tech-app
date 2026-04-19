@@ -1,43 +1,43 @@
 import { Controller, Get, Post, Body, Param, ParseIntPipe, Patch, Query } from '@nestjs/common'
-import { StripsService } from '../service/trips.service'
 import { AutoDispatchQueryDto, GetTripListDto } from '../dto/trip.dto'
 import { TRIP_STATUS } from 'src/common/constants/strip.constant'
+import { TripsService } from '../service/trips.service'
 
 @Controller('trips')
-export class StripsController {
-  constructor(private readonly stripsService: StripsService) {}
+export class TripsController {
+  constructor(private readonly tripsService: TripsService) {}
 
   @Post('auto-dispatch')
   autoDispatch(@Query() query: AutoDispatchQueryDto) {
     if (query.hubId) {
-      return this.stripsService.autoDispatchLocalTask(query.hubId)
+      return this.tripsService.autoDispatchLocalTask(query.hubId)
     }
     // Chạy global fan-out nếu được phép (có config ở middleware sau)
-    return this.stripsService.autoDispatchGlobalTask()
+    return this.tripsService.autoDispatchGlobalTask()
   }
 
   @Post('auto-dispatch/all')
   autoDispatchAll() {
-    return this.stripsService.autoDispatchGlobalTask()
+    return this.tripsService.autoDispatchGlobalTask()
   }
 
   @Get()
   findAll(@Query() query: GetTripListDto) {
-    return this.stripsService.findAll(query)
+    return this.tripsService.findAll(query)
   }
 
   @Get(':id')
   findById(@Param('id', ParseIntPipe) id: number) {
-    return this.stripsService.findById(id)
+    return this.tripsService.findById(id)
   }
 
   @Patch(':id/status')
   updateStatus(@Param('id', ParseIntPipe) id: number, @Body('status') status: keyof typeof TRIP_STATUS) {
-    return this.stripsService.updateStatus(id, status)
+    return this.tripsService.updateStatus(id, status)
   }
 
   @Patch(':id/cancel-order/:orderId')
   cancelOrder(@Param('id', ParseIntPipe) id: number, @Param('orderId', ParseIntPipe) orderId: number) {
-    return this.stripsService.cancelOrderFromTrip(id, orderId)
+    return this.tripsService.cancelOrderFromTrip(id, orderId)
   }
 }

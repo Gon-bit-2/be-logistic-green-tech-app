@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common'
-import { StripsService } from './service/trips.service'
-import { StripsController } from './controller/trips.controller'
-import { StripRepository } from './repository/trip.repository'
+import { TripsService } from './service/trips.service'
+import { TripsController } from './controller/trips.controller'
+import { TripRepository } from './repository/trip.repository'
 import { BullModule } from '@nestjs/bullmq'
 import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
-import { StripsProcessor } from './processor/trips.processor'
+import { TripsProcessor } from './processor/trips.processor'
+import { PrismaService } from 'src/database/prisma.service'
 
 @Module({
   imports: [
@@ -27,8 +28,8 @@ import { StripsProcessor } from './processor/trips.processor'
       },
     }),
   ],
-  controllers: [StripsController],
-  providers: [StripsService, StripRepository, StripsProcessor],
-  exports: [StripsService],
+  controllers: [TripsController],
+  providers: [TripsService, TripRepository, TripsProcessor, PrismaService],
+  exports: [TripsService],
 })
-export class StripsModule {}
+export class TripsModule {}

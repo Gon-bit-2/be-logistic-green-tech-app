@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
+
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 // Source - https://stackoverflow.com/a/63333671
 // Posted by oviniciusfeitosa, modified by community. See post 'Timeline' for change history
@@ -12,39 +12,16 @@ import roleName, { HTTPMethod } from 'src/common/constants/role.constant'
 import { createClient } from 'redis'
 import envConfig from 'src/config/config'
 
-const SellerModule = [
-  'AUTH',
-  'MEDIA',
-  'MANAGE-PRODUCT',
-  'PRODUCT-TRANSLATION',
-  'PROFILE',
-  'CART',
-  'ORDER',
-  'PAYMENT',
-  'DISCOUNT',
-  'REVIEW',
-  'ROLE',
-  'MESSAGE',
-  'SHOP-VIDEO',
-  'ADDRESS',
-]
-const ClientModule = [
-  'AUTH',
-  'PROFILE',
-  'MEDIA',
-  'CART',
-  'ORDER',
-  'PAYMENT',
-  'REVIEW',
-  'DISCOUNT',
-  'MESSAGE',
-  'ADDRESS',
-]
+const DriverModule = ['AUTH', 'VEHICLE', 'TRIPS', 'ORDERS', 'TRACKING', 'PAYMENT', 'LANGUAGE']
+
+const CustomerModule = ['AUTH', 'ORDERS', 'PAYMENT', 'TRACKING', 'TRIPS', 'HUB', 'LANGUAGE']
+
+const WarehouseStaffModule = ['AUTH', 'HUB', 'ORDERS', 'VEHICLE', 'ANALYTICS', 'GREEN-TECH', 'LANGUAGE']
 
 const prisma = new PrismaService()
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
-  await app.listen(3000)
+  await app.listen(3001)
   const server = app.getHttpAdapter().getInstance()
 
   const router = server.router
@@ -122,19 +99,24 @@ async function bootstrap() {
   const adminPermissionIds = updatedPermissionInDb.map((item) => ({
     id: item.id,
   }))
-  // Lọc danh sách các quyền (permissions) từ database dựa trên các module được phép truy cập đã định nghĩa trong SellerModule
-  const sellerPermissionIds = updatedPermissionInDb
-    .filter((item) => SellerModule.includes(item.module.toUpperCase()))
+  // Lọc danh sách các quyền (permissions) từ database dựa trên các module được phép truy cập
+  const driverPermissionIds = updatedPermissionInDb
+    .filter((item) => DriverModule.includes(item.module.toUpperCase()))
     .map((item) => ({ id: item.id }))
 
-  const clientPermissionIds = updatedPermissionInDb
-    .filter((item) => ClientModule.includes(item.module.toUpperCase()))
+  const customerPermissionIds = updatedPermissionInDb
+    .filter((item) => CustomerModule.includes(item.module.toUpperCase()))
+    .map((item) => ({ id: item.id }))
+
+  const warehouseStaffPermissionIds = updatedPermissionInDb
+    .filter((item) => WarehouseStaffModule.includes(item.module.toUpperCase()))
     .map((item) => ({ id: item.id }))
 
   await Promise.all([
     updateRole(adminPermissionIds, roleName.ADMIN),
-    updateRole(sellerPermissionIds, roleName.DRIVER),
-    updateRole(clientPermissionIds, roleName.CUSTOMER),
+    updateRole(driverPermissionIds, roleName.DRIVER),
+    updateRole(customerPermissionIds, roleName.CUSTOMER),
+    updateRole(warehouseStaffPermissionIds, roleName.WAREHOUSE_STAFF),
   ])
 
   // Clear cached role permissions in Redis
@@ -178,4 +160,7 @@ const updateRole = async (permissionIds: { id: number }[], roleName: string) => 
     },
   })
 }
-bootstrap()
+bootstrap().catch((error) => {
+  console.error('Error during bootstrap:', error)
+  process.exit(1)
+})

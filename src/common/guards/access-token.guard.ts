@@ -8,10 +8,9 @@ import {
   Inject,
 } from '@nestjs/common'
 import { Request } from 'express'
-import { REQUEST_USER_KEY } from '../decorators/custom-validator.decorator'
-import { HTTPMethod } from '../constants/role.constant'
-import { REQUEST_ROLE_PERMISSIONS } from '../constants/auth.constant'
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager'
+import { HTTPMethod } from '../constants/role.constant'
+import { REQUEST_ROLE_PERMISSIONS, REQUEST_USER_KEY } from '../constants/auth.constant'
 import { RolePermissionType } from '../model/share-role.model'
 import { keyBy } from 'lodash'
 import { TokenService } from 'src/common/services/token.service'

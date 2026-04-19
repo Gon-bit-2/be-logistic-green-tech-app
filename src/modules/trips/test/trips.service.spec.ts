@@ -68,7 +68,7 @@ describe('StripsService', () => {
         message: 'Đã đưa yêu cầu gom chuyến cho Hub 5 vào hàng đợi xử lý ngầm.',
         jobId: 'job-1',
       });
-      expect(queueMock.add).toHaveBeenCalledWith('dispatch-local', { hubId: 5 });
+      expect(queueMock.add).toHaveBeenCalledWith('dispatch-local', { hubId: 5 }, { jobId: 'dispatch-hub-5' });
     });
   });
 
@@ -84,8 +84,8 @@ describe('StripsService', () => {
       expect(res.message).toContain('trên 2 cụm kho trung chuyển');
       expect(res.jobId).toBe('job-1,job-2');
       expect(queueMock.addBulk).toHaveBeenCalledWith([
-        { name: 'dispatch-local', data: { hubId: 1 } },
-        { name: 'dispatch-local', data: { hubId: 2 } },
+        { name: 'dispatch-local', data: { hubId: 1 }, opts: { jobId: 'dispatch-hub-1' } },
+        { name: 'dispatch-local', data: { hubId: 2 }, opts: { jobId: 'dispatch-hub-2' } },
       ]);
     });
 

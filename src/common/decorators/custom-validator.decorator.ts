@@ -1,14 +1,2 @@
-export const REQUEST_USER_KEY = 'user'
-export const AuthType = {
-  Bearer: 'Bearer',
-  None: 'None',
-  APIKey: 'ApiKey',
-} as const
-
-export type TAuthType = (typeof AuthType)[keyof typeof AuthType]
-export const ConditionGuard = {
-  And: 'and',
-  Or: 'or',
-} as const
-
-export type ConditionGuardType = (typeof ConditionGuard)[keyof typeof ConditionGuard]
+export { REQUEST_USER_KEY, AuthType, ConditionGuard } from 'src/common/constants/auth.constant'
+export type { AuthTypeType as TAuthType, ConditionGuardType } from 'src/common/constants/auth.constant'
