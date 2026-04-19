@@ -10,6 +10,9 @@ Tài liệu này được viết từ source backend hiện tại tại ngày `2
 - `GET /` là public
 - Auth mặc định là `Bearer` cho mọi route, trừ các route có `@isPublic()`
 - Với route `Bearer`, runtime hiện tại còn check permission theo `role + path + method` trong DB/cache
+- Có cơ chế **Resource Level Authorization (RLA)** sử dụng Guard `@ResourceAccess`: 
+  - CUSTOMER và DRIVER chỉ được thao tác với dữ liệu của nình (VD: check `customerId`).
+  - WAREHOUSE_STAFF chỉ được thao tác với dữ liệu thuộc kho mình quản lý (VD: check `currentHubId`).
 - Response là JSON, `Date` serialize thành ISO string
 - Pagination chuẩn:
   - `page`: mặc định `1`
@@ -39,6 +42,7 @@ Các module đang được import trong `src/app.module.ts`:
 | POST   | `/auth/verify-otp`      | Yes    | Verify OTP                | `{ message }`                   |
 | POST   | `/auth/register`        | Yes    | Đăng ký customer          | user public                     |
 | POST   | `/auth/login`           | Yes    | Đăng nhập                 | `{ accessToken, refreshToken }` |
+| GET    | `/auth/profile`         | No     | Lấy thông tin user hiện tại| user profile (có `roleId`)      |
 | POST   | `/auth/refresh-token`   | Yes    | Refresh token             | `{ accessToken, refreshToken }` |
 | POST   | `/auth/logout`          | No     | Logout theo refresh token | `{ message }`                   |
 | GET    | `/auth/google-link`     | Yes    | Lấy URL Google OAuth      | `{ url }`                       |
