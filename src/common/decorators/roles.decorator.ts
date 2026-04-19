@@ -1,10 +1,9 @@
-import { applyDecorators, SetMetadata, UseGuards } from '@nestjs/common'
+import { SetMetadata } from '@nestjs/common'
 import roleName from '../constants/role.constant'
-import { RolesGuard } from 'src/common/guards/roles.guard'
 
 export const ROLES_KEY = 'roles'
 export const Roles = (...roles: string[]) => {
-  return applyDecorators(SetMetadata(ROLES_KEY, roles), UseGuards(RolesGuard))
+  return SetMetadata(ROLES_KEY, roles)
 }
 
 export const IsAdmin = () => Roles(roleName.ADMIN)

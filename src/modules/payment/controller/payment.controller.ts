@@ -56,15 +56,14 @@ export class PaymentController {
   async handleWebhook(
     @Headers('stripe-signature') signature: string,
     @Req() req: any,
-    @Body() body: any // Dùng fallback nếu ko có rawBody
+    @Body() body: any // Fallback cho unit test hoặc môi trường không attach rawBody
   ) {
     if (!signature) {
       throw new BadRequestException('Missing stripe-signature header')
     }
 
-    // Yêu cầu có bodyParser raw cho path này.
-    // Nếu Nest app config `{ rawBody: true }` thì truy cập `req.rawBody`
-    const payload = req.rawBody || Buffer.from(JSON.stringify(body))
+    // Runtime chuẩn dùng req.rawBody từ NestFactory.create(..., { rawBody: true }).
+    const payload = req.rawBody instanceof Buffer ? req.rawBody : Buffer.from(JSON.stringify(body))
 
     return this.paymentService.handleStripeWebhook(signature, payload)
   }

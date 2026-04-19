@@ -15,6 +15,11 @@ import { BullModule } from '@nestjs/bullmq'
 import { TrackingModule } from 'src/modules/tracking/tracking.module'
 import { GreenTechModule } from 'src/modules/green-tech/green-tech.module'
 import { PaymentModule } from 'src/modules/payment/payment.module'
+import { OrdersModule } from 'src/modules/orders/orders.module'
+import { AuthenticationGuard } from 'src/common/guards/authentication.guard'
+import { RolesGuard } from 'src/common/guards/roles.guard'
+import { AnalyticsModule } from 'src/modules/analytics/analytics.module'
+import { TripsModule } from './modules/trips/trips.module'
 
 @Module({
   imports: [
@@ -25,6 +30,9 @@ import { PaymentModule } from 'src/modules/payment/payment.module'
     TrackingModule,
     GreenTechModule,
     PaymentModule,
+    OrdersModule,
+    TripsModule,
+    AnalyticsModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {
@@ -60,6 +68,14 @@ import { PaymentModule } from 'src/modules/payment/payment.module'
     {
       provide: APP_GUARD,
       useClass: ThrottlerBehindProxyGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useExisting: AuthenticationGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useExisting: RolesGuard,
     },
   ],
 })

@@ -15,6 +15,8 @@ export class HubRepository {
     const skip = (page - 1) * limit
 
     const where = {
+      deletedAt: null,
+      isActive: true,
       ...(search && {
         name: { contains: search, mode: 'insensitive' as const },
       }),

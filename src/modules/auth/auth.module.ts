@@ -13,6 +13,11 @@ import { ShareUserRepository } from 'src/common/repositories/shared-user.repo'
 import { JwtModule } from '@nestjs/jwt'
 import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
 import { PrismaService } from 'src/database/prisma.service'
+import { AccessTokenGuard } from 'src/common/guards/access-token.guard'
+import { ApiKeyGuard } from 'src/common/guards/api-key.guard'
+import { PaymentApiKeyGuard } from 'src/common/guards/payment-api-key.guard'
+import { AuthenticationGuard } from 'src/common/guards/authentication.guard'
+import { RolesGuard } from 'src/common/guards/roles.guard'
 
 @Module({
   imports: [JwtModule.register({})],
@@ -28,6 +33,12 @@ import { PrismaService } from 'src/database/prisma.service'
     SharedRoleRepository,
     ShareUserRepository,
     PrismaService,
+    AccessTokenGuard,
+    ApiKeyGuard,
+    PaymentApiKeyGuard,
+    AuthenticationGuard,
+    RolesGuard,
   ],
+  exports: [TokenService, AccessTokenGuard, ApiKeyGuard, PaymentApiKeyGuard, AuthenticationGuard, RolesGuard],
 })
 export class AuthModule {}

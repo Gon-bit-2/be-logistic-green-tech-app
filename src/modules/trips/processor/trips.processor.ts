@@ -1,6 +1,6 @@
 import { Processor, WorkerHost, InjectQueue } from '@nestjs/bullmq'
 import { Job } from 'bullmq'
-import { StripRepository } from '../repository/trip.repository'
+import { TripRepository } from '../repository/trip.repository'
 import { PrismaService } from 'src/database/prisma.service'
 import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
 import { calculateHaversineDistance } from 'src/utils/geo.util'
@@ -12,12 +12,12 @@ import Redis from 'ioredis'
 import envConfig from 'src/config/config'
 
 @Processor(AUTO_DISPATCH_QUEUE_NAME)
-export class StripsProcessor extends WorkerHost {
-  private readonly logger = new Logger(StripsProcessor.name)
+export class TripsProcessor extends WorkerHost {
+  private readonly logger = new Logger(TripsProcessor.name)
   private readonly redis: Redis
 
   constructor(
-    private readonly stripRepository: StripRepository,
+    private readonly tripRepository: TripRepository,
     private readonly prismaService: PrismaService,
   ) {
     super()
@@ -63,8 +63,8 @@ export class StripsProcessor extends WorkerHost {
     this.logger.log(`[BULLMQ] Start processing dispatch-local for Hub ${hubId ?? 'Global'}`)
 
     // 1. Phân lập Dữ Liệu
-    const vehicles = await this.stripRepository.findAvailableVehicles(hubId)
-    let pendingOrders = await this.stripRepository.findPendingOrders(hubId)
+    const vehicles = await this.tripRepository.findAvailableVehicles(hubId)
+    let pendingOrders = await this.tripRepository.findPendingOrders(hubId)
 
     if (!vehicles.length || !pendingOrders.length) {
       this.logger.log(`[BULLMQ] No available vehicles or pending orders for Hub: ${hubId}. Skipping...`)
@@ -72,7 +72,7 @@ export class StripsProcessor extends WorkerHost {
     }
 
     // Lấy danh sách tài xế rảnh rỗi thuộc cùng Hub, không đang vướng Trip nào
-    const availableDrivers = await this.stripRepository.findAvailableDrivers(hubId)
+    const availableDrivers = await this.tripRepository.findAvailableDrivers(hubId)
 
     if (!availableDrivers.length) {
       this.logger.warn(`[BULLMQ] No available driver for Hub ${hubId}. Cannot dispatch.`)
@@ -294,7 +294,7 @@ export class StripsProcessor extends WorkerHost {
           hubId: node.hubId,
         }))
 
-        await this.stripRepository.createTripWithStops(
+        await this.tripRepository.createTripWithStops(
           vehicle.id,
           driverId,
           assignedOrders.map((o) => o.id),

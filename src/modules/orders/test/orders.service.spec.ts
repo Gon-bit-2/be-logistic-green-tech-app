@@ -90,9 +90,10 @@ describe('OrdersService', () => {
         payload,
         expect.objectContaining({
           totalWeight: 5,
+          totalVolume: 0.002,
           currentHubId: 1,
           shippingFee: 42500, // 15000 + 5*5500
-          estimatedCo2Saved: 5 * 0.05 // 0.25
+          estimatedCo2Saved: 5 * 0.0125 // 0.0625
         })
       );
     });

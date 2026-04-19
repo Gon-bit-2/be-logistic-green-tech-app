@@ -6,7 +6,7 @@ import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { Prisma } from 'generated/prisma'
 
 @Injectable()
-export class StripRepository {
+export class TripRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
   /**
@@ -249,11 +249,11 @@ export class StripRepository {
 
       // 2. Phân loại đơn hàng theo loại stop
       const deliveredOrderIds: number[] = []
-      const hubTransferOrders: { 
-        orderId: number; 
-        receiverLat: number; 
-        receiverLng: number; 
-        totalVolume: number 
+      const hubTransferOrders: {
+        orderId: number
+        receiverLat: number
+        receiverLng: number
+        totalVolume: number
       }[] = []
 
       for (const stop of trip.stops) {
@@ -293,15 +293,15 @@ export class StripRepository {
         for (const hub of allHubs as any[]) {
           const dist =
             Math.pow(hub.latitude - htOrder.receiverLat, 2) + Math.pow(hub.longitude - htOrder.receiverLng, 2)
-            
+
           // Lưu lại fallback phòng trường hợp thiên tai/dịch bệnh làm 100% Hub bị đầy
           if (dist < minDist) {
-              backupHubId = hub.id
+            backupHubId = hub.id
           }
 
           // Kiểm tra Capacity Hub (chặn ở mức 90% để chừa khoảng trống vận hành thực tế)
           const currentOccupiedVolume = hub.ordersCurrentlyHere.reduce((sum: number, o: any) => sum + o.totalVolume, 0)
-          
+
           if (currentOccupiedVolume + htOrder.totalVolume > hub.capacityVolume * 0.9) {
             continue // Hub này đã đầy -> Pass qua xét Hub phụ cận xa hơn 1 chút
           }
@@ -311,10 +311,10 @@ export class StripRepository {
             nearestHubId = hub.id
           }
         }
-        
+
         // Nếu kẹt quá độ (mọi Hub đều > 90% capacity), đành thả đại vào Hub gần nhất
         if (!nearestHubId) {
-            nearestHubId = backupHubId
+          nearestHubId = backupHubId
         }
 
         await tx.order.update({
