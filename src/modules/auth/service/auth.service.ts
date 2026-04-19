@@ -47,6 +47,16 @@ export class AuthService {
     return `2fa:pending:${userId}`
   }
 
+  async getProfile(userId: number) {
+    const user = await this.shareUserRepository.findUnique({ id: userId })
+    if (!user) {
+      throw new UnauthorizedException('User not found')
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, totpSecret, ...profile } = user
+    return profile
+  }
+
   async register(body: RegisterBodyType) {
     try {
       const verificationCode = await this.verificationCodeRepository.findUniqueVerificationCode({
