@@ -18,6 +18,7 @@ import { PaymentModule } from 'src/modules/payment/payment.module'
 import { OrdersModule } from 'src/modules/orders/orders.module'
 import { AuthenticationGuard } from 'src/common/guards/authentication.guard'
 import { RolesGuard } from 'src/common/guards/roles.guard'
+import { ResourceAccessGuard } from 'src/common/guards/resource-access.guard'
 import { AnalyticsModule } from 'src/modules/analytics/analytics.module'
 import { TripsModule } from './modules/trips/trips.module'
 
@@ -76,6 +77,10 @@ import { TripsModule } from './modules/trips/trips.module'
     {
       provide: APP_GUARD,
       useExisting: RolesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ResourceAccessGuard,
     },
   ],
 })
