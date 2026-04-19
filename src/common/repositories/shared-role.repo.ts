@@ -9,8 +9,9 @@ export class SharedRoleRepository {
   private adminRoleId: number | null = null
   constructor(private readonly prismaService: PrismaService) {}
   private async getRole(roleName: string) {
-    const role: RoleType = await this.prismaService
-      .$queryRaw`SELECT * FROM "Role" WHERE name=${roleName} AND "deletedAt"IS NULL LIMIT 1`.then((res: RoleType[]) => {
+    const role: RoleType = await this.prismaService.$queryRaw<
+      RoleType[]
+    >`SELECT * FROM "roles" WHERE name=${roleName} AND "deletedAt" IS NULL LIMIT 1`.then((res) => {
       if (res.length === 0) {
         throw new Error('Role not found')
       }

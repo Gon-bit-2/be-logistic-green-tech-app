@@ -96,7 +96,7 @@ export class AuthService {
       if (error instanceof UnprocessableEntityException) {
         throw error
       }
-      if (error instanceof Error) {
+      if (error && typeof error === 'object' && 'code' in error && String(error.code) === 'P2002') {
         throw new BadRequestException('Người Dùng Đã Tồn Tại')
       }
       throw error

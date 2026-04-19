@@ -1,15 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { StripsService } from '../service/trips.service';
-import { StripRepository } from '../repository/trip.repository';
+import { TripsService } from '../service/trips.service';
+import { TripRepository } from '../repository/trip.repository';
 import { PrismaService } from 'src/database/prisma.service';
 import { getQueueToken } from '@nestjs/bullmq';
 import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant';
 import { NotFoundException } from '@nestjs/common';
 import { Queue } from 'bullmq';
 
-describe('StripsService', () => {
-  let service: StripsService;
-  let stripRepo: jest.Mocked<StripRepository>;
+describe('TripsService', () => {
+  let service: TripsService;
+  let tripRepo: jest.Mocked<TripRepository>;
   let prismaService: any;
   let queueMock: jest.Mocked<Queue>;
 
@@ -33,9 +33,9 @@ describe('StripsService', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        StripsService,
+        TripsService,
         {
-          provide: StripRepository,
+          provide: TripRepository,
           useValue: stripRepoMock,
         },
         {
@@ -49,8 +49,8 @@ describe('StripsService', () => {
       ],
     }).compile();
 
-    service = module.get<StripsService>(StripsService);
-    stripRepo = module.get(StripRepository);
+    service = module.get<TripsService>(TripsService);
+    tripRepo = module.get(TripRepository);
     prismaService = module.get(PrismaService);
     queueMock = module.get(getQueueToken(AUTO_DISPATCH_QUEUE_NAME));
   });
@@ -99,24 +99,24 @@ describe('StripsService', () => {
 
   describe('findAll', () => {
     it('gọi repo.findAll', async () => {
-      stripRepo.findAll.mockResolvedValue({ data: [], totalItems: 0 } as any);
+      tripRepo.findAll.mockResolvedValue({ data: [], totalItems: 0 } as any);
       
       const res = await service.findAll({});
       expect(res).toEqual({ data: [], totalItems: 0 });
-      expect(stripRepo.findAll).toHaveBeenCalledWith({});
+      expect(tripRepo.findAll).toHaveBeenCalledWith({});
     });
   });
 
   describe('findById', () => {
     it('trả về order nếu tìm thấy', async () => {
-      stripRepo.findById.mockResolvedValue({ id: 1 } as any);
+      tripRepo.findById.mockResolvedValue({ id: 1 } as any);
 
       const res = await service.findById(1);
       expect(res).toEqual({ id: 1 });
     });
 
     it('văng NotFoundException nếu k tìm thấy trip', async () => {
-      stripRepo.findById.mockResolvedValue(null);
+      tripRepo.findById.mockResolvedValue(null);
 
       await expect(service.findById(999)).rejects.toThrow(NotFoundException);
     });
@@ -124,18 +124,59 @@ describe('StripsService', () => {
 
   describe('updateStatus', () => {
     it('chuyển trạng thái trip thành công', async () => {
-      stripRepo.findById.mockResolvedValue({ id: 1 } as any);
-      stripRepo.updateTripStatus.mockResolvedValue({ id: 1, status: 'SHIPPING' } as any);
+      tripRepo.findById.mockResolvedValue({ id: 1 } as any);
+      tripRepo.updateTripStatus.mockResolvedValue({ id: 1, status: 'IN_PROGRESS' } as any);
 
-      const res = await service.updateStatus(1, 'SHIPPING' as any);
-      expect(res).toEqual({ id: 1, status: 'SHIPPING' });
-      expect(stripRepo.updateTripStatus).toHaveBeenCalledWith(1, 'SHIPPING');
+      const res = await service.updateStatus(1, 'IN_PROGRESS' as any);
+      expect(res).toEqual({ id: 1, status: 'IN_PROGRESS' });
+      expect(tripRepo.updateTripStatus).toHaveBeenCalledWith(1, 'IN_PROGRESS');
     });
 
     it('văng NotFoundException nếu trip k tồn tại', async () => {
-      stripRepo.findById.mockResolvedValue(null);
+      tripRepo.findById.mockResolvedValue(null);
 
-      await expect(service.updateStatus(999, 'SHIPPING' as any)).rejects.toThrow(NotFoundException);
+      await expect(service.updateStatus(999, 'IN_PROGRESS' as any)).rejects.toThrow(NotFoundException);
+    });
+
+    it('gọi completeTrip khi chuyển sang COMPLETED', async () => {
+      tripRepo.findById.mockResolvedValue({ id: 1 } as any);
+      prismaService.hub.findMany.mockResolvedValue([
+        {
+          id: 1,
+          latitude: 10.7,
+          longitude: 106.6,
+          capacityVolume: 1000,
+          ordersCurrentlyHere: [],
+        },
+      ]);
+      tripRepo.completeTrip = jest.fn().mockResolvedValue({ id: 1, status: 'COMPLETED' } as any);
+
+      const res = await service.updateStatus(1, 'COMPLETED' as any);
+
+      expect(prismaService.hub.findMany).toHaveBeenCalled();
+      expect(tripRepo.completeTrip).toHaveBeenCalledWith(
+        1,
+        expect.arrayContaining([expect.objectContaining({ id: 1 })]),
+      );
+      expect(res).toEqual({ id: 1, status: 'COMPLETED' });
+    });
+  });
+
+  describe('cancelOrderFromTrip', () => {
+    it('hủy order khỏi trip qua repository', async () => {
+      tripRepo.findById.mockResolvedValue({ id: 3 } as any);
+      tripRepo.cancelOrderFromTrip = jest.fn().mockResolvedValue({ tripCancelled: false } as any);
+
+      const res = await service.cancelOrderFromTrip(3, 99);
+
+      expect(tripRepo.cancelOrderFromTrip).toHaveBeenCalledWith(3, 99);
+      expect(res).toEqual({ tripCancelled: false });
+    });
+
+    it('văng NotFoundException nếu trip không tồn tại', async () => {
+      tripRepo.findById.mockResolvedValue(null);
+
+      await expect(service.cancelOrderFromTrip(3, 99)).rejects.toThrow(NotFoundException);
     });
   });
 });
