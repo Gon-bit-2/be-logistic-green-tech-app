@@ -22,6 +22,8 @@ import { ResourceAccessGuard } from 'src/common/guards/resource-access.guard'
 import { AllExceptionsFilter } from 'src/common/filters/all-exceptions.filter'
 import { AnalyticsModule } from 'src/modules/analytics/analytics.module'
 import { TripsModule } from './modules/trips/trips.module'
+import { WalletModule } from './modules/wallet/wallet.module'
+import { UploadModule } from './modules/upload/upload.module'
 
 @Module({
   imports: [
@@ -34,6 +36,8 @@ import { TripsModule } from './modules/trips/trips.module'
     PaymentModule,
     OrdersModule,
     TripsModule,
+    WalletModule,
+    UploadModule,
     AnalyticsModule,
     ThrottlerModule.forRoot({
       throttlers: [
