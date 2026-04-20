@@ -1,16 +1,25 @@
 import { Injectable, Logger } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { CreateOrderBodyType, GetOrderListQueryType, UpdateOrderStatusType } from '../model/order.model'
 import { OrderRepository } from '../repository/order.repo'
 import { calculateHaversineDistance } from 'src/utils/geo.util'
 import { PrismaService } from 'src/database/prisma.service'
+import { NotificationEventName, OrderCreatedEvent, OrderStatusUpdatedEvent } from 'src/modules/notification/events/notification.event'
+import { ORDER_STATUS } from 'src/common/constants/order.constant'
 
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name)
+  private readonly notifiableOrderStatuses: OrderStatusUpdatedEvent['status'][] = [
+    ORDER_STATUS.OUT_FOR_DELIVERY,
+    ORDER_STATUS.DELIVERED,
+    ORDER_STATUS.CANCELLED,
+  ]
 
   constructor(
     private readonly orderRepo: OrderRepository,
     private readonly prismaService: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // ====== #10: HUB GEOSPATIAL CACHE ======
@@ -114,6 +123,12 @@ export class OrdersService {
       currentHubId,
     })
 
+    await this.emitNotificationEvent(NotificationEventName.ORDER_CREATED, {
+      userId: createdOrder.customerId,
+      orderId: createdOrder.id,
+      trackingCode: createdOrder.trackingCode,
+    })
+
     return {
       order: createdOrder,
     }
@@ -147,10 +162,46 @@ export class OrdersService {
   }
 
   async update(id: number, payload: UpdateOrderStatusType) {
-    return this.orderRepo.update(id, payload)
+    const updatedOrder = await this.orderRepo.update(id, payload)
+
+    if (this.shouldNotifyOrderStatus(updatedOrder.status)) {
+      await this.emitNotificationEvent(NotificationEventName.ORDER_STATUS_UPDATED, {
+        userId: updatedOrder.customerId,
+        orderId: updatedOrder.id,
+        trackingCode: updatedOrder.trackingCode,
+        status: updatedOrder.status,
+      })
+    }
+
+    return updatedOrder
   }
 
   async delete(id: number, deletedById: number) {
     return this.orderRepo.delete({ id, deletedById })
+  }
+
+  private shouldNotifyOrderStatus(status: string): status is OrderStatusUpdatedEvent['status'] {
+    return this.notifiableOrderStatuses.some((item) => item === status)
+  }
+
+  private async emitNotificationEvent(
+    eventName: typeof NotificationEventName.ORDER_CREATED,
+    payload: OrderCreatedEvent,
+  ): Promise<void>
+  private async emitNotificationEvent(
+    eventName: typeof NotificationEventName.ORDER_STATUS_UPDATED,
+    payload: OrderStatusUpdatedEvent,
+  ): Promise<void>
+  private async emitNotificationEvent(
+    eventName: typeof NotificationEventName.ORDER_CREATED | typeof NotificationEventName.ORDER_STATUS_UPDATED,
+    payload: OrderCreatedEvent | OrderStatusUpdatedEvent,
+  ) {
+    try {
+      await this.eventEmitter.emitAsync(eventName, payload)
+    } catch (error) {
+      this.logger.warn(
+        `Notification event failed for ${eventName}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
   }
 }

@@ -4,6 +4,7 @@ import { CreateTrackingEventType } from '../model/tracking.model'
 import { PrismaService } from 'src/database/prisma.service'
 import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import {
   TRACKING_EVENT_TYPE,
   VALID_STATUS_TRANSITIONS,
@@ -11,15 +12,22 @@ import {
 } from 'src/common/constants/tracking.constant'
 import { GREEN_TECH_QUEUE_NAME, CALCULATE_EMISSION_JOB_NAME } from 'src/common/constants/queue.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
+import { NotificationEventName, OrderStatusUpdatedEvent } from 'src/modules/notification/events/notification.event'
 
 @Injectable()
 export class TrackingService {
   private readonly logger = new Logger(TrackingService.name)
+  private readonly notifiableOrderStatuses: OrderStatusUpdatedEvent['status'][] = [
+    ORDER_STATUS.OUT_FOR_DELIVERY,
+    ORDER_STATUS.DELIVERED,
+    ORDER_STATUS.CANCELLED,
+  ]
 
   constructor(
     private readonly trackingRepo: TrackingRepository,
     private readonly prismaService: PrismaService,
     @InjectQueue(GREEN_TECH_QUEUE_NAME) private readonly greenTechQueue: Queue,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -30,7 +38,7 @@ export class TrackingService {
     // 1. Kiểm tra Order tồn tại và lấy trạng thái hiện tại
     const order = await this.prismaService.order.findFirst({
       where: { id: payload.orderId, deletedAt: null },
-      select: { id: true, status: true, trackingCode: true, currentTripId: true },
+      select: { id: true, status: true, trackingCode: true, currentTripId: true, customerId: true },
     })
 
     if (!order) {
@@ -66,6 +74,15 @@ export class TrackingService {
 
     // 4. Gọi Repository tạo event + update status (trong Transaction)
     const event = await this.trackingRepo.createEventWithStatusUpdate(createdById, payload, shouldUpdateOrderStatus)
+
+    if (shouldUpdateOrderStatus && payload.status && this.shouldNotifyOrderStatus(payload.status)) {
+      await this.emitNotificationEvent(NotificationEventName.ORDER_STATUS_UPDATED, {
+        userId: order.customerId,
+        orderId: order.id,
+        trackingCode: order.trackingCode,
+        status: payload.status,
+      })
+    }
 
     // 5. Nếu DELIVERED → kiểm tra Trip có hoàn thành chưa (tất cả đơn đều DELIVERED)
     if (payload.status === ORDER_STATUS.DELIVERED && order.currentTripId) {
@@ -196,6 +213,23 @@ export class TrackingService {
       trackingCode: order.trackingCode,
       currentStatus: order.status,
       events: sanitizedEvents,
+    }
+  }
+
+  private shouldNotifyOrderStatus(status: string): status is OrderStatusUpdatedEvent['status'] {
+    return this.notifiableOrderStatuses.some((item) => item === status)
+  }
+
+  private async emitNotificationEvent(
+    eventName: typeof NotificationEventName.ORDER_STATUS_UPDATED,
+    payload: OrderStatusUpdatedEvent,
+  ) {
+    try {
+      await this.eventEmitter.emitAsync(eventName, payload)
+    } catch (error) {
+      this.logger.warn(
+        `Notification event failed for ${eventName}: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
   }
 }

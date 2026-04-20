@@ -3,12 +3,16 @@ import { PermissionType } from '../model/share-permission.model'
 import { RoleType } from '../model/share-role.model'
 import { UserType } from 'src/common/model/shared-user.model'
 import { PrismaService } from 'src/database/prisma.service'
+import roleName from '../constants/role.constant'
 
 export type WhereUniqueUserType = { id: number } | { email: string }
 export type UserIncludeRolePermissionType = UserType & {
   role: RoleType & {
     permissions: PermissionType[]
   }
+}
+export type UserIncludeRoleType = UserType & {
+  role: RoleType
 }
 @Injectable()
 export class ShareUserRepository {
@@ -40,6 +44,17 @@ export class ShareUserRepository {
       },
     })
   }
+  async findUniqueIncludeRole(where: WhereUniqueUserType): Promise<UserIncludeRoleType | null> {
+    return await this.prismaService.user.findFirst({
+      where: {
+        ...where,
+        deletedAt: null,
+      },
+      include: {
+        role: true,
+      },
+    })
+  }
   async update(where: { id: number }, data: Partial<UserType>) {
     // Verify user exists and not deleted before updating
     const existingUser = await this.prismaService.user.findFirst({
@@ -59,6 +74,23 @@ export class ShareUserRepository {
         id: where.id,
       },
       data,
+    })
+  }
+
+  async findActiveAdmins() {
+    return await this.prismaService.user.findMany({
+      where: {
+        deletedAt: null,
+        isDeleted: false,
+        role: {
+          name: roleName.ADMIN,
+          deletedAt: null,
+          isActive: true,
+        },
+      },
+      select: {
+        id: true,
+      },
     })
   }
 }

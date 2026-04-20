@@ -28,8 +28,6 @@ export class TripsController {
     return this.tripsService.autoDispatchGlobalTask()
   }
 
-  @Get()
-  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
   @Post(':id/optimize-route')
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
   @ResourceAccess({
@@ -41,6 +39,8 @@ export class TripsController {
     return this.tripsService.optimizeRouteForTrip(id)
   }
 
+  @Get()
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
   findAll(@Query() query: GetTripListDto, @ActiveUser() user: AccessTokenPayload) {
     let driverId: number | undefined
     if (user.roleName === roleName.DRIVER) {

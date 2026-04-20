@@ -44,6 +44,7 @@ export type RegisterBodyType = z.infer<typeof RegisterBodySchema>
 //
 export const RegisterResSchema = UserSchema.omit({
   password: true,
+  totpSecret: true,
 })
 export type RegisterResType = z.infer<typeof RegisterResSchema>
 

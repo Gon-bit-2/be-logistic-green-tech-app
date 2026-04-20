@@ -1,6 +1,6 @@
 # API Reference
 
-Tài liệu này được viết từ source backend hiện tại tại ngày `2026-04-16`.
+Tài liệu này được viết từ source backend hiện tại tại ngày `2026-04-20`.
 
 ## Tổng quan runtime
 
@@ -35,6 +35,8 @@ Các module đang được import trong `src/app.module.ts`:
 - `analytics`
 - `upload` (Cloudinary Cloud - POD)
 - `wallet` (COD Reconciliation)
+- `notifications`
+- `role-requests`
 
 ## 1. Auth
 
@@ -197,6 +199,98 @@ Lưu ý:
 
 - `LanguageService` hiện trả `404` khi không tìm thấy ngôn ngữ và `409` khi tạo trùng mã ngôn ngữ.
 
+## 4.5 Notifications
+
+| Method | Path                          | Quyền dự kiến | Mục đích                    | Response chính         |
+| ------ | ----------------------------- | ------------- | --------------------------- | ---------------------- |
+| GET    | `/notifications`              | Authenticated | Danh sách inbox             | `{ data, totalItems }` |
+| GET    | `/notifications/unread-count` | Authenticated | Đếm thông báo chưa đọc      | `{ totalUnread }`      |
+| PATCH  | `/notifications/:id/read`     | Authenticated | Đánh dấu 1 thông báo đã đọc | `{ message }`          |
+| PATCH  | `/notifications/read-all`     | Authenticated | Đánh dấu toàn bộ đã đọc     | `{ message }`          |
+
+Query của `GET /notifications`:
+
+- `page`
+- `limit`
+- `isRead`: `true | false`
+
+Payload notification hiện tại dùng cho role-request tối thiểu gồm:
+
+```json
+{
+  "roleRequestId": 12,
+  "targetRoleName": "DRIVER",
+  "status": "PENDING",
+  "reviewedById": 1
+}
+```
+
+Payload notification cho order hiện tối thiểu gồm:
+
+```json
+{
+  "orderId": 101,
+  "trackingCode": "cmabc123xyz",
+  "orderStatus": "OUT_FOR_DELIVERY"
+}
+```
+
+Các `type` notification hiện có:
+
+- `ROLE_REQUEST_SUBMITTED`
+- `ROLE_REQUEST_APPROVED`
+- `ROLE_REQUEST_REJECTED`
+- `ORDER_CREATED`
+- `ORDER_OUT_FOR_DELIVERY`
+- `ORDER_DELIVERED`
+- `ORDER_CANCELLED`
+
+Behavior note:
+
+- Notification cho `role-requests` hiện được tạo qua Nest `EventEmitter` sau khi action nghiệp vụ hoàn tất.
+- Notification cho order hiện được tạo qua Nest `EventEmitter` khi tạo đơn thành công hoặc khi đơn chuyển sang `OUT_FOR_DELIVERY`, `DELIVERED`, `CANCELLED`.
+- Việc tạo notification là side-effect tách riêng khỏi transaction chính của `role-request`.
+- Nếu notification write thất bại, request tạo/duyệt/từ chối `role-request` hiện không tự rollback chỉ vì lỗi notification.
+- Environment phải apply migration `20260420_add_role_requests_notifications` trước khi dùng các endpoint `/notifications`.
+- Environment phải apply migration `20260420_add_order_notifications` trước khi dùng các type notification mới cho order.
+
+## 4.6 Role Requests
+
+| Method | Path                        | Quyền dự kiến                  | Mục đích                                | Response chính         |
+| ------ | --------------------------- | ------------------------------ | --------------------------------------- | ---------------------- |
+| POST   | `/role-requests`            | CUSTOMER / DRIVER / WAREHOUSE_STAFF | Gửi yêu cầu đăng ký vai trò mới     | role request detail    |
+| GET    | `/role-requests/me`         | CUSTOMER / DRIVER / WAREHOUSE_STAFF | Xem lịch sử request của chính mình | `{ data, totalItems }` |
+| GET    | `/role-requests`            | ADMIN                          | Admin xem danh sách request             | `{ data, totalItems }` |
+| PATCH  | `/role-requests/:id/approve`| ADMIN                          | Duyệt request và cập nhật role cho user | role request detail    |
+| PATCH  | `/role-requests/:id/reject` | ADMIN                          | Từ chối request                         | role request detail    |
+
+Body tạo request:
+
+```json
+{
+  "targetRoleName": "DRIVER",
+  "reason": "Tôi muốn đăng ký làm tài xế giao hàng"
+}
+```
+
+Body approve:
+
+```json
+{
+  "reviewNote": "Đủ điều kiện",
+  "hubId": 1
+}
+```
+
+Ghi chú:
+
+- Chỉ hỗ trợ target role `DRIVER` và `WAREHOUSE_STAFF`.
+- Mỗi user chỉ được có 1 request `PENDING` trên toàn hệ thống.
+- Nếu approve `WAREHOUSE_STAFF`, `hubId` là bắt buộc.
+- Khi submit request, hệ thống emit event để tạo notification cho admin; khi approve/reject, hệ thống emit event để tạo notification cho requester.
+- Notification là side-effect bất đồng bộ theo EventEmitter của Nest, không phải phần response body của API này.
+- Environment phải apply migration `20260420_add_role_requests_notifications` trước khi dùng các endpoint `/role-requests`.
+
 ## 5. Tracking
 
 ### REST APIs
@@ -299,6 +393,99 @@ Response emission log gồm các field chính:
 | GET    | `/orders/:id`        | Authenticated | Chi tiết đơn hàng       | order                 |
 | PUT    | `/orders/:id/status` | Authenticated | Cập nhật trạng thái đơn | order                 |
 | DELETE | `/orders/:id`        | Authenticated | Xóa mềm đơn             | order                 |
+
+Request `POST /orders`:
+
+```json
+{
+  "senderName": "Nguyen Van A",
+  "senderPhone": "0900000000",
+  "senderAddress": "123 Nguyen Trai, Quan 1, TP HCM",
+  "senderLat": 10.776889,
+  "senderLng": 106.700806,
+  "receiverName": "Tran Thi B",
+  "receiverPhone": "0911111111",
+  "receiverAddress": "456 Le Loi, Quan 1, TP HCM",
+  "receiverLat": 10.773118,
+  "receiverLng": 106.698299,
+  "preferredDeliveryTimeStart": "2026-04-21T08:00:00.000Z",
+  "preferredDeliveryTimeEnd": "2026-04-21T12:00:00.000Z",
+  "serviceType": "STANDARD",
+  "items": [
+    {
+      "name": "Ao thun",
+      "quantity": 2,
+      "weight": 0.3,
+      "length": 30,
+      "width": 20,
+      "height": 5
+    }
+  ]
+}
+```
+
+Field rules:
+
+- `senderName`, `senderPhone`, `senderAddress`, `receiverName`, `receiverPhone`, `receiverAddress` là bắt buộc.
+- `senderLat`, `senderLng`, `receiverLat`, `receiverLng` là bắt buộc và phải là JSON number, backend hiện không tự ép kiểu từ string sang number.
+- `items` là bắt buộc, phải có ít nhất 1 phần tử.
+- Mỗi `item` cần tối thiểu: `name`, `quantity`, `weight`.
+- `length`, `width`, `height` là optional, đơn vị hiện tại backend giả định là `cm`.
+- `weight` là kg cho từng item; `quantity` là số lượng item đó.
+- `serviceType` nhận một trong các giá trị: `EXPRESS`, `STANDARD`, `ECO_GREEN`. Nếu bỏ qua, backend mặc định `STANDARD`.
+- `preferredDeliveryTimeStart` và `preferredDeliveryTimeEnd` là optional, nên gửi ISO-8601 string.
+- `customerId` chỉ nên dùng khi admin hoặc warehouse staff tạo hộ khách hàng. Customer tự tạo đơn nên bỏ field này để backend lấy từ token.
+
+Không có compatibility alias cho payload cũ:
+
+- Backend hiện không nhận các field kiểu cũ như `customerName`, `pickupAddress`, `deliveryAddress`, `contactName`, `contactPhone`, `estimatedArrival`, `packageWeightKg`, `packageDimensions`, `declaredValueUsd`, `serviceTier`, `itemDescription`.
+- Frontend cần map các field UI đó sang contract ở trên trước khi gọi API.
+
+Response `POST /orders`:
+
+```json
+{
+  "order": {
+    "id": 101,
+    "trackingCode": "cmabc123xyz",
+    "customerId": 25,
+    "senderName": "Nguyen Van A",
+    "senderPhone": "0900000000",
+    "senderAddress": "123 Nguyen Trai, Quan 1, TP HCM",
+    "senderLat": 10.776889,
+    "senderLng": 106.700806,
+    "receiverName": "Tran Thi B",
+    "receiverPhone": "0911111111",
+    "receiverAddress": "456 Le Loi, Quan 1, TP HCM",
+    "receiverLat": 10.773118,
+    "receiverLng": 106.698299,
+    "status": "PENDING",
+    "serviceType": "STANDARD",
+    "totalWeight": 0.6,
+    "totalVolume": 0.006,
+    "shippingFee": 42500,
+    "estimatedCo2Saved": 0.0625,
+    "currentHubId": 3,
+    "currentTripId": null,
+    "preferredDeliveryTimeStart": "2026-04-21T08:00:00.000Z",
+    "preferredDeliveryTimeEnd": "2026-04-21T12:00:00.000Z",
+    "createdAt": "2026-04-20T12:00:00.000Z",
+    "updatedAt": "2026-04-20T12:00:00.000Z",
+    "items": [
+      {
+        "id": 1,
+        "orderId": 101,
+        "name": "Ao thun",
+        "quantity": 2,
+        "weight": 0.3,
+        "length": 30,
+        "width": 20,
+        "height": 5
+      }
+    ]
+  }
+}
+```
 
 Lưu ý:
 

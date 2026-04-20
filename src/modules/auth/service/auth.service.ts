@@ -59,26 +59,11 @@ export class AuthService {
 
   async register(body: RegisterBodyType) {
     try {
-      const verificationCode = await this.verificationCodeRepository.findUniqueVerificationCode({
-        email_type: {
-          email: body.email,
-          type: TypeOfVerificationCode.REGISTER,
-        },
+      await this.validateVerificationCode({
+        email: body.email,
+        code: body.code,
+        type: TypeOfVerificationCode.REGISTER,
       })
-      // console.log('VerificationCode:::::', verificationCode)
-
-      if (!verificationCode) {
-        throw new UnprocessableEntityException({
-          message: 'Mã OTP không hợp lệ',
-          path: 'code',
-        })
-      }
-      if (verificationCode.expiresAt < new Date()) {
-        throw new UnprocessableEntityException({
-          message: 'Mã OTP đã hết hạn',
-          path: 'code',
-        })
-      }
       const clientRoleId = await this.sharedRoleRepository.getClientRoleId()
       const hashedPassword = await this.hashingService.hash(body.password)
       const [user] = await this.prismaService.$transaction([

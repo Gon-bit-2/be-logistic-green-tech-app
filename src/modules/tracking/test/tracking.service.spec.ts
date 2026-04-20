@@ -9,12 +9,15 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TRACKING_EVENT_TYPE } from 'src/common/constants/tracking.constant';
 import { ORDER_STATUS } from 'src/common/constants/order.constant';
 import { Queue } from 'bullmq';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { NotificationEventName } from 'src/modules/notification/events/notification.event';
 
 describe('TrackingService', () => {
   let service: TrackingService;
   let trackingRepo: jest.Mocked<TrackingRepository>;
   let prismaService: any;
   let greenTechQueue: jest.Mocked<Queue>;
+  let eventEmitter: jest.Mocked<EventEmitter2>;
 
   beforeEach(async () => {
     const trackingRepoMock = {
@@ -37,6 +40,10 @@ describe('TrackingService', () => {
       add: jest.fn(),
     };
 
+    const eventEmitterMock = {
+      emitAsync: jest.fn().mockResolvedValue([]),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TrackingService,
@@ -52,6 +59,10 @@ describe('TrackingService', () => {
           provide: getQueueToken(GREEN_TECH_QUEUE_NAME),
           useValue: queueFactoryMock,
         },
+        {
+          provide: EventEmitter2,
+          useValue: eventEmitterMock,
+        },
       ],
     }).compile();
 
@@ -59,6 +70,7 @@ describe('TrackingService', () => {
     trackingRepo = module.get(TrackingRepository);
     prismaService = module.get(PrismaService);
     greenTechQueue = module.get(getQueueToken(GREEN_TECH_QUEUE_NAME));
+    eventEmitter = module.get(EventEmitter2);
   });
 
   afterEach(() => {
@@ -67,7 +79,7 @@ describe('TrackingService', () => {
 
   describe('createEvent', () => {
     it('Tạo event bình thường + chuyển trạng thái hợp lệ', async () => {
-      prismaService.order.findFirst.mockResolvedValue({ id: 1, status: ORDER_STATUS.PENDING });
+      prismaService.order.findFirst.mockResolvedValue({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.PENDING });
       trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 10 } as any);
 
       const payload = {
@@ -80,6 +92,7 @@ describe('TrackingService', () => {
 
       expect(result).toEqual({ id: 10 });
       expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(1, payload, true);
+      expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
     });
 
     it('văng NotFoundException nếu order ko tồn tại', async () => {
@@ -88,7 +101,7 @@ describe('TrackingService', () => {
     });
 
     it('văng lỗi BadRequestException khi chuyển trạng thái sai logic (Vd: PENDING -> DELIVERED)', async () => {
-      prismaService.order.findFirst.mockResolvedValue({ id: 1, status: ORDER_STATUS.PENDING });
+      prismaService.order.findFirst.mockResolvedValue({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.PENDING });
 
       const payload = { orderId: 1, eventType: TRACKING_EVENT_TYPE.STATUS_CHANGE, status: ORDER_STATUS.DELIVERED };
       // PENDING không thể chuyển ngay sang DELIVERED (theo constant)
@@ -96,7 +109,7 @@ describe('TrackingService', () => {
     });
 
     it('vượt MAX_DELIVERY_ATTEMPTS thì văng BadRequestException khi cố Exception', async () => {
-      prismaService.order.findFirst.mockResolvedValue({ id: 1, status: ORDER_STATUS.OUT_FOR_DELIVERY });
+      prismaService.order.findFirst.mockResolvedValue({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.OUT_FOR_DELIVERY });
       trackingRepo.countFailedAttempts.mockResolvedValue(3); // Giả lập đã fail 3 lần (cả lần hiện tại)
 
       const payload = {
@@ -109,7 +122,13 @@ describe('TrackingService', () => {
     });
 
     it('khi DELIVERED thì tự động enqueue BullMQ cập nhật trip status', async () => {
-      prismaService.order.findFirst.mockResolvedValue({ id: 1, status: ORDER_STATUS.OUT_FOR_DELIVERY, currentTripId: 100 });
+      prismaService.order.findFirst.mockResolvedValue({
+        id: 1,
+        customerId: 7,
+        trackingCode: 'ORD001',
+        status: ORDER_STATUS.OUT_FOR_DELIVERY,
+        currentTripId: 100,
+      });
       trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 10 } as any);
       
       // Giả lập trip đã hoàn tất tất cả đơn hàng
@@ -129,12 +148,43 @@ describe('TrackingService', () => {
 
       await service.createEvent(1, payload as any);
 
+      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
+        userId: 7,
+        orderId: 1,
+        trackingCode: 'ORD001',
+        status: ORDER_STATUS.DELIVERED,
+      });
+
       expect(prismaService.trip.update).toHaveBeenCalledWith({
         where: { id: 100 },
         data: expect.objectContaining({ status: 'COMPLETED' }),
       });
       // Test GreenTech Queue added
       expect(greenTechQueue.add).toHaveBeenCalledWith(CALCULATE_EMISSION_JOB_NAME, { tripId: 100 });
+    });
+
+    it('bắn notification khi đơn chuyển sang OUT_FOR_DELIVERY', async () => {
+      prismaService.order.findFirst.mockResolvedValue({
+        id: 2,
+        customerId: 9,
+        trackingCode: 'ORD002',
+        status: ORDER_STATUS.IN_TRANSIT,
+        currentTripId: null,
+      });
+      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 11 } as any);
+
+      await service.createEvent(1, {
+        orderId: 2,
+        eventType: TRACKING_EVENT_TYPE.STATUS_CHANGE,
+        status: ORDER_STATUS.OUT_FOR_DELIVERY,
+      } as any);
+
+      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
+        userId: 9,
+        orderId: 2,
+        trackingCode: 'ORD002',
+        status: ORDER_STATUS.OUT_FOR_DELIVERY,
+      });
     });
   });
 

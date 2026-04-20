@@ -3,7 +3,7 @@ const roleName = {
   CUSTOMER: 'CUSTOMER',
   DRIVER: 'DRIVER',
   WAREHOUSE_STAFF: 'WAREHOUSE_STAFF',
-}
+} as const
 export default roleName
 
 export const HTTPMethod = {

@@ -5,8 +5,7 @@ import { RoleType } from '../model/share-role.model'
 
 @Injectable()
 export class SharedRoleRepository {
-  private clientRoleId: number | null = null
-  private adminRoleId: number | null = null
+  private readonly roleIdCache = new Map<string, number>()
   constructor(private readonly prismaService: PrismaService) {}
   private async getRole(roleName: string) {
     const role: RoleType = await this.prismaService.$queryRaw<
@@ -19,22 +18,26 @@ export class SharedRoleRepository {
     })
     return role
   }
-  async getClientRoleId() {
-    if (this.clientRoleId) {
-      return this.clientRoleId
+  async getRoleIdByName(name: string) {
+    const cachedRoleId = this.roleIdCache.get(name)
+    if (cachedRoleId) {
+      return cachedRoleId
     }
 
-    const role: RoleType = await this.getRole(roleName.CUSTOMER)
-    this.clientRoleId = role.id
+    const role = await this.getRole(name)
+    this.roleIdCache.set(name, role.id)
     return role.id
   }
+  async getClientRoleId() {
+    return this.getRoleIdByName(roleName.CUSTOMER)
+  }
   async getAdminRoleId() {
-    if (this.adminRoleId) {
-      return this.adminRoleId
-    }
-
-    const role: RoleType = await this.getRole(roleName.ADMIN)
-    this.adminRoleId = role.id
-    return role.id
+    return this.getRoleIdByName(roleName.ADMIN)
+  }
+  async getDriverRoleId() {
+    return this.getRoleIdByName(roleName.DRIVER)
+  }
+  async getWarehouseStaffRoleId() {
+    return this.getRoleIdByName(roleName.WAREHOUSE_STAFF)
   }
 }
