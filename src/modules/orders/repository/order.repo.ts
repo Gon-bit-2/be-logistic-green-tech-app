@@ -36,22 +36,24 @@ export class OrderRepository {
     })
   }
 
-  async findAll(query: GetOrderListQueryType) {
-    const { limit, page, status } = query
+  async findAll(query: GetOrderListQueryType & { customerId?: number; currentHubId?: number }) {
+    const { limit, page, status, customerId, currentHubId } = query
     const skip = (page - 1) * limit
     const take = limit
+
+    const whereParams: any = {
+      deletedAt: null,
+      ...(status && { status }),
+      ...(customerId && { customerId }),
+      ...(currentHubId && { currentHubId }),
+    }
+
     const [totalItems, data] = await Promise.all([
       this.prismaService.order.count({
-        where: {
-          deletedAt: null,
-          status,
-        },
+        where: whereParams,
       }),
       this.prismaService.order.findMany({
-        where: {
-          deletedAt: null,
-          status,
-        },
+        where: whereParams,
         include: {
           items: true,
         },

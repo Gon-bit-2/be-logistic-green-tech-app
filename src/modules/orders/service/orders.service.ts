@@ -14,7 +14,7 @@ export class OrdersService {
   ) {}
 
   // ====== #10: HUB GEOSPATIAL CACHE ======
-  // Thay vì query `SELECT * FROM hubs` mỗi lần tạo đơn, cache list Hub trên RAM Node.js 
+  // Thay vì query `SELECT * FROM hubs` mỗi lần tạo đơn, cache list Hub trên RAM Node.js
   // Node.js v8 engine thừa sức tính Haversine cho 10,000 phần tử mảng trong <2ms (cực chuẩn cho Enterprise).
   private cachedActiveHubs: { id: number; latitude: number; longitude: number; name: string }[] | null = null
   private lastHubsCacheTime = 0
@@ -37,7 +37,6 @@ export class OrdersService {
     }
 
     const activeHubs = this.cachedActiveHubs
-
 
     if (!activeHubs.length) {
       this.logger.warn('[ORDER] Không có Hub nào đang hoạt động. Đơn hàng sẽ không được gán Hub.')
@@ -139,7 +138,7 @@ export class OrdersService {
     return baseFee + distanceFee + heavyFee
   }
 
-  async findAll(query: GetOrderListQueryType) {
+  async findAll(query: GetOrderListQueryType & { customerId?: number; currentHubId?: number }) {
     return this.orderRepo.findAll(query)
   }
 

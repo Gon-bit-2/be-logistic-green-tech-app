@@ -10,6 +10,9 @@ Tài liệu này được viết từ source backend hiện tại tại ngày `2
 - `GET /` là public
 - Auth mặc định là `Bearer` cho mọi route, trừ các route có `@isPublic()`
 - Với route `Bearer`, runtime hiện tại còn check permission theo `role + path + method` trong DB/cache
+- Có cơ chế **Resource Level Authorization (RLA)** sử dụng Guard `@ResourceAccess`:
+  - CUSTOMER và DRIVER chỉ được thao tác với dữ liệu của nình (VD: check `customerId`).
+  - WAREHOUSE_STAFF chỉ được thao tác với dữ liệu thuộc kho mình quản lý (VD: check `currentHubId`).
 - Response là JSON, `Date` serialize thành ISO string
 - Pagination chuẩn:
   - `page`: mặc định `1`
@@ -33,17 +36,18 @@ Các module đang được import trong `src/app.module.ts`:
 
 ## 1. Auth
 
-| Method | Path                    | Public | Mục đích                  | Response chính                  |
-| ------ | ----------------------- | ------ | ------------------------- | ------------------------------- |
-| POST   | `/auth/otp`             | Yes    | Gửi OTP                   | `{ message }`                   |
-| POST   | `/auth/verify-otp`      | Yes    | Verify OTP                | `{ message }`                   |
-| POST   | `/auth/register`        | Yes    | Đăng ký customer          | user public                     |
-| POST   | `/auth/login`           | Yes    | Đăng nhập                 | `{ accessToken, refreshToken }` |
-| POST   | `/auth/refresh-token`   | Yes    | Refresh token             | `{ accessToken, refreshToken }` |
-| POST   | `/auth/logout`          | No     | Logout theo refresh token | `{ message }`                   |
-| GET    | `/auth/google-link`     | Yes    | Lấy URL Google OAuth      | `{ url }`                       |
-| GET    | `/auth/google/callback` | Yes    | Redirect từ Google        | `302 redirect`                  |
-| POST   | `/auth/forgot-password` | Yes    | Đổi mật khẩu bằng OTP     | `{ message }`                   |
+| Method | Path                    | Public | Mục đích                    | Response chính                  |
+| ------ | ----------------------- | ------ | --------------------------- | ------------------------------- |
+| POST   | `/auth/otp`             | Yes    | Gửi OTP                     | `{ message }`                   |
+| POST   | `/auth/verify-otp`      | Yes    | Verify OTP                  | `{ message }`                   |
+| POST   | `/auth/register`        | Yes    | Đăng ký customer            | user public                     |
+| POST   | `/auth/login`           | Yes    | Đăng nhập                   | `{ accessToken, refreshToken }` |
+| GET    | `/auth/profile`         | No     | Lấy thông tin user hiện tại | user profile (có `roleId`)      |
+| POST   | `/auth/refresh-token`   | Yes    | Refresh token               | `{ accessToken, refreshToken }` |
+| POST   | `/auth/logout`          | No     | Logout theo refresh token   | `{ message }`                   |
+| GET    | `/auth/google-link`     | Yes    | Lấy URL Google OAuth        | `{ url }`                       |
+| GET    | `/auth/google/callback` | Yes    | Redirect từ Google          | `302 redirect`                  |
+| POST   | `/auth/forgot-password` | Yes    | Đổi mật khẩu bằng OTP       | `{ message }`                   |
 
 ### Body mẫu
 
@@ -268,13 +272,13 @@ Response emission log gồm các field chính:
 
 ## 7. Orders
 
-| Method | Path                  | Quyền dự kiến  | Mục đích                 | Response chính        |
-| ------ | --------------------- | -------------- | ------------------------ | --------------------- |
-| POST   | `/orders`             | Authenticated  | Tạo đơn hàng             | `{ order }`           |
-| GET    | `/orders`             | Authenticated  | Danh sách đơn hàng       | `{ data, totalItems}` |
-| GET    | `/orders/:id`         | Authenticated  | Chi tiết đơn hàng        | order                 |
-| PUT    | `/orders/:id/status`  | Authenticated  | Cập nhật trạng thái đơn  | order                 |
-| DELETE | `/orders/:id`         | Authenticated  | Xóa mềm đơn              | order                 |
+| Method | Path                 | Quyền dự kiến | Mục đích                | Response chính        |
+| ------ | -------------------- | ------------- | ----------------------- | --------------------- |
+| POST   | `/orders`            | Authenticated | Tạo đơn hàng            | `{ order }`           |
+| GET    | `/orders`            | Authenticated | Danh sách đơn hàng      | `{ data, totalItems}` |
+| GET    | `/orders/:id`        | Authenticated | Chi tiết đơn hàng       | order                 |
+| PUT    | `/orders/:id/status` | Authenticated | Cập nhật trạng thái đơn | order                 |
+| DELETE | `/orders/:id`        | Authenticated | Xóa mềm đơn             | order                 |
 
 Lưu ý:
 
@@ -284,14 +288,14 @@ Lưu ý:
 
 ## 8. Trips
 
-| Method | Path                                 | Quyền dự kiến | Mục đích                             | Response chính        |
-| ------ | ------------------------------------ | ------------- | ------------------------------------ | --------------------- |
-| POST   | `/trips/auto-dispatch`               | Authenticated | Trigger gom chuyến theo 1 hub / all  | `{ message, jobId }`  |
-| POST   | `/trips/auto-dispatch/all`           | Authenticated | Trigger gom chuyến toàn hệ thống     | `{ message, jobId }`  |
-| GET    | `/trips`                             | Authenticated | Danh sách chuyến                     | `{ data, totalItems}` |
-| GET    | `/trips/:id`                         | Authenticated | Chi tiết chuyến                      | trip                  |
-| PATCH  | `/trips/:id/status`                  | Authenticated | Cập nhật trạng thái chuyến           | trip                  |
-| PATCH  | `/trips/:id/cancel-order/:orderId`   | Authenticated | Gỡ đơn khỏi chuyến                   | trip / result object  |
+| Method | Path                               | Quyền dự kiến | Mục đích                            | Response chính        |
+| ------ | ---------------------------------- | ------------- | ----------------------------------- | --------------------- |
+| POST   | `/trips/auto-dispatch`             | Authenticated | Trigger gom chuyến theo 1 hub / all | `{ message, jobId }`  |
+| POST   | `/trips/auto-dispatch/all`         | Authenticated | Trigger gom chuyến toàn hệ thống    | `{ message, jobId }`  |
+| GET    | `/trips`                           | Authenticated | Danh sách chuyến                    | `{ data, totalItems}` |
+| GET    | `/trips/:id`                       | Authenticated | Chi tiết chuyến                     | trip                  |
+| PATCH  | `/trips/:id/status`                | Authenticated | Cập nhật trạng thái chuyến          | trip                  |
+| PATCH  | `/trips/:id/cancel-order/:orderId` | Authenticated | Gỡ đơn khỏi chuyến                  | trip / result object  |
 
 Lưu ý:
 
@@ -335,14 +339,15 @@ Lưu ý:
 
 ## 10. Analytics
 
-| Method | Path | Quyền dự kiến | Mục đích | Response chính |
-| ------ | ---- | ------------- | -------- | -------------- |
-| GET | `/analytics/dashboard` | ADMIN | Thống kê tổng quan | `{ totalOrders, totalRevenue, totalDistance, totalCo2Saved, avgDeliveryTime, onTimeDeliveryRate }` |
-| GET | `/analytics/orders` | ADMIN | Thống kê đơn hàng theo khoảng thời gian | `Array<{ period, count, revenue, avgDeliveryTime }>` |
-| GET | `/analytics/emissions` | ADMIN | Thống kê khí thải theo khoảng thời gian | `Array<{ period, co2Emitted, co2Saved, greenTripsCount }>` |
-| GET | `/analytics/fleet-performance` | ADMIN | Thống kê hiệu suất từng phương tiện | `Array<{ vehicleId, licensePlate, totalTrips, totalDistance, efficiency, co2Saved }>` |
+| Method | Path                           | Quyền dự kiến | Mục đích                                | Response chính                                                                                     |
+| ------ | ------------------------------ | ------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| GET    | `/analytics/dashboard`         | ADMIN         | Thống kê tổng quan                      | `{ totalOrders, totalRevenue, totalDistance, totalCo2Saved, avgDeliveryTime, onTimeDeliveryRate }` |
+| GET    | `/analytics/orders`            | ADMIN         | Thống kê đơn hàng theo khoảng thời gian | `Array<{ period, count, revenue, avgDeliveryTime }>`                                               |
+| GET    | `/analytics/emissions`         | ADMIN         | Thống kê khí thải theo khoảng thời gian | `Array<{ period, co2Emitted, co2Saved, greenTripsCount }>`                                         |
+| GET    | `/analytics/fleet-performance` | ADMIN         | Thống kê hiệu suất từng phương tiện     | `Array<{ vehicleId, licensePlate, totalTrips, totalDistance, efficiency, co2Saved }>`              |
 
 **Query parameter (dùng chung cho các endpoint):**
+
 - `dateRange`: enum `'7d' | '30d' | '90d' | '1y'` (mặc định `'30d'`)
 
 ## 11. Error format hiện tại

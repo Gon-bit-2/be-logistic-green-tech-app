@@ -1,5 +1,6 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Ip, Get, Query, Res } from '@nestjs/common'
 import { AuthService } from 'src/modules/auth/service/auth.service'
+import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import {
   ForgotPasswordBodyDTO,
   GetAuthorizationUrlResDTO,
@@ -26,6 +27,12 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly googleService: GoogleService,
   ) {}
+
+  @Get('profile')
+  getProfile(@ActiveUser('userId') userId: number) {
+    return this.authService.getProfile(userId)
+  }
+
   @Throttle({
     default: { limit: 1, ttl: 60000 },
   })
