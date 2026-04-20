@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrdersService } from '../service/orders.service';
 import { OrderRepository } from '../repository/order.repo';

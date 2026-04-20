@@ -6,9 +6,11 @@ import { BullModule } from '@nestjs/bullmq'
 import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
 import { TripsProcessor } from './processor/trips.processor'
 import { PrismaService } from 'src/database/prisma.service'
+import { GreenTechModule } from '../green-tech/green-tech.module'
 
 @Module({
   imports: [
+    GreenTechModule,
     BullModule.registerQueue({
       name: AUTO_DISPATCH_QUEUE_NAME,
       defaultJobOptions: {

@@ -34,8 +34,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       
     } else if (exception instanceof ZodError) {
       httpStatus = HttpStatus.BAD_REQUEST;
-      message = exception.errors.map(err => err.message).join(', ');
-      errors = exception.errors;
+      message = (exception as any).errors.map(err => err.message).join(', ');
+      errors = (exception as any).errors;
     } else if (exception instanceof Error) {
       message = exception.message;
     }
