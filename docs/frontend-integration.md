@@ -278,3 +278,44 @@ Lưu ý: hiện tại các nhóm này đi qua `Bearer` mặc định và permiss
 ## 10. Tài liệu liên quan
 
 - API reference chi tiết: [api-reference.md](./api-reference.md)
+
+
+## 5. WebSockets Integration (Tracking Gateway)
+Để hiển thị thời gian thực vị trí tài xế, Frontend cần kết nối Socket.io với Gateway `/tracking`.
+
+**1. Setup Client**
+```typescript
+import { io } from "socket.io-client";
+
+// Đảm bảo include token vào "auth"
+const socket = io("http://localhost:8386/tracking", {
+  auth: {
+    token: "Bearer <accessToken>"
+  }
+});
+```
+
+**2. Subscribe/Nhận Dữ Liệu (Dành cho Khách Hàng)**
+```typescript
+// Join vào room trip cụ thể
+socket.emit("joinTripTracking", { tripId: 1001 });
+
+// Lắng nghe thay đổi vị trí
+socket.on("locationUpdated", (data) => {
+  console.log("GPS mới từ driver:", data.lat, data.lng);
+});
+
+// Khi rời trang
+socket.emit("leaveTripTracking", { tripId: 1001 });
+```
+
+**3. Publish/Cập nhật vị trí (Dành cho Tài Xế)**
+```typescript
+// Driver update GPS liên tục
+socket.emit("driverLocationUpdate", {
+  tripId: 1001,
+  lat: 10.762622,
+  lng: 106.660172
+});
+```
+

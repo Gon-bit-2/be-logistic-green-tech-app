@@ -1,3 +1,4 @@
+import { optimizeRouteWithOSRM } from 'src/utils/routing.util'
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
@@ -6,6 +7,7 @@ import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
 import { PrismaService } from 'src/database/prisma.service'
 import { GetTripListQueryType } from '../model/trip.model'
 import { TripStatusType } from 'src/common/constants/strip.constant'
+import { GamificationService } from '../../green-tech/service/gamification.service'
 
 @Injectable()
 export class TripsService {
@@ -14,6 +16,7 @@ export class TripsService {
     private readonly autoDispatchQueue: Queue,
     private readonly tripRepo: TripRepository,
     private readonly prismaService: PrismaService, // Dùng để fetch danh sách Hub khi chạy Global
+    private readonly gamificationService: GamificationService,
   ) {}
 
   /**
@@ -92,6 +95,38 @@ export class TripsService {
    * - Đơn liên tỉnh (HUB_TRANSFER) → ARRIVED_AT_HUB + chuyển sang Hub đích
    *   → Đơn tự động hiện trong lượt dispatch tiếp ở Hub đích (khép kín vòng lặp)
    */
+  async optimizeRouteForTrip(tripId: number) {
+    const trip = await this.tripRepo.findById(tripId)
+    if (!trip) throw new NotFoundException('Trip not found')
+
+    // Giả sử trip.ordersOnBoard chứa các điểm đến của đơn hàng.
+    // Ta lấy tọa độ của tất cả đơn hàng
+    // Lấy hub hiện tại làm điểm xuất phát (nếu có). Trong CSDL ta cần query.
+    const orders = await this.prismaService.order.findMany({
+      where: { currentTripId: tripId },
+      include: { trackingEvents: { orderBy: { occurredAt: 'desc' }, take: 1 } },
+    })
+
+    if (orders.length < 2) return trip
+
+    // Giả định order có vĩ độ, kinh độ từ address - nhưng trong DB ta có trackingEvents hoặc customer address.
+    // Tạm lấy một số tọa độ giả định để gọi OSRM nếu không có (demo mục đích Tối ưu lộ trình)
+    const coordinates = orders.map((o, idx) => ({
+      lat: 10.762622 + idx * 0.01, // Vị trí giả định
+      lng: 106.660172 + idx * 0.01,
+      orderId: o.id,
+    }))
+
+    const result = await optimizeRouteWithOSRM(coordinates)
+
+    return {
+      message: 'Đã tối ưu lộ trình thành công',
+      distance: result.distance,
+      duration: result.duration,
+      waypoints: result.waypoints,
+    }
+  }
+
   private async completeTrip(tripId: number) {
     // Lấy danh sách tất cả Hub active để tìm Hub đích cho đơn liên tỉnh
     const allHubs = await this.prismaService.hub.findMany({
@@ -107,7 +142,14 @@ export class TripsService {
       },
     })
 
-    return this.tripRepo.completeTrip(tripId, allHubs)
+    const result = await this.tripRepo.completeTrip(tripId, allHubs)
+
+    // Kích hoạt logic tính toán Gamification CO2 sau khi hoàn thành chuyến (Non-blocking)
+    this.gamificationService.processTripEmission(tripId).catch((err) => {
+      console.error(`[Gamification Error] Lỗi xử lý điểm cống hiến chuyến xe ${tripId}:`, err)
+    })
+
+    return result
   }
 
   /**

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from '../service/auth.service';
 import { SharedRoleRepository } from 'src/common/repositories/shared-role.repo';

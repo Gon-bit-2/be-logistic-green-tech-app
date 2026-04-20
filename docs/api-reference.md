@@ -33,6 +33,8 @@ Các module đang được import trong `src/app.module.ts`:
 - `orders`
 - `trips`
 - `analytics`
+- `upload` (Cloudinary Cloud - POD)
+- `wallet` (COD Reconciliation)
 
 ## 1. Auth
 
@@ -197,6 +199,8 @@ Lưu ý:
 
 ## 5. Tracking
 
+### REST APIs
+
 | Method | Path                                    | Quyền dự kiến                    | Mục đích        | Response chính                            |
 | ------ | --------------------------------------- | -------------------------------- | --------------- | ----------------------------------------- |
 | POST   | `/tracking-events`                      | DRIVER / WAREHOUSE_STAFF / ADMIN | Tạo event       | tracking event vừa tạo                    |
@@ -239,12 +243,28 @@ Nếu giao thành công:
 }
 ```
 
-Rule nghiệp vụ:
+Rule nghiệp vụ REST:
 
 - `STATUS_CHANGE` bắt buộc có `status`
 - `EXCEPTION` bắt buộc có `failureReasonCode`
 - `status = DELIVERED` bắt buộc có `pod`
 - public timeline sẽ ẩn bớt thông tin nhạy cảm
+
+### WebSocket (Real-time Tracking)
+
+Namespace: `/tracking`
+
+| Sự kiện (Emit/Subscribe) | Người gửi               | Payload/Data                                   | Chi tiết                                               |
+| ------------------------ | ----------------------- | ---------------------------------------------- | ------------------------------------------------------ |
+| `driverLocationUpdate`   | Driver (Emit)           | `{ tripId: number, lat: number, lng: number }` | Tài xế cập nhật GPS liên tục. Yêu cầu token hợp lệ.    |
+| `locationUpdated`        | Server (Broadcast)      | `{ driverId, tripId, lat, lng, timestamp }`    | Server đẩy vị trí về cho tất cả client trong room trip |
+| `joinTripTracking`       | Khách / Giám sát (Emit) | `{ tripId: number }`                           | Client tham gia vào room của 1 chuyến đi (trip).       |
+| `leaveTripTracking`      | Khách / Giám sát (Emit) | `{ tripId: number }`                           | Rời khỏi room tracking để tiết kiệm tài nguyên.        |
+
+**Lưu ý:**
+
+- Xác thực: `client.handshake.auth.token` hiện được trích xuất thông qua JWT Guard (TODO: `WsGuard`) để map với `AuthenticatedSocket`.
+- Cần Emit `joinTripTracking` để bắt đầu nhận dữ liệu từ `locationUpdated`.
 
 ## 6. Green Tech
 
@@ -379,3 +399,22 @@ Ví dụ validation:
 - `LanguageService` dùng `404` cho not found và `409` cho duplicate create thay vì generic `500`.
 - `POST /hubs/:id/staff` vẫn trả raw Prisma record; frontend chỉ nên dùng các field an toàn đã liệt kê ở phần Hub.
 - Các route private hiện phụ thuộc cả JWT hợp lệ lẫn permission record theo `path + method`.
+
+## 12. Upload & Wallet (New Components)
+
+### W.1 Upload (POD)
+
+| Method | Path                   | Giới hạn      | Multipart form-data   | Chi tiết                        |
+| ------ | ---------------------- | ------------- | --------------------- | ------------------------------- |
+| POST   | `/upload/pod`          | auth required | `file` (single)       | Tải lên 1 ảnh POD               |
+| POST   | `/upload/multiple-pod` | auth required | `files` (array max 5) | Tải lên nhiểu ảnh POD hàng loạt |
+
+- Upload hiện tích hợp Cloudinary `streamifier`.
+- Yêu cầu định dạng image hợp lệ (`/jpg/jpeg/png/webp/gif/`).
+
+### W.2 Wallet (COD Storage)
+
+Hệ thống tạo `Wallet` để lưu trữ đối soát số tiền thu được từ COD của tài xế. Module hoạt động đằng sau theo các API internal service.
+
+- Function: `walletRepository.addCodToWallet(userId, amount)`
+- Function: `walletRepository.reconcileCod(userId, amount)` (Đối soát / Thu hồi nợ COD)

@@ -5,7 +5,7 @@ import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import { ResourceAccess } from 'src/common/decorators/resource-access.decorator'
 import { Roles } from 'src/common/decorators/roles.decorator'
 import roleName from 'src/common/constants/role.constant'
-import { AccessTokenPayload } from 'src/types/jwt.type'
+import type { AccessTokenPayload } from 'src/types/jwt.type'
 
 @Controller('orders')
 export class OrdersController {

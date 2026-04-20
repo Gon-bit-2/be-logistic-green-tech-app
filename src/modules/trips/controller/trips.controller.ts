@@ -6,7 +6,7 @@ import { Roles } from 'src/common/decorators/roles.decorator'
 import { ResourceAccess } from 'src/common/decorators/resource-access.decorator'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import roleName from 'src/common/constants/role.constant'
-import { AccessTokenPayload } from 'src/types/jwt.type'
+import type { AccessTokenPayload } from 'src/types/jwt.type'
 
 @Controller('trips')
 export class TripsController {
@@ -30,6 +30,17 @@ export class TripsController {
 
   @Get()
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
+  @Post(':id/optimize-route')
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
+  @ResourceAccess({
+    model: 'trip',
+    paramName: 'id',
+    ownerField: 'driverId',
+  })
+  optimizeRoute(@Param('id', ParseIntPipe) id: number) {
+    return this.tripsService.optimizeRouteForTrip(id)
+  }
+
   findAll(@Query() query: GetTripListDto, @ActiveUser() user: AccessTokenPayload) {
     let driverId: number | undefined
     if (user.roleName === roleName.DRIVER) {

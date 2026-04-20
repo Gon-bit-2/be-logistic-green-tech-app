@@ -32,6 +32,9 @@ const ConfigSchema = z.object({
   REDIS_PORT: z.coerce.number(),
   STRIPE_SECRET_KEY: z.string(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  CLOUDINARY_CLOUD_NAME: z.string(),
+  CLOUDINARY_API_KEY: z.string(),
+  CLOUDINARY_API_SECRET: z.string(),
 })
 
 const configServer = ConfigSchema.safeParse(process.env)
