@@ -59,6 +59,9 @@ model User {
   updatedOrders           Order[]              @relation("OrderUpdatedBy")
   deletedOrders           Order[]              @relation("OrderDeletedBy")
   refreshTokens           RefreshToken[]
+  notifications           Notification[]       @relation("UserNotifications")
+  requestedRoleChanges    RoleRequest[]        @relation("RoleRequestRequester")
+  reviewedRoleChanges     RoleRequest[]        @relation("RoleRequestReviewedBy")
   createdRoles            Role[]               @relation("RoleCreatedBy")
   updatedRoles            Role[]               @relation("RoleUpdatedBy")
   deletedRoles            Role[]               @relation("RoleDeletedBy")
@@ -81,6 +84,7 @@ model User {
   updatedPayments         Payment[]            @relation("PaymentUpdatedBy")
   // V1.5 Gamification
   greenProfile            UserGreenProfile?
+  addressBooks            AddressBook[]
 
   @@unique([email, isDeleted])
   @@index([roleId])
@@ -89,6 +93,26 @@ model User {
   @@index([email])
   @@index([isDeleted])
   @@map("users")
+}
+
+model AddressBook {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  label       String?  @db.VarChar(100)
+  contactName String   @db.VarChar(255)
+  phone       String   @db.VarChar(20)
+  address     String   @db.VarChar(500)
+  latitude    Float?
+  longitude   Float?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([userId, deletedAt])
+  @@index([userId, isDefault])
+  @@map("address_books")
 }
 
 model UserTranslation {
@@ -148,6 +172,8 @@ model Role {
   createdBy   User?        @relation("RoleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
   updatedById Int?
   updatedBy   User?        @relation("RoleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  currentRoleRequests RoleRequest[] @relation("RoleRequestCurrentRole")
+  targetRoleRequests  RoleRequest[] @relation("RoleRequestTargetRole")
 
   deletedAt   DateTime?
   deletedById Int?
@@ -222,6 +248,51 @@ model RefreshToken {
   @@index([expiresAt])
 }
 
+model RoleRequest {
+  id            Int               @id @default(autoincrement())
+  requesterId   Int
+  requester     User              @relation("RoleRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  currentRoleId Int
+  currentRole   Role              @relation("RoleRequestCurrentRole", fields: [currentRoleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  targetRoleId  Int
+  targetRole    Role              @relation("RoleRequestTargetRole", fields: [targetRoleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reason        String            @db.VarChar(1000)
+  status        RoleRequestStatus @default(PENDING)
+  reviewNote    String?           @db.VarChar(1000)
+  reviewedById  Int?
+  reviewedBy    User?             @relation("RoleRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  reviewedAt    DateTime?
+  assignedHubId Int?
+  assignedHub   Hub?              @relation("RoleRequestAssignedHub", fields: [assignedHubId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([requesterId])
+  @@index([status])
+  @@index([targetRoleId])
+  @@index([requesterId, status])
+  @@map("role_requests")
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  user      User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  type      NotificationType
+  title     String           @db.VarChar(255)
+  message   String           @db.VarChar(1000)
+  payload   Json?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
 // 2. MODULE: FLEET & GREEN TECH (Quản lý xe và thông số môi trường)
 model Vehicle {
   id                Int         @id @default(autoincrement())
@@ -267,6 +338,7 @@ model Hub {
   tripStops           TripStop[]
   ordersCurrentlyHere Order[]    @relation("OrdersAtHub") // Hàng đang tồn kho tại đây
   vehicles            Vehicle[]  @relation("HubVehicles") // Xe biên chế tại kho
+  assignedRoleRequests RoleRequest[] @relation("RoleRequestAssignedHub")
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
   deletedAt           DateTime?
@@ -595,6 +667,22 @@ enum RoleName {
   CUSTOMER
   DRIVER
   WAREHOUSE_STAFF
+}
+
+enum RoleRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  ROLE_REQUEST_SUBMITTED
+  ROLE_REQUEST_APPROVED
+  ROLE_REQUEST_REJECTED
+  ORDER_CREATED
+  ORDER_OUT_FOR_DELIVERY
+  ORDER_DELIVERED
+  ORDER_CANCELLED
 }
 
 enum OrderStatus {

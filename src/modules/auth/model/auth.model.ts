@@ -44,6 +44,7 @@ export type RegisterBodyType = z.infer<typeof RegisterBodySchema>
 //
 export const RegisterResSchema = UserSchema.omit({
   password: true,
+  totpSecret: true,
 })
 export type RegisterResType = z.infer<typeof RegisterResSchema>
 
@@ -162,3 +163,66 @@ export const ForgotPasswordBodySchema = z
     }
   })
 export type ForgotPasswordBodyType = z.infer<typeof ForgotPasswordBodySchema>
+
+export const UpdateProfileBodySchema = UserSchema.pick({
+  fullName: true,
+  phone: true,
+  avatar: true,
+})
+  .partial()
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'Vui lòng cung cấp ít nhất một trường để cập nhật',
+  })
+export type UpdateProfileBodyType = z.infer<typeof UpdateProfileBodySchema>
+
+export const UpdateProfileResSchema = RegisterResSchema
+export type UpdateProfileResType = z.infer<typeof UpdateProfileResSchema>
+
+export const AddressBookSchema = z.object({
+  id: z.number().int().positive(),
+  userId: z.number().int().positive(),
+  label: z.string().min(1).max(100).nullable(),
+  contactName: z.string().min(1).max(255),
+  phone: z.string().min(10).max(20),
+  address: z.string().min(1).max(500),
+  latitude: z.number().min(-90).max(90).nullable(),
+  longitude: z.number().min(-180).max(180).nullable(),
+  isDefault: z.boolean(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  deletedAt: z.date().nullable(),
+})
+
+export const CreateAddressBookBodySchema = AddressBookSchema.pick({
+  label: true,
+  contactName: true,
+  phone: true,
+  address: true,
+  latitude: true,
+  longitude: true,
+  isDefault: true,
+})
+  .extend({
+    label: z.string().min(1).max(100).nullable().optional(),
+    latitude: z.number().min(-90).max(90).nullable().optional(),
+    longitude: z.number().min(-180).max(180).nullable().optional(),
+    isDefault: z.boolean().optional(),
+  })
+  .strict()
+export type CreateAddressBookBodyType = z.infer<typeof CreateAddressBookBodySchema>
+
+export const UpdateAddressBookBodySchema = CreateAddressBookBodySchema.partial()
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'Vui lòng cung cấp ít nhất một trường để cập nhật',
+  })
+export type UpdateAddressBookBodyType = z.infer<typeof UpdateAddressBookBodySchema>
+
+export const AddressBookResSchema = AddressBookSchema
+export type AddressBookResType = z.infer<typeof AddressBookResSchema>
+
+export const AddressBookListResSchema = z.object({
+  data: z.array(AddressBookSchema),
+})
+export type AddressBookListResType = z.infer<typeof AddressBookListResSchema>

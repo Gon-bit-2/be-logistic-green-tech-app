@@ -1,13 +1,15 @@
 import { Injectable, OnModuleInit } from '@nestjs/common'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from 'generated/prisma'
+import { Pool } from 'pg'
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
   constructor() {
-    const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+    const adapter = new PrismaPg(pool)
     super({
       adapter,
-      errorFormat: 'minimal',
       log: ['info'],
     })
   }
@@ -15,3 +17,4 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     await this.$connect()
   }
 }
+

@@ -3,6 +3,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { OrdersService } from '../service/orders.service';
 import { OrderRepository } from '../repository/order.repo';
 import { PrismaService } from 'src/database/prisma.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { NotificationEventName } from 'src/modules/notification/events/notification.event';
+import { ORDER_STATUS } from 'src/common/constants/order.constant';
 
 // Mock calculateHaversineDistance before testing
 jest.mock('src/utils/geo.util', () => ({
@@ -14,6 +17,7 @@ describe('OrdersService', () => {
   let service: OrdersService;
   let orderRepo: jest.Mocked<OrderRepository>;
   let prismaService: any; // Mucking Prisma is easier by object assignment
+  let eventEmitter: jest.Mocked<EventEmitter2>;
 
   beforeEach(async () => {
     const orderRepoMock = {
@@ -30,6 +34,10 @@ describe('OrdersService', () => {
       },
     };
 
+    const eventEmitterMock = {
+      emitAsync: jest.fn().mockResolvedValue([]),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
@@ -41,12 +49,17 @@ describe('OrdersService', () => {
           provide: PrismaService,
           useValue: prismaServiceMock,
         },
+        {
+          provide: EventEmitter2,
+          useValue: eventEmitterMock,
+        },
       ],
     }).compile();
 
     service = module.get<OrdersService>(OrdersService);
     orderRepo = module.get(OrderRepository);
     prismaService = module.get(PrismaService);
+    eventEmitter = module.get(EventEmitter2);
   });
 
   afterEach(() => {
@@ -62,7 +75,7 @@ describe('OrdersService', () => {
       // Giả lập khoảng cách
       (calculateHaversineDistance as jest.Mock).mockReturnValue(5); // 5km
       // Giả lập response từ repo
-      orderRepo.create.mockResolvedValue({ id: 100 } as any);
+      orderRepo.create.mockResolvedValue({ id: 100, customerId: 2, trackingCode: 'ORD100' } as any);
 
       const payload = {
         receiverName: 'A',
@@ -81,7 +94,7 @@ describe('OrdersService', () => {
 
       const result = await service.create(1, 2, payload as any);
 
-      expect(result).toEqual({ order: { id: 100 } });
+      expect(result).toEqual({ order: { id: 100, customerId: 2, trackingCode: 'ORD100' } });
       expect(prismaService.hub.findMany).toHaveBeenCalled();
       
       // Kiểm tra giá trị truyền vào repo.create: totalWeight = 5, distanceKm = 5, heavyFee = 0 => base(15000) + 5*5500(27500) = 42500
@@ -97,13 +110,18 @@ describe('OrdersService', () => {
           estimatedCo2Saved: 5 * 0.0125 // 0.0625
         })
       );
+      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_CREATED, {
+        userId: 2,
+        orderId: 100,
+        trackingCode: 'ORD100',
+      });
     });
 
     it('Tính toán phí giao > 10km và Phụ phí hàng nặng (Heavy Fee > 5kg) và Gán đơn mồ côi (khi ko có Hub)', async () => {
       prismaService.hub.findMany.mockResolvedValue([]); // Không có Hub hoạt động -> mồ côi
       
       (calculateHaversineDistance as jest.Mock).mockReturnValue(15); // 15km
-      orderRepo.create.mockResolvedValue({ id: 101 } as any);
+      orderRepo.create.mockResolvedValue({ id: 101, customerId: 2, trackingCode: 'ORD101' } as any);
 
       const payload = {
         senderLat: 10.0,
@@ -131,6 +149,11 @@ describe('OrdersService', () => {
           shippingFee: 96000,
         })
       );
+      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_CREATED, {
+        userId: 2,
+        orderId: 101,
+        trackingCode: 'ORD101',
+      });
     });
   });
 
@@ -154,11 +177,25 @@ describe('OrdersService', () => {
 
   describe('update & delete', () => {
     it('gọi hàm update của repo', async () => {
-      orderRepo.update.mockResolvedValue({ id: 1 } as any);
-      const payload: any = { status: 'SHIPPING' };
+      orderRepo.update.mockResolvedValue({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.DELIVERED } as any);
+      const payload: any = { status: ORDER_STATUS.DELIVERED };
       const res = await service.update(1, payload);
-      expect(res).toEqual({ id: 1 });
+      expect(res).toEqual({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.DELIVERED });
       expect(orderRepo.update).toHaveBeenCalledWith(1, payload);
+      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
+        userId: 7,
+        orderId: 1,
+        trackingCode: 'ORD001',
+        status: ORDER_STATUS.DELIVERED,
+      });
+    });
+
+    it('không bắn notification cho status không nằm trong danh sách notify', async () => {
+      orderRepo.update.mockResolvedValue({ id: 2, customerId: 7, trackingCode: 'ORD002', status: ORDER_STATUS.ASSIGNED } as any);
+
+      await service.update(2, { status: ORDER_STATUS.ASSIGNED } as any);
+
+      expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
     });
 
     it('gọi hàm delete của repo', async () => {

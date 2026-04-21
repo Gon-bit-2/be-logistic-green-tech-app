@@ -73,6 +73,23 @@ export const GetTripParamsSchema = z
   })
   .strict()
 
+// Manual Trip Creation
+export const CreateManualTripSchema = z.object({
+  vehicleId: z.number().int().positive(),
+  driverId: z.number().int().positive(),
+  orderIds: z.array(z.number().int().positive()).min(1),
+})
+
+// Assign Vehicle
+export const AssignVehicleSchema = z.object({
+  vehicleId: z.number().int().positive(),
+})
+
+// Add Orders
+export const AddOrdersToTripSchema = z.object({
+  orderIds: z.array(z.number().int().positive()).min(1),
+})
+
 // TypeScript types
 export type TripType = z.infer<typeof TripSchema>
 export type TripStopType = z.infer<typeof TripStopSchema>
@@ -83,3 +100,6 @@ export type GetTripDetailResType = z.infer<typeof GetTripDetailResSchema>
 export type AutoDispatchQueryType = z.infer<typeof AutoDispatchQuerySchema>
 export type AutoDispatchResType = z.infer<typeof AutoDispatchResSchema>
 export type GetTripParamsType = z.infer<typeof GetTripParamsSchema>
+export type CreateManualTripType = z.infer<typeof CreateManualTripSchema>
+export type AssignVehicleType = z.infer<typeof AssignVehicleSchema>
+export type AddOrdersToTripType = z.infer<typeof AddOrdersToTripSchema>

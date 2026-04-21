@@ -6,6 +6,16 @@ import { HashingService } from 'src/common/services/hashing.service';
 import { TokenService } from 'src/common/services/token.service';
 import { AuthService } from './auth.service';
 
+jest.mock('src/config/config', () => ({
+  __esModule: true,
+  default: {
+    GOOGLE_CLIENT_ID: 'google-client-id',
+    GOOGLE_CLIENT_SECRET: 'google-client-secret',
+    GOOGLE_REDIRECT_URI: 'http://localhost:8386/auth/google/callback',
+    GOOGLE_CLIENT_REDIRECT_URI: 'appecomerce://callback',
+  },
+}));
+
 jest.mock('googleapis', () => ({
   google: {
     auth: {
@@ -90,5 +100,11 @@ describe('GoogleService', () => {
     
     expect(result.accessToken).toBe('a');
     expect(authRepository.createUserIncludeRole).toHaveBeenCalled();
+  });
+
+  it('should throw a readable error when google callback code is missing', async () => {
+    await expect(service.googleCallback({ state: undefined as any, code: undefined as any })).rejects.toThrow(
+      'Thiếu mã xác thực từ Google',
+    );
   });
 });

@@ -1,13 +1,21 @@
 import { Injectable } from '@nestjs/common'
+import { Prisma } from 'generated/prisma'
 import { TypeOfVerificationCodeType } from 'src/common/constants/auth.constant'
 import { RoleType } from 'src/common/model/share-role.model'
 import { WhereUniqueUserType } from 'src/common/repositories/shared-user.repo'
 import { PrismaService } from 'src/database/prisma.service'
-import { DeviceType, UserType } from 'src/modules/auth/model/auth.model'
+import { CreateAddressBookBodyType, DeviceType, UserType } from 'src/modules/auth/model/auth.model'
+
+type PrismaExecutor = PrismaService | Prisma.TransactionClient
 
 @Injectable()
 export class AuthRepository {
   constructor(private readonly prismaService: PrismaService) {}
+
+  private getClient(client?: PrismaExecutor) {
+    return client ?? this.prismaService
+  }
+
   async createUser(
     user: Pick<UserType, 'email' | 'fullName' | 'password' | 'roleId'> & { phone: string | null },
   ): Promise<Omit<UserType, 'password' | 'totpSecret'>> {
@@ -92,5 +100,81 @@ export class AuthRepository {
       return verificationCode
     }
     return null
+  }
+
+  async findAddressBooksByUserId(userId: number) {
+    return await this.prismaService.addressBook.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+      },
+      orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+    })
+  }
+
+  async countActiveAddressBooksByUserId(userId: number) {
+    return await this.prismaService.addressBook.count({
+      where: {
+        userId,
+        deletedAt: null,
+      },
+    })
+  }
+
+  async findAddressBookByIdForUser(id: number, userId: number, client?: PrismaExecutor) {
+    return await this.getClient(client).addressBook.findFirst({
+      where: {
+        id,
+        userId,
+        deletedAt: null,
+      },
+    })
+  }
+
+  async findFirstActiveAddressBookByUserId(userId: number, client?: PrismaExecutor) {
+    return await this.getClient(client).addressBook.findFirst({
+      where: {
+        userId,
+        deletedAt: null,
+      },
+      orderBy: [{ isDefault: 'desc' }, { id: 'asc' }],
+    })
+  }
+
+  async clearDefaultAddressBooks(userId: number, excludeId?: number, client?: PrismaExecutor) {
+    return await this.getClient(client).addressBook.updateMany({
+      where: {
+        userId,
+        deletedAt: null,
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+      },
+      data: {
+        isDefault: false,
+      },
+    })
+  }
+
+  async createAddressBook(data: CreateAddressBookBodyType & { userId: number; isDefault: boolean }, client?: PrismaExecutor) {
+    return await this.getClient(client).addressBook.create({
+      data: {
+        ...data,
+        label: data.label ?? null,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
+      },
+    })
+  }
+
+  async updateAddressBook(
+    id: number,
+    data: Prisma.AddressBookUpdateInput | Prisma.AddressBookUncheckedUpdateInput,
+    client?: PrismaExecutor,
+  ) {
+    return await this.getClient(client).addressBook.update({
+      where: {
+        id,
+      },
+      data,
+    })
   }
 }

@@ -24,6 +24,9 @@ import { AnalyticsModule } from 'src/modules/analytics/analytics.module'
 import { TripsModule } from './modules/trips/trips.module'
 import { WalletModule } from './modules/wallet/wallet.module'
 import { UploadModule } from './modules/upload/upload.module'
+import { NotificationModule } from './modules/notification/notification.module'
+import { RoleModule } from './modules/role/role.module'
+import { EventEmitterModule } from '@nestjs/event-emitter'
 
 @Module({
   imports: [
@@ -39,6 +42,9 @@ import { UploadModule } from './modules/upload/upload.module'
     WalletModule,
     UploadModule,
     AnalyticsModule,
+    NotificationModule,
+    RoleModule,
+    EventEmitterModule.forRoot(),
     ThrottlerModule.forRoot({
       throttlers: [
         {

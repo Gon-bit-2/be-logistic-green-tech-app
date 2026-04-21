@@ -1,5 +1,11 @@
 import { Controller, Get, Post, Body, Param, ParseIntPipe, Patch, Query } from '@nestjs/common'
-import { AutoDispatchQueryDto, GetTripListDto } from '../dto/trip.dto'
+import {
+  AddOrdersToTripDto,
+  AssignVehicleDto,
+  AutoDispatchQueryDto,
+  CreateManualTripDto,
+  GetTripListDto,
+} from '../dto/trip.dto'
 import { TRIP_STATUS } from 'src/common/constants/strip.constant'
 import { TripsService } from '../service/trips.service'
 import { Roles } from 'src/common/decorators/roles.decorator'
@@ -11,6 +17,24 @@ import type { AccessTokenPayload } from 'src/types/jwt.type'
 @Controller('trips')
 export class TripsController {
   constructor(private readonly tripsService: TripsService) {}
+
+  @Post('manual')
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  async createManualTrip(@Body() body: CreateManualTripDto) {
+    return this.tripsService.createManualTrip(body)
+  }
+
+  @Patch(':id/vehicle')
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  async assignVehicleToTrip(@Param('id', ParseIntPipe) id: number, @Body() body: AssignVehicleDto) {
+    return this.tripsService.assignVehicleToTrip(id, body)
+  }
+
+  @Post(':id/orders')
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  async addOrdersToTrip(@Param('id', ParseIntPipe) id: number, @Body() body: AddOrdersToTripDto) {
+    return this.tripsService.addOrdersToTrip(id, body)
+  }
 
   @Post('auto-dispatch')
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
@@ -28,8 +52,6 @@ export class TripsController {
     return this.tripsService.autoDispatchGlobalTask()
   }
 
-  @Get()
-  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
   @Post(':id/optimize-route')
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
   @ResourceAccess({
@@ -41,6 +63,8 @@ export class TripsController {
     return this.tripsService.optimizeRouteForTrip(id)
   }
 
+  @Get()
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
   findAll(@Query() query: GetTripListDto, @ActiveUser() user: AccessTokenPayload) {
     let driverId: number | undefined
     if (user.roleName === roleName.DRIVER) {

@@ -2,17 +2,21 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
   UnprocessableEntityException,
 } from '@nestjs/common'
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager'
 import { addMilliseconds } from 'date-fns'
 import {
+  CreateAddressBookBodyType,
   ForgotPasswordBodyType,
   LoginBodyType,
   RefreshTokenBodyType,
   RegisterBodyType,
   SendOTPBodyType,
+  UpdateAddressBookBodyType,
+  UpdateProfileBodyType,
   VerifyOTPBodyType,
 } from 'src/modules/auth/model/auth.model'
 import ms, { StringValue } from 'ms'
@@ -57,28 +61,116 @@ export class AuthService {
     return profile
   }
 
+  async updateProfile(userId: number, body: UpdateProfileBodyType) {
+    const user = await this.shareUserRepository.findUnique({ id: userId })
+    if (!user) {
+      throw new UnauthorizedException('User not found')
+    }
+
+    const updatedUser = await this.shareUserRepository.update(
+      { id: userId },
+      {
+        ...body,
+        updatedById: userId,
+      },
+    )
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, totpSecret, ...profile } = updatedUser
+    return profile
+  }
+
+  async getAddressBooks(userId: number) {
+    const data = await this.authRepository.findAddressBooksByUserId(userId)
+    return { data }
+  }
+
+  async createAddressBook(userId: number, body: CreateAddressBookBodyType) {
+    const totalItems = await this.authRepository.countActiveAddressBooksByUserId(userId)
+    const isDefault = body.isDefault ?? totalItems === 0
+
+    return await this.prismaService.$transaction(async (tx) => {
+      if (isDefault) {
+        await this.authRepository.clearDefaultAddressBooks(userId, undefined, tx)
+      }
+
+      return await this.authRepository.createAddressBook(
+        {
+          ...body,
+          userId,
+          isDefault,
+        },
+        tx,
+      )
+    })
+  }
+
+  async updateAddressBook(userId: number, addressBookId: number, body: UpdateAddressBookBodyType) {
+    const existingAddress = await this.authRepository.findAddressBookByIdForUser(addressBookId, userId)
+    if (!existingAddress) {
+      throw new NotFoundException('Address book entry not found')
+    }
+
+    return await this.prismaService.$transaction(async (tx) => {
+      if (body.isDefault === true) {
+        await this.authRepository.clearDefaultAddressBooks(userId, addressBookId, tx)
+      }
+
+      return await this.authRepository.updateAddressBook(
+        addressBookId,
+        {
+          ...body,
+          ...(body.label !== undefined ? { label: body.label ?? null } : {}),
+          ...(body.latitude !== undefined ? { latitude: body.latitude ?? null } : {}),
+          ...(body.longitude !== undefined ? { longitude: body.longitude ?? null } : {}),
+        },
+        tx,
+      )
+    })
+  }
+
+  async deleteAddressBook(userId: number, addressBookId: number) {
+    const existingAddress = await this.authRepository.findAddressBookByIdForUser(addressBookId, userId)
+    if (!existingAddress) {
+      throw new NotFoundException('Address book entry not found')
+    }
+
+    await this.prismaService.$transaction(async (tx) => {
+      await this.authRepository.updateAddressBook(
+        addressBookId,
+        {
+          deletedAt: new Date(),
+          isDefault: false,
+        },
+        tx,
+      )
+
+      if (existingAddress.isDefault) {
+        const fallbackAddress = await this.authRepository.findFirstActiveAddressBookByUserId(userId, tx)
+        if (fallbackAddress) {
+          await this.authRepository.updateAddressBook(
+            fallbackAddress.id,
+            {
+              isDefault: true,
+            },
+            tx,
+          )
+        }
+      }
+    })
+
+    return {
+      message: 'Xóa địa chỉ thành công',
+    }
+  }
+
   async register(body: RegisterBodyType) {
     try {
-      const verificationCode = await this.verificationCodeRepository.findUniqueVerificationCode({
-        email_type: {
-          email: body.email,
-          type: TypeOfVerificationCode.REGISTER,
-        },
+      await this.validateVerificationCode({
+        email: body.email,
+        code: body.code,
+        type: TypeOfVerificationCode.REGISTER,
       })
-      // console.log('VerificationCode:::::', verificationCode)
-
-      if (!verificationCode) {
-        throw new UnprocessableEntityException({
-          message: 'Mã OTP không hợp lệ',
-          path: 'code',
-        })
-      }
-      if (verificationCode.expiresAt < new Date()) {
-        throw new UnprocessableEntityException({
-          message: 'Mã OTP đã hết hạn',
-          path: 'code',
-        })
-      }
       const clientRoleId = await this.sharedRoleRepository.getClientRoleId()
       const hashedPassword = await this.hashingService.hash(body.password)
       const [user] = await this.prismaService.$transaction([
