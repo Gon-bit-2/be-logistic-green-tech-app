@@ -5,9 +5,12 @@ import { Queue } from 'bullmq'
 import { TripRepository } from '../repository/trip.repository'
 import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
 import { PrismaService } from 'src/database/prisma.service'
-import { GetTripListQueryType } from '../model/trip.model'
-import { TripStatusType } from 'src/common/constants/strip.constant'
+import { AddOrdersToTripType, AssignVehicleType, CreateManualTripType, GetTripListQueryType } from '../model/trip.model'
+import { TripStatusType, TRIP_STATUS, STOP_TYPE } from 'src/common/constants/strip.constant'
 import { GamificationService } from '../../green-tech/service/gamification.service'
+import { EventEmitter2 } from '@nestjs/event-emitter'
+import { ORDER_STATUS } from 'src/common/constants/order.constant'
+import { BadRequestException } from '@nestjs/common'
 
 @Injectable()
 export class TripsService {
@@ -17,6 +20,7 @@ export class TripsService {
     private readonly tripRepo: TripRepository,
     private readonly prismaService: PrismaService, // Dùng để fetch danh sách Hub khi chạy Global
     private readonly gamificationService: GamificationService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -66,6 +70,168 @@ export class TripsService {
 
   async findAll(query: GetTripListQueryType) {
     return this.tripRepo.findAll(query)
+  }
+
+  async createManualTrip(dto: CreateManualTripType) {
+    const { orderIds, vehicleId, driverId } = dto
+
+    const vehicle = await this.prismaService.vehicle.findUnique({
+      where: { id: vehicleId },
+    })
+
+    if (!vehicle) {
+      throw new NotFoundException(`Vehicle #${vehicleId} không tồn tại`)
+    }
+
+    const orders = await this.prismaService.order.findMany({
+      where: {
+        id: { in: orderIds },
+        status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
+      },
+    })
+
+    if (orders.length === 0) {
+      throw new BadRequestException('Không có đơn hàng hợp lệ nào được chọn')
+    }
+
+    const totalWeight = orders.reduce((sum, o) => sum + o.totalWeight, 0)
+
+    if (totalWeight > vehicle.capacityWeight) {
+      throw new BadRequestException(
+        `Tổng trọng lượng đơn hàng (${totalWeight}kg) vượt quá tải trọng xe (${vehicle.capacityWeight}kg)`,
+      )
+    }
+
+    // Map orders as simple stops for demonstration (in reality, requires proper route planning)
+    const stopsData = orders.map((o, idx) => ({
+      orderId: o.id,
+      hubId: o.currentHubId,
+      stopSequence: idx + 1,
+      stopType: STOP_TYPE.DROPOFF,
+    }))
+
+    const trip = await this.tripRepo.createTripWithStops(
+      vehicleId,
+      driverId,
+      orders.map((o) => o.id),
+      stopsData,
+    )
+
+    if (!trip) {
+      throw new BadRequestException('Không thể tạo chuyến xe, vui lòng thử lại')
+    }
+
+    this.eventEmitter.emit('trip.created', { trip })
+
+    return trip
+  }
+
+  async assignVehicleToTrip(tripId: number, dto: AssignVehicleType) {
+    const trip = await this.tripRepo.findById(tripId)
+    if (!trip) {
+      throw new NotFoundException(`Trip #${tripId} không tồn tại`)
+    }
+
+    const vehicle = await this.prismaService.vehicle.findUnique({
+      where: { id: dto.vehicleId },
+    })
+
+    if (!vehicle) {
+      throw new NotFoundException(`Vehicle #${dto.vehicleId} không tồn tại`)
+    }
+
+    // Calculate current trip weight
+    const currentOrdersCount = trip.stops.filter((s) => s.orderId).length
+    if (currentOrdersCount > 0) {
+      const orderIds = trip.stops.map((s) => s.orderId).filter((id): id is number => id !== null)
+      const orders = await this.prismaService.order.findMany({
+        where: { id: { in: orderIds } },
+      })
+      const currentWeight = orders.reduce((sum, o) => sum + o.totalWeight, 0)
+      if (currentWeight > vehicle.capacityWeight) {
+        throw new BadRequestException(
+          `Trọng lượng chuyến xe hiện tại (${currentWeight}kg) vượt quá tải trọng xe mới (${vehicle.capacityWeight}kg)`,
+        )
+      }
+    }
+
+    const updatedTrip = await this.prismaService.trip.update({
+      where: { id: tripId },
+      data: { vehicleId: dto.vehicleId },
+      include: { stops: true },
+    })
+
+    return updatedTrip
+  }
+
+  async addOrdersToTrip(tripId: number, dto: AddOrdersToTripType) {
+    const trip = await this.tripRepo.findById(tripId)
+    if (!trip) {
+      throw new NotFoundException(`Trip #${tripId} không tồn tại`)
+    }
+
+    if (trip.status !== TRIP_STATUS.PENDING) {
+      throw new BadRequestException('Chỉ có thể thêm đơn hàng vào chuyến xe đang chờ')
+    }
+
+    const ordersToAdd = await this.prismaService.order.findMany({
+      where: {
+        id: { in: dto.orderIds },
+        status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
+      },
+    })
+
+    if (ordersToAdd.length === 0) {
+      throw new BadRequestException('Không có đơn hàng nào hợp lệ để thêm')
+    }
+
+    // Get current orders
+    const currentOrderIds = trip.stops.map((s) => s.orderId).filter((id): id is number => id !== null)
+    const currentOrders = await this.prismaService.order.findMany({
+      where: { id: { in: currentOrderIds } },
+    })
+
+    const totalWeight =
+      currentOrders.reduce((sum, o) => sum + o.totalWeight, 0) + ordersToAdd.reduce((sum, o) => sum + o.totalWeight, 0)
+
+    const vehicle = await this.prismaService.vehicle.findUnique({
+      where: { id: trip.vehicleId },
+    })
+
+    if (!vehicle || totalWeight > vehicle.capacityWeight) {
+      throw new BadRequestException(
+        `Tổng trọng lượng mới (${totalWeight}kg) sẽ vượt quá tải trọng xe (${vehicle?.capacityWeight}kg)`,
+      )
+    }
+
+    let lastSequence = trip.stops.length > 0 ? Math.max(...trip.stops.map((s) => s.stopSequence)) : 0
+
+    const newStops = ordersToAdd.map((o) => {
+      lastSequence++
+      return {
+        tripId,
+        orderId: o.id,
+        hubId: o.currentHubId,
+        stopSequence: lastSequence,
+        stopType: STOP_TYPE.DROPOFF,
+      }
+    })
+
+    const updatedTrip = await this.prismaService.$transaction(async (tx) => {
+      await tx.tripStop.createMany({ data: newStops })
+
+      await tx.order.updateMany({
+        where: { id: { in: ordersToAdd.map((o) => o.id) } },
+        data: { status: ORDER_STATUS.ASSIGNED, currentTripId: tripId },
+      })
+
+      return tx.trip.findUnique({
+        where: { id: tripId },
+        include: { stops: true },
+      })
+    })
+
+    return updatedTrip
   }
 
   async findById(id: number) {

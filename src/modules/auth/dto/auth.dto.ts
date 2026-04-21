@@ -1,5 +1,8 @@
 import { createZodDto } from 'nestjs-zod'
 import {
+  AddressBookListResSchema,
+  AddressBookResSchema,
+  CreateAddressBookBodySchema,
   ForgotPasswordBodySchema,
   GetAuthorizationUrlResSchema,
   LoginBodySchema,
@@ -10,6 +13,9 @@ import {
   RegisterBodySchema,
   RegisterResSchema,
   SendOTPBodySchema,
+  UpdateAddressBookBodySchema,
+  UpdateProfileBodySchema,
+  UpdateProfileResSchema,
   VerifyOTPBodySchema,
 } from 'src/modules/auth/model/auth.model'
 //Serializer
@@ -25,3 +31,9 @@ export class RefreshTokenResDTO extends createZodDto(RefreshTokenResSchema) {}
 export class LogoutBodyDTO extends createZodDto(LogoutBodySchema) {}
 export class GetAuthorizationUrlResDTO extends createZodDto(GetAuthorizationUrlResSchema) {}
 export class ForgotPasswordBodyDTO extends createZodDto(ForgotPasswordBodySchema) {}
+export class UpdateProfileBodyDTO extends createZodDto(UpdateProfileBodySchema) {}
+export class UpdateProfileResDTO extends createZodDto(UpdateProfileResSchema) {}
+export class CreateAddressBookBodyDTO extends createZodDto(CreateAddressBookBodySchema) {}
+export class UpdateAddressBookBodyDTO extends createZodDto(UpdateAddressBookBodySchema) {}
+export class AddressBookResDTO extends createZodDto(AddressBookResSchema) {}
+export class AddressBookListResDTO extends createZodDto(AddressBookListResSchema) {}

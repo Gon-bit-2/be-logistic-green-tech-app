@@ -12,11 +12,41 @@ import roleName, { HTTPMethod } from 'src/common/constants/role.constant'
 import { createClient } from 'redis'
 import envConfig from 'src/config/config'
 
-const DriverModule = ['AUTH', 'VEHICLE', 'TRIPS', 'ORDERS', 'TRACKING', 'PAYMENT', 'LANGUAGE', 'ROLE-REQUESTS', 'NOTIFICATIONS']
+const DriverModule = [
+  'AUTH',
+  'VEHICLE',
+  'TRIPS',
+  'ORDERS',
+  'TRACKING',
+  'PAYMENT',
+  'LANGUAGE',
+  'ROLE-REQUESTS',
+  'NOTIFICATIONS',
+]
 
-const CustomerModule = ['AUTH', 'ORDERS', 'PAYMENT', 'TRACKING', 'TRIPS', 'HUB', 'LANGUAGE', 'ROLE-REQUESTS', 'NOTIFICATIONS']
+const CustomerModule = [
+  'AUTH',
+  'ORDERS',
+  'PAYMENT',
+  'TRACKING',
+  'TRIPS',
+  'HUB',
+  'LANGUAGE',
+  'ROLE-REQUESTS',
+  'NOTIFICATIONS',
+]
 
-const WarehouseStaffModule = ['AUTH', 'HUB', 'ORDERS', 'VEHICLE', 'ANALYTICS', 'GREEN-TECH', 'LANGUAGE', 'ROLE-REQUESTS', 'NOTIFICATIONS']
+const WarehouseStaffModule = [
+  'AUTH',
+  'HUB',
+  'ORDERS',
+  'VEHICLE',
+  'ANALYTICS',
+  'GREEN-TECH',
+  'LANGUAGE',
+  'ROLE-REQUESTS',
+  'NOTIFICATIONS',
+]
 
 const prisma = new PrismaService()
 async function bootstrap() {

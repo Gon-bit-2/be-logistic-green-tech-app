@@ -9,11 +9,64 @@ export class AllExceptionsFilter implements ExceptionFilter {
   constructor(private readonly httpAdapterHost: HttpAdapterHost) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
+    if (host.getType() === 'ws') {
+      this.handleWsException(exception, host)
+      return
+    }
+
     const { httpAdapter } = this.httpAdapterHost
     const ctx = host.switchToHttp()
 
+    const { httpStatus, message, errors } = this.resolveException(exception)
+    const request = ctx.getRequest()
+
+    const responseBody = {
+      statusCode: httpStatus,
+      message,
+      ...(errors && { errors }),
+      path: httpAdapter.getRequestUrl(request),
+      timestamp: new Date().toISOString(),
+    }
+
+    if (httpStatus >= 500) {
+      this.logger.error(
+        `[${request.method}] ${request.url} - ${message}`,
+        exception instanceof Error ? exception.stack : String(exception),
+      )
+    } else {
+      this.logger.warn(`[${request.method}] ${request.url} - ${message}`)
+    }
+
+    httpAdapter.reply(ctx.getResponse(), responseBody, httpStatus)
+  }
+
+  private handleWsException(exception: unknown, host: ArgumentsHost) {
+    const ws = host.switchToWs()
+    const client = ws.getClient<{ emit?: (event: string, payload: unknown) => void; id?: string }>()
+    const { httpStatus, message, errors } = this.resolveException(exception)
+
+    const responseBody = {
+      statusCode: httpStatus,
+      message,
+      ...(errors && { errors }),
+      timestamp: new Date().toISOString(),
+    }
+
+    if (httpStatus >= 500) {
+      this.logger.error(
+        `[WS] ${client?.id ?? 'unknown'} - ${message}`,
+        exception instanceof Error ? exception.stack : String(exception),
+      )
+    } else {
+      this.logger.warn(`[WS] ${client?.id ?? 'unknown'} - ${message}`)
+    }
+
+    client?.emit?.('exception', responseBody)
+  }
+
+  private resolveException(exception: unknown) {
     let httpStatus = HttpStatus.INTERNAL_SERVER_ERROR
-    let message: string = 'Internal server error'
+    let message = 'Internal server error'
     let errors: any = null
 
     if (exception instanceof HttpException) {
@@ -41,23 +94,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = exception.message
     }
 
-    const responseBody = {
-      statusCode: httpStatus,
-      message,
-      ...(errors && { errors }),
-      path: httpAdapter.getRequestUrl(ctx.getRequest()),
-      timestamp: new Date().toISOString(),
-    }
-
-    if (httpStatus >= 500) {
-      this.logger.error(
-        `[${ctx.getRequest().method}] ${ctx.getRequest().url} - ${message}`,
-        exception instanceof Error ? exception.stack : String(exception),
-      )
-    } else {
-      this.logger.warn(`[${ctx.getRequest().method}] ${ctx.getRequest().url} - ${message}`)
-    }
-
-    httpAdapter.reply(ctx.getResponse(), responseBody, httpStatus)
+    return { httpStatus, message, errors }
   }
 }

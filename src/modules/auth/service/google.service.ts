@@ -49,6 +49,10 @@ export class GoogleService {
   }
   async googleCallback({ state, code }: { state: string; code: string }) {
     try {
+      if (!code) {
+        throw new Error('Thiếu mã xác thực từ Google')
+      }
+
       let userAgent = 'Unknown'
       let ip = 'Unknown'
       //1: lấy state từ url

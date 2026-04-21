@@ -8,8 +8,11 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets'
 import { Server, Socket } from 'socket.io'
-import { Logger, UseFilters, UseGuards } from '@nestjs/common'
+import { Logger } from '@nestjs/common'
 import { AccessTokenPayload } from 'src/types/jwt.type'
+import { OnEvent } from '@nestjs/event-emitter'
+import { Auth } from 'src/common/decorators/auth.decorator'
+import { AuthType } from 'src/common/constants/auth.constant'
 
 export interface AuthenticatedSocket extends Socket {
   user?: AccessTokenPayload
@@ -22,6 +25,7 @@ export interface AuthenticatedSocket extends Socket {
   cors: { origin: '*' },
   namespace: 'tracking',
 })
+@Auth(AuthType.None)
 export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server
@@ -33,14 +37,25 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
    * Có thể mở rộng để validate JWT token ngay tại đây qua client.handshake.auth
    */
   handleConnection(client: AuthenticatedSocket) {
-    this.logger.log(`🔗 Client connected: ${client.id}`)
+    client.once('disconnect', (reason) => {
+      client.data.disconnectReason = reason
+    })
+
+    client.once('error', (error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.warn(`Socket error from ${client.id}: ${message}`)
+    })
+
+    this.logger.log(
+      `🔗 Client connected: ${client.id} | namespace=${client.nsp.name} | transport=${client.conn.transport.name} | origin=${client.handshake.headers.origin ?? 'unknown'}`,
+    )
   }
 
   /**
    * Handle client disconnections
    */
   handleDisconnect(client: AuthenticatedSocket) {
-    this.logger.log(`❌ Client disconnected: ${client.id}`)
+    this.logger.log(`❌ Client disconnected: ${client.id} | reason=${String(client.data.disconnectReason ?? 'unknown')}`)
   }
 
   /**
@@ -101,5 +116,11 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
     this.logger.log(`🚶‍♂️ Client ${client.id} left tracking room: trip_${data.tripId}`)
 
     return { event: 'left', message: `Successfully left trip_${data.tripId}` }
+  }
+
+  @OnEvent('trip.created')
+  handleTripCreatedEvent(payload: { trip: { id: number; [key: string]: any } }) {
+    this.logger.log(`🚀 Chuyến xe mới được tạo: Trip ID #${payload.trip?.id}. Đang broadcast tới dashboard...`)
+    this.server.emit('dashboard.tripCreated', payload.trip)
   }
 }

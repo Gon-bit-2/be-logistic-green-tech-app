@@ -44,8 +44,15 @@ describe('AuthService', () => {
       findUniqueRefreshTokenIncludeUserRole: jest.fn(),
       deleteRefreshToken: jest.fn(),
       updateDevice: jest.fn(),
+      findAddressBooksByUserId: jest.fn(),
+      countActiveAddressBooksByUserId: jest.fn(),
+      clearDefaultAddressBooks: jest.fn(),
+      createAddressBook: jest.fn(),
+      findAddressBookByIdForUser: jest.fn(),
+      findFirstActiveAddressBookByUserId: jest.fn(),
+      updateAddressBook: jest.fn(),
     }
-    const shareUserRepoMock = { findUnique: jest.fn() }
+    const shareUserRepoMock = { findUnique: jest.fn(), update: jest.fn() }
     const verificationCodeRepoMock = {
       findUniqueVerificationCode: jest.fn(),
       createVerificationCode: jest.fn(),
@@ -88,6 +95,136 @@ describe('AuthService', () => {
 
   afterEach(() => {
     jest.clearAllMocks()
+  })
+
+  describe('updateProfile', () => {
+    it('cập nhật profile thành công', async () => {
+      shareUserRepo.findUnique.mockResolvedValue({ id: 1 } as any)
+      shareUserRepo.update.mockResolvedValue({
+        id: 1,
+        email: 'test@mail.com',
+        fullName: 'Updated User',
+        phone: '0987654321',
+        avatar: null,
+        password: 'hashed_password',
+        totpSecret: null,
+      } as any)
+
+      const res = await service.updateProfile(1, {
+        fullName: 'Updated User',
+        phone: '0987654321',
+      })
+
+      expect(shareUserRepo.update).toHaveBeenCalledWith(
+        { id: 1 },
+        {
+          fullName: 'Updated User',
+          phone: '0987654321',
+          updatedById: 1,
+        },
+      )
+      expect(res).toMatchObject({
+        id: 1,
+        email: 'test@mail.com',
+        fullName: 'Updated User',
+      })
+      expect(res.password).toBeUndefined()
+    })
+
+    it('văng Unauthorized khi user không tồn tại', async () => {
+      shareUserRepo.findUnique.mockResolvedValue(null)
+
+      await expect(service.updateProfile(999, { fullName: 'Missing User' })).rejects.toThrow(UnauthorizedException)
+    })
+  })
+
+  describe('addressBook', () => {
+    it('trả về danh sách address book của user', async () => {
+      authRepo.findAddressBooksByUserId.mockResolvedValue([{ id: 1, contactName: 'Home' }] as any)
+
+      const res = await service.getAddressBooks(1)
+
+      expect(authRepo.findAddressBooksByUserId).toHaveBeenCalledWith(1)
+      expect(res).toEqual({
+        data: [{ id: 1, contactName: 'Home' }],
+      })
+    })
+
+    it('tạo địa chỉ đầu tiên sẽ tự đặt mặc định', async () => {
+      authRepo.countActiveAddressBooksByUserId.mockResolvedValue(0)
+      authRepo.createAddressBook.mockResolvedValue({ id: 1, isDefault: true } as any)
+      prismaService.$transaction.mockImplementation(async (callback: any) => callback({}))
+
+      const res = await service.createAddressBook(1, {
+        contactName: 'Nhà riêng',
+        phone: '0987654321',
+        address: '123 Nguyen Trai',
+        label: 'Home',
+        latitude: null,
+        longitude: null,
+      })
+
+      expect(authRepo.clearDefaultAddressBooks).toHaveBeenCalledWith(1, undefined, {})
+      expect(authRepo.createAddressBook).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          isDefault: true,
+        }),
+        {},
+      )
+      expect(res).toEqual({ id: 1, isDefault: true })
+    })
+
+    it('cập nhật địa chỉ mặc định sẽ bỏ mặc định các địa chỉ khác', async () => {
+      authRepo.findAddressBookByIdForUser.mockResolvedValue({ id: 10, userId: 1 } as any)
+      authRepo.updateAddressBook.mockResolvedValue({ id: 10, isDefault: true } as any)
+      prismaService.$transaction.mockImplementation(async (callback: any) => callback({}))
+
+      const res = await service.updateAddressBook(1, 10, {
+        isDefault: true,
+        label: 'Office',
+      })
+
+      expect(authRepo.clearDefaultAddressBooks).toHaveBeenCalledWith(1, 10, {})
+      expect(authRepo.updateAddressBook).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({
+          isDefault: true,
+          label: 'Office',
+        }),
+        {},
+      )
+      expect(res).toEqual({ id: 10, isDefault: true })
+    })
+
+    it('xóa địa chỉ mặc định sẽ gán mặc định cho địa chỉ tiếp theo', async () => {
+      authRepo.findAddressBookByIdForUser.mockResolvedValue({ id: 10, userId: 1, isDefault: true } as any)
+      authRepo.findFirstActiveAddressBookByUserId.mockResolvedValue({ id: 11 } as any)
+      prismaService.$transaction.mockImplementation(async (callback: any) => callback({}))
+
+      const res = await service.deleteAddressBook(1, 10)
+
+      expect(authRepo.updateAddressBook).toHaveBeenNthCalledWith(
+        1,
+        10,
+        expect.objectContaining({
+          isDefault: false,
+          deletedAt: expect.any(Date),
+        }),
+        {},
+      )
+      expect(authRepo.updateAddressBook).toHaveBeenNthCalledWith(
+        2,
+        11,
+        {
+          isDefault: true,
+        },
+        {},
+      )
+      expect(res).toEqual({
+        message: 'Xóa địa chỉ thành công',
+      })
+    })
   })
 
   describe('register', () => {

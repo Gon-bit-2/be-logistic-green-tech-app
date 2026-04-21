@@ -1,7 +1,24 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Ip, Get, Query, Res } from '@nestjs/common'
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Ip,
+  Get,
+  Query,
+  Res,
+  Patch,
+  Delete,
+  Param,
+  ParseIntPipe,
+} from '@nestjs/common'
 import { AuthService } from 'src/modules/auth/service/auth.service'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import {
+  AddressBookListResDTO,
+  AddressBookResDTO,
+  CreateAddressBookBodyDTO,
   ForgotPasswordBodyDTO,
   GetAuthorizationUrlResDTO,
   LoginBodyDTO,
@@ -10,6 +27,9 @@ import {
   RegisterBodyDTO,
   RegisterResDTO,
   SendOPTBodyDTO,
+  UpdateAddressBookBodyDTO,
+  UpdateProfileBodyDTO,
+  UpdateProfileResDTO,
   VerifyOTPBodyDTO,
 } from 'src/modules/auth/dto/auth.dto'
 import { ZodSerializerDto } from 'nestjs-zod'
@@ -20,6 +40,7 @@ import { isPublic } from 'src/common/decorators/auth.decorator'
 import { MessageResDTO } from 'src/common/dtos/response.dto'
 import { UserAgent } from 'src/common/decorators/user-agent.decorator'
 import envConfig from 'src/config/config'
+import { buildGoogleRedirectUrl } from 'src/modules/auth/utils/google-redirect.util'
 
 @Controller('auth')
 export class AuthController {
@@ -31,6 +52,40 @@ export class AuthController {
   @Get('profile')
   getProfile(@ActiveUser('userId') userId: number) {
     return this.authService.getProfile(userId)
+  }
+
+  @Patch('profile')
+  @ZodSerializerDto(UpdateProfileResDTO)
+  updateProfile(@ActiveUser('userId') userId: number, @Body() body: UpdateProfileBodyDTO) {
+    return this.authService.updateProfile(userId, body)
+  }
+
+  @Get('address-book')
+  @ZodSerializerDto(AddressBookListResDTO)
+  getAddressBooks(@ActiveUser('userId') userId: number) {
+    return this.authService.getAddressBooks(userId)
+  }
+
+  @Post('address-book')
+  @ZodSerializerDto(AddressBookResDTO)
+  createAddressBook(@ActiveUser('userId') userId: number, @Body() body: CreateAddressBookBodyDTO) {
+    return this.authService.createAddressBook(userId, body)
+  }
+
+  @Patch('address-book/:id')
+  @ZodSerializerDto(AddressBookResDTO)
+  updateAddressBook(
+    @ActiveUser('userId') userId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: UpdateAddressBookBodyDTO,
+  ) {
+    return this.authService.updateAddressBook(userId, id, body)
+  }
+
+  @Delete('address-book/:id')
+  @ZodSerializerDto(MessageResDTO)
+  deleteAddressBook(@ActiveUser('userId') userId: number, @Param('id', ParseIntPipe) id: number) {
+    return this.authService.deleteAddressBook(userId, id)
   }
 
   @Throttle({
@@ -93,16 +148,36 @@ export class AuthController {
 
   @Get('google/callback')
   @isPublic()
-  async googleCallback(@Query('state') state: string, @Query('code') code: string, @Res() res: Response) {
+  async googleCallback(
+    @Query('state') state: string,
+    @Query('code') code: string,
+    @Query('error') error: string,
+    @Res() res: Response,
+  ) {
     try {
+      if (error) {
+        throw new Error(`Google OAuth error: ${error}`)
+      }
+
+      if (!code) {
+        throw new Error('Thiếu mã xác thực từ Google')
+      }
+
       const data = await this.googleService.googleCallback({ state, code })
       return res.redirect(
-        `${envConfig.GOOGLE_CLIENT_REDIRECT_URI}?accessToken=${data.accessToken}&refreshToken=${data.refreshToken}`,
+        buildGoogleRedirectUrl(envConfig.GOOGLE_CLIENT_REDIRECT_URI, {
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+        }),
       )
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Có lỗi khi đăng nhập bằng google vui lòng thử lại cách khác'
-      return res.redirect(`${envConfig.GOOGLE_CLIENT_REDIRECT_URI}?errorMessage=${message}`)
+      return res.redirect(
+        buildGoogleRedirectUrl(envConfig.GOOGLE_CLIENT_REDIRECT_URI, {
+          errorMessage: message,
+        }),
+      )
     }
   }
   @Post('forgot-password')
