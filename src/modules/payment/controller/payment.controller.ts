@@ -1,4 +1,17 @@
-import { Controller, Post, Body, Headers, Req, BadRequestException, Param, ParseIntPipe, Get } from '@nestjs/common'
+import {
+  Controller,
+  Post,
+  Body,
+  Headers,
+  Req,
+  BadRequestException,
+  Param,
+  ParseIntPipe,
+  Get,
+  type RawBodyRequest,
+} from '@nestjs/common'
+import type { Request } from 'express'
+import { SkipThrottle } from '@nestjs/throttler'
 import { PaymentService } from '../service/payment.service'
 import { Auth, isPublic } from 'src/common/decorators/auth.decorator'
 import { Roles } from 'src/common/decorators/roles.decorator'
@@ -14,12 +27,9 @@ export class PaymentController {
    * Tạo PaymentIntent (Khách hàng bấm thanh toán qua mạng)
    */
   @Post('create-intent/:orderId')
-  @Auth(AuthType.Bearer)
+  @SkipThrottle()
   @Roles(roleName.CUSTOMER)
-  createIntent(
-    @Param('orderId', ParseIntPipe) orderId: number,
-    @ActiveUser('userId') userId: number,
-  ) {
+  createIntent(@Param('orderId', ParseIntPipe) orderId: number, @ActiveUser('userId') userId: number) {
     return this.paymentService.createPaymentIntent(orderId, userId)
   }
 
@@ -29,10 +39,7 @@ export class PaymentController {
   @Post('cod-confirm/:orderId')
   @Auth(AuthType.Bearer)
   @Roles(roleName.DRIVER)
-  confirmCOD(
-    @Param('orderId', ParseIntPipe) orderId: number,
-    @ActiveUser('userId') driverId: number,
-  ) {
+  confirmCOD(@Param('orderId', ParseIntPipe) orderId: number, @ActiveUser('userId') driverId: number) {
     return this.paymentService.confirmCOD(orderId, driverId)
   }
 
@@ -40,7 +47,6 @@ export class PaymentController {
    * Xem trạng thái thanh toán
    */
   @Get('order/:orderId')
-  @Auth(AuthType.Bearer)
   @Roles(roleName.CUSTOMER, roleName.DRIVER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
   getPaymentStatus(@Param('orderId', ParseIntPipe) orderId: number) {
     return this.paymentService.getPaymentByOrderId(orderId)
@@ -55,8 +61,8 @@ export class PaymentController {
   @isPublic() // Webhook được public nhưng bị protect bởi HMAC Signature từ Stripe
   async handleWebhook(
     @Headers('stripe-signature') signature: string,
-    @Req() req: any,
-    @Body() body: any // Fallback cho unit test hoặc môi trường không attach rawBody
+    @Req() req: RawBodyRequest<Request>,
+    @Body() body: any, // Fallback cho unit test hoặc môi trường không attach rawBody
   ) {
     if (!signature) {
       throw new BadRequestException('Missing stripe-signature header')

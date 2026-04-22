@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Param, Delete, ParseIntPipe, Put, Query } from '@nestjs/common'
 import { OrdersService } from '../service/orders.service'
-import { CreateOrderDto, GetOrderListDto, UpdateOrderStatusDto } from '../dto/order.dto'
+import { CreateOrderDto, GetOrderListDto, UpdateOrderStatusDto, OrderQuoteBodyDto } from '../dto/order.dto'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import { ResourceAccess } from 'src/common/decorators/resource-access.decorator'
 import { Roles } from 'src/common/decorators/roles.decorator'
@@ -10,6 +10,12 @@ import type { AccessTokenPayload } from 'src/types/jwt.type'
 @Controller('orders')
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
+
+  @Post('quote')
+  @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  quote(@Body() payload: OrderQuoteBodyDto) {
+    return this.ordersService.quote(payload)
+  }
 
   @Post()
   @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)

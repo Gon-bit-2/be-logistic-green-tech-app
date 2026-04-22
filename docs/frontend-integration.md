@@ -233,7 +233,19 @@ export function extractApiMessage(error: any): string {
 - Thanh toán Stripe cho order đã có backend support
 - Xem payment status theo `orderId`
 
-#### Contract tạo order FE phải dùng đúng
+#### Contract payment FE cần hiểu đúng
+
+- `POST /payments/create-intent/:orderId` trả về `{ clientSecret, transactionId, amount }`.
+- `amount` là số tiền VND nguyên đã được backend chuẩn hóa để phù hợp với Stripe `currency = vnd`.
+- FE không nên tự tính lại amount từ `shippingFee` ở UI rồi gửi sang Stripe; luôn dùng `clientSecret` backend trả về để confirm payment.
+- Nếu UI đang hiển thị `shippingFee` từ order detail, nên format như VND nguyên khi đi vào bước thanh toán để tránh lệch với `amount` thực tế được tạo ở backend.
+- Với dữ liệu order cũ có `shippingFee` dạng thập phân, backend sẽ tự làm tròn. Ví dụ `26089.8` sẽ được payment flow dùng thành `26090`.
+
+#### Contract tạo order và tính giá FE phải dùng đúng
+
+Trước khi tạo order, FE nên gọi `POST /orders/quote` để lấy trước giá cước (`shippingFee`), khoảng cách, và đường đi thực tế trên bản đồ (polyline) để hiển thị cho user.
+
+Payload `POST /orders/quote` và `POST /orders` rất giống nhau. Thay vì tính bằng công thức mock phía client, FE hãy gửi payload lên `/orders/quote`.
 
 Frontend hiện phải gọi `POST /orders` theo contract backend mới, không còn dùng payload kiểu `pickupAddress` hay `serviceTier` trực tiếp.
 
@@ -360,10 +372,11 @@ Lưu ý: hiện tại các nhóm này đi qua `Bearer` mặc định và permiss
 3. `POST /hubs/:id/staff` trả raw Prisma record; frontend chỉ nên dùng field an toàn.
 4. `LanguageService` hiện map lỗi nghiệp vụ sang `404` và `409`, nên frontend nên handle các status này đúng nghĩa.
 5. `POST /payments/webhook` là route server-to-server; frontend/public client không cần gọi route này trực tiếp.
-6. `POST /role-requests` sẽ bị từ chối nếu user đang có một request `PENDING`.
-7. `PATCH /role-requests/:id/approve` yêu cầu `hubId` khi target role là `WAREHOUSE_STAFF`.
-8. Nếu môi trường deploy chưa chạy migration `20260420_add_role_requests_notifications`, các màn `/notifications` và `/role-requests` sẽ fail do thiếu bảng DB tương ứng.
-9. Nếu môi trường deploy chưa chạy migration `20260420_add_order_notifications`, notification type cho order sẽ chưa ghi được vào DB.
+6. `amount` trong payment response là nguồn sự thật cho checkout Stripe; không giả định nó luôn bằng raw `shippingFee` chưa format trên màn hình.
+7. `POST /role-requests` sẽ bị từ chối nếu user đang có một request `PENDING`.
+8. `PATCH /role-requests/:id/approve` yêu cầu `hubId` khi target role là `WAREHOUSE_STAFF`.
+9. Nếu môi trường deploy chưa chạy migration `20260420_add_role_requests_notifications`, các màn `/notifications` và `/role-requests` sẽ fail do thiếu bảng DB tương ứng.
+10. Nếu môi trường deploy chưa chạy migration `20260420_add_order_notifications`, notification type cho order sẽ chưa ghi được vào DB.
 
 ## 10. Tài liệu liên quan
 
@@ -426,3 +439,23 @@ socket.emit("driverLocationUpdate", {
 });
 ```
 
+## 12. Maps Integration (Goong API Proxy)
+
+Tất cả các tính năng bản đồ và địa lý của Frontend phải gọi qua backend, **KHÔNG GỌI TRỰC TIẾP LÊN GOONG API**. Backend sẽ chịu trách nhiệm gắn API Key.
+
+**Các endpoint chính:**
+- Autocomplete tìm kiếm địa chỉ: `GET /maps/places/autocomplete?input=Hanoi`
+- Lấy chi tiết một địa chỉ: `GET /maps/places/detail?placeid=...`
+- Lấy tọa độ từ text (Geocoding): `GET /maps/geocode?address=...` hoặc `GET /maps/geocode?latlng=...,...`
+- Chỉ đường (Directions): `POST /maps/directions`
+
+**Payload cho `POST /maps/directions`:**
+```json
+{
+  "origin": "10.776889,106.700806",
+  "destination": "10.773118,106.698299",
+  "vehicle": "car"
+}
+```
+
+Response của Backend cho `/maps` giữ nguyên format của Goong API để Frontend dễ dàng parse data (polyline, distance, duration).

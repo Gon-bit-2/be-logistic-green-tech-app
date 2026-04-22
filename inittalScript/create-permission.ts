@@ -14,26 +14,29 @@ import envConfig from 'src/config/config'
 
 const DriverModule = [
   'AUTH',
-  'VEHICLE',
+  'VEHICLES',
   'TRIPS',
   'ORDERS',
   'TRACKING',
-  'PAYMENT',
+  'PAYMENTS',
   'LANGUAGE',
   'ROLE-REQUESTS',
   'NOTIFICATIONS',
+  'MAPS',
+  'WALLET',
 ]
 
 const CustomerModule = [
   'AUTH',
   'ORDERS',
-  'PAYMENT',
+  'PAYMENTS',
   'TRACKING',
   'TRIPS',
   'HUB',
   'LANGUAGE',
   'ROLE-REQUESTS',
   'NOTIFICATIONS',
+  'MAPS',
 ]
 
 const WarehouseStaffModule = [
@@ -46,6 +49,8 @@ const WarehouseStaffModule = [
   'LANGUAGE',
   'ROLE-REQUESTS',
   'NOTIFICATIONS',
+  'MAPS',
+  'WALLET',
 ]
 
 const prisma = new PrismaService()

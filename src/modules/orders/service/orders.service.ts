@@ -1,10 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
-import { CreateOrderBodyType, GetOrderListQueryType, UpdateOrderStatusType } from '../model/order.model'
+import {
+  CreateOrderBodyType,
+  GetOrderListQueryType,
+  UpdateOrderStatusType,
+  OrderQuoteBodyType,
+} from '../model/order.model'
 import { OrderRepository } from '../repository/order.repo'
+import { MapsService } from 'src/modules/maps/service/maps.service'
 import { calculateHaversineDistance } from 'src/utils/geo.util'
 import { PrismaService } from 'src/database/prisma.service'
-import { NotificationEventName, OrderCreatedEvent, OrderStatusUpdatedEvent } from 'src/modules/notification/events/notification.event'
+import {
+  NotificationEventName,
+  OrderCreatedEvent,
+  OrderStatusUpdatedEvent,
+} from 'src/modules/notification/events/notification.event'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 
 @Injectable()
@@ -20,7 +30,54 @@ export class OrdersService {
     private readonly orderRepo: OrderRepository,
     private readonly prismaService: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly mapsService: MapsService,
   ) {}
+
+  async quote(payload: OrderQuoteBodyType) {
+    let totalWeight = 0
+    let totalVolume = 0
+
+    payload.items.forEach((item) => {
+      const itemWeight = item.weight * item.quantity
+      totalWeight += itemWeight
+      let itemVolume = 0
+      if (item.length && item.width && item.height) {
+        itemVolume = ((item.length * item.width * item.height) / 1000000) * item.quantity
+      }
+      totalVolume += itemVolume
+    })
+
+    const distanceKm = calculateHaversineDistance(
+      payload.senderLat,
+      payload.senderLng,
+      payload.receiverLat,
+      payload.receiverLng,
+    )
+
+    const shippingFee = this.calculateShippingFee(distanceKm, totalWeight)
+
+    const averageDieselEmissionPerKm = 0.25
+    const avgVehicleCapacityWeight = 1000
+    const loadRatio = Math.min(totalWeight / avgVehicleCapacityWeight, 1)
+    const effectiveLoadRatio = Math.max(loadRatio, 0.05)
+    const estimatedCo2Saved = averageDieselEmissionPerKm * distanceKm * effectiveLoadRatio
+
+    const directions = await this.mapsService.directions({
+      origin: { lat: payload.senderLat, lng: payload.senderLng },
+      destination: { lat: payload.receiverLat, lng: payload.receiverLng },
+      vehicle: 'car',
+    })
+
+    return {
+      distanceMeters: directions.distanceMeters,
+      durationSeconds: directions.durationSeconds,
+      shippingFee,
+      currency: 'VND',
+      serviceType: payload.serviceType,
+      estimatedCo2Saved,
+      polyline: directions.polyline,
+    }
+  }
 
   // ====== #10: HUB GEOSPATIAL CACHE ======
   // Thay vì query `SELECT * FROM hubs` mỗi lần tạo đơn, cache list Hub trên RAM Node.js
@@ -150,7 +207,7 @@ export class OrdersService {
       heavyFee = Math.ceil(totalWeight - 5) * 2000
     }
 
-    return baseFee + distanceFee + heavyFee
+    return Math.round(baseFee + distanceFee + heavyFee)
   }
 
   async findAll(query: GetOrderListQueryType & { customerId?: number; currentHubId?: number }) {
