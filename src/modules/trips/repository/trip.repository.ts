@@ -171,7 +171,38 @@ export class TripRepository {
       this.prismaService.trip.findMany({
         where: whereClause,
         include: {
-          stops: true,
+          driver: {
+            select: {
+              avatar: true,
+              fullName: true,
+              id: true,
+            },
+          },
+          stops: {
+            include: {
+              order: {
+                select: {
+                  id: true,
+                  status: true,
+                  trackingCode: true,
+                },
+              },
+            },
+            orderBy: { stopSequence: 'asc' },
+          },
+          vehicle: {
+            select: {
+              capacityVolume: true,
+              capacityWeight: true,
+              emissionRatePerKm: true,
+              fuelType: true,
+              hubId: true,
+              id: true,
+              isActive: true,
+              licensePlate: true,
+              type: true,
+            },
+          },
         },
         skip,
         take,
@@ -219,6 +250,40 @@ export class TripRepository {
       data: {
         status,
         ...extraData,
+      },
+      include: {
+        driver: {
+          select: {
+            avatar: true,
+            fullName: true,
+            id: true,
+          },
+        },
+        stops: {
+          include: {
+            order: {
+              select: {
+                id: true,
+                status: true,
+                trackingCode: true,
+              },
+            },
+          },
+          orderBy: { stopSequence: 'asc' },
+        },
+        vehicle: {
+          select: {
+            capacityVolume: true,
+            capacityWeight: true,
+            emissionRatePerKm: true,
+            fuelType: true,
+            hubId: true,
+            id: true,
+            isActive: true,
+            licensePlate: true,
+            type: true,
+          },
+        },
       },
     })
   }

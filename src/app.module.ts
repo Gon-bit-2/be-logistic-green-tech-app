@@ -16,9 +16,7 @@ import { TrackingModule } from 'src/modules/tracking/tracking.module'
 import { GreenTechModule } from 'src/modules/green-tech/green-tech.module'
 import { PaymentModule } from 'src/modules/payment/payment.module'
 import { OrdersModule } from 'src/modules/orders/orders.module'
-import { AuthenticationGuard } from 'src/common/guards/authentication.guard'
-import { RolesGuard } from 'src/common/guards/roles.guard'
-import { ResourceAccessGuard } from 'src/common/guards/resource-access.guard'
+import { AppAccessGuard } from 'src/common/guards/app-access.guard'
 import { AllExceptionsFilter } from 'src/common/filters/all-exceptions.filter'
 import { AnalyticsModule } from 'src/modules/analytics/analytics.module'
 import { TripsModule } from './modules/trips/trips.module'
@@ -26,6 +24,7 @@ import { WalletModule } from './modules/wallet/wallet.module'
 import { UploadModule } from './modules/upload/upload.module'
 import { NotificationModule } from './modules/notification/notification.module'
 import { RoleModule } from './modules/role/role.module'
+import { MapsModule } from './modules/maps/maps.module'
 import { EventEmitterModule } from '@nestjs/event-emitter'
 
 @Module({
@@ -44,6 +43,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter'
     AnalyticsModule,
     NotificationModule,
     RoleModule,
+    MapsModule,
     EventEmitterModule.forRoot(),
     ThrottlerModule.forRoot({
       throttlers: [
@@ -83,15 +83,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter'
     },
     {
       provide: APP_GUARD,
-      useExisting: AuthenticationGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useExisting: RolesGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useExisting: ResourceAccessGuard,
+      useExisting: AppAccessGuard,
     },
     {
       provide: APP_FILTER,

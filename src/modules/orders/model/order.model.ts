@@ -131,6 +131,18 @@ export const UpdateOrderStatusSchema = z.object({
   status: OrderStatusSchema,
 })
 
+export const OrderQuoteBodySchema = CreateOrderBodySchema.omit({ customerId: true })
+
+export const OrderQuoteResSchema = z.object({
+  distanceMeters: z.number(),
+  durationSeconds: z.number(),
+  shippingFee: z.number(),
+  currency: z.string().default('VND'),
+  serviceType: ServiceTypeSchema,
+  estimatedCo2Saved: z.number(),
+  polyline: z.string(),
+})
+
 export type OrderType = z.infer<typeof OrderSchema>
 export type OrderResponseType = z.infer<typeof OrderResponseSchema>
 export type OrderItemType = z.infer<typeof OrderItemSchema>
@@ -142,3 +154,5 @@ export type GetOrderDetailResType = z.infer<typeof GetOrderDetailResSchema>
 export type CancelOrderResType = z.infer<typeof CancelOrderResSchema>
 export type GetOrderParamsType = z.infer<typeof GetOrderParamsSchema>
 export type UpdateOrderStatusType = z.infer<typeof UpdateOrderStatusSchema>
+export type OrderQuoteBodyType = z.infer<typeof OrderQuoteBodySchema>
+export type OrderQuoteResType = z.infer<typeof OrderQuoteResSchema>

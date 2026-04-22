@@ -17,6 +17,7 @@ import { AccessTokenGuard } from 'src/common/guards/access-token.guard'
 import { ApiKeyGuard } from 'src/common/guards/api-key.guard'
 import { PaymentApiKeyGuard } from 'src/common/guards/payment-api-key.guard'
 import { AuthenticationGuard } from 'src/common/guards/authentication.guard'
+import { AppAccessGuard } from 'src/common/guards/app-access.guard'
 import { RolesGuard } from 'src/common/guards/roles.guard'
 import { ResourceAccessGuard } from 'src/common/guards/resource-access.guard'
 
@@ -38,6 +39,7 @@ import { ResourceAccessGuard } from 'src/common/guards/resource-access.guard'
     ApiKeyGuard,
     PaymentApiKeyGuard,
     AuthenticationGuard,
+    AppAccessGuard,
     RolesGuard,
     ResourceAccessGuard,
   ],
@@ -47,6 +49,7 @@ import { ResourceAccessGuard } from 'src/common/guards/resource-access.guard'
     ApiKeyGuard,
     PaymentApiKeyGuard,
     AuthenticationGuard,
+    AppAccessGuard,
     RolesGuard,
     ResourceAccessGuard,
   ],

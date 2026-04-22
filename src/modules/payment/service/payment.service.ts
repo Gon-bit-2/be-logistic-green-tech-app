@@ -17,10 +17,19 @@ interface StripeWebhookEvent {
   }
 }
 
+const REUSABLE_PAYMENT_INTENT_STATUSES = new Set<string>([
+  'requires_payment_method',
+  'requires_confirmation',
+  'requires_action',
+  'processing',
+  'requires_capture',
+])
+
 @Injectable()
 export class PaymentService {
   private stripe: InstanceType<typeof Stripe>
   private readonly logger = new Logger(PaymentService.name)
+  private readonly stripeZeroDecimalCurrencies = new Set(['vnd'])
 
   constructor(
     private readonly paymentRepo: PaymentRepository,
@@ -50,16 +59,31 @@ export class PaymentService {
       throw new BadRequestException('Đơn hàng này đã được thanh toán.')
     }
 
-    // Stripe tính theo đơn vị nhỏ nhất (VND ko có thập phân nên raw = amount)
-    // Nếu là USD thì phải * 100
-    const amountVnd = Number(order.shippingFee)
+    const amountVnd = this.normalizeStripeAmount(order.shippingFee, 'vnd')
+
+    if (order.payment?.method === 'STRIPE' && order.payment.status === 'PENDING' && order.payment.transactionId) {
+      const reusableIntent = await this.getReusablePaymentIntent(order.payment.transactionId)
+
+      if (reusableIntent?.client_secret) {
+        return {
+          clientSecret: reusableIntent.client_secret,
+          transactionId: reusableIntent.id,
+          amount: amountVnd,
+        }
+      }
+    }
 
     // Tạo PaymentIntent
-    const paymentIntent = await this.stripe.paymentIntents.create({
-      amount: amountVnd,
-      currency: 'vnd',
-      metadata: { orderId: order.id.toString() },
-    })
+    const paymentIntent = await this.stripe.paymentIntents.create(
+      {
+        amount: amountVnd,
+        currency: 'vnd',
+        metadata: { orderId: order.id.toString() },
+      },
+      {
+        idempotencyKey: `payment-intent-order-${order.id}`,
+      },
+    )
 
     // Lưu Payment intent ID vào database để đối soát webhook
     await this.paymentRepo.upsertPayment(
@@ -74,6 +98,9 @@ export class PaymentService {
       {
         transactionId: paymentIntent.id,
         method: 'STRIPE',
+        status: 'PENDING',
+        amount: amountVnd,
+        paidAt: null,
       },
     )
 
@@ -104,7 +131,7 @@ export class PaymentService {
         order.id,
         {
           orderId: order.id,
-          amount: Number(order.shippingFee),
+          amount: this.normalizeStripeAmount(order.shippingFee, 'vnd'),
           method: 'COD',
           status: 'COMPLETED',
           paidAt: new Date(),
@@ -168,5 +195,33 @@ export class PaymentService {
 
   async getPaymentByOrderId(orderId: number) {
     return this.paymentRepo.findByOrderId(orderId)
+  }
+
+  private async getReusablePaymentIntent(transactionId: string) {
+    try {
+      const paymentIntent = await this.stripe.paymentIntents.retrieve(transactionId)
+
+      if (REUSABLE_PAYMENT_INTENT_STATUSES.has(paymentIntent.status)) {
+        return paymentIntent
+      }
+    } catch (error) {
+      this.logger.warn(`[PAYMENT] Không thể lấy lại payment intent ${transactionId}: ${(error as Error).message}`)
+    }
+
+    return null
+  }
+
+  private normalizeStripeAmount(amount: unknown, currency: string): number {
+    const numericAmount = Number(amount)
+
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      throw new BadRequestException('Số tiền thanh toán không hợp lệ.')
+    }
+
+    if (this.stripeZeroDecimalCurrencies.has(currency.toLowerCase())) {
+      return Math.round(numericAmount)
+    }
+
+    return Math.round(numericAmount * 100)
   }
 }

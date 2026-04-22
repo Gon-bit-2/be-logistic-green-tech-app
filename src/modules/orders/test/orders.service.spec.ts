@@ -155,6 +155,33 @@ describe('OrdersService', () => {
         trackingCode: 'ORD101',
       });
     });
+
+    it('làm tròn shipping fee về VND nguyên khi khoảng cách tạo ra số lẻ', async () => {
+      prismaService.hub.findMany.mockResolvedValue([
+        { id: 1, latitude: 10.1, longitude: 106.1, name: 'Hub 1' },
+      ]);
+      (calculateHaversineDistance as jest.Mock).mockReturnValue(2.0163272727);
+      orderRepo.create.mockResolvedValue({ id: 102, customerId: 2, trackingCode: 'ORD102' } as any);
+
+      const payload = {
+        senderLat: 10.0,
+        senderLng: 106.0,
+        receiverLat: 10.02,
+        receiverLng: 106.02,
+        items: [{ name: 'item', weight: 1, quantity: 1 }],
+      };
+
+      await service.create(1, 2, payload as any);
+
+      expect(orderRepo.create).toHaveBeenCalledWith(
+        1,
+        2,
+        payload,
+        expect.objectContaining({
+          shippingFee: 26090,
+        })
+      );
+    });
   });
 
   describe('findAll', () => {

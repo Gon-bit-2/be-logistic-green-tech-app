@@ -16,6 +16,7 @@ jest.mock('stripe', () => {
     return {
       paymentIntents: {
         create: jest.fn(),
+        retrieve: jest.fn(),
       },
       webhooks: {
         constructEvent: jest.fn(),
@@ -86,12 +87,60 @@ describe('PaymentService', () => {
         amount: 15000,
         currency: 'vnd',
         metadata: { orderId: '10' }
+      }, {
+        idempotencyKey: 'payment-intent-order-10'
       });
       expect(paymentRepo.upsertPayment).toHaveBeenCalledWith(
         10, 
         expect.objectContaining({ transactionId: 'pi_123', status: 'PENDING' }), 
         expect.anything()
       );
+    });
+
+    it('làm tròn shipping fee thập phân trước khi gửi sang Stripe với VND', async () => {
+      prismaService.order.findUnique.mockResolvedValue({
+        id: 21, customerId: 1, shippingFee: 26089.8, payment: null
+      });
+      stripeMockIntance.paymentIntents.create.mockResolvedValue({
+        id: 'pi_decimal', client_secret: 'secret_decimal'
+      });
+
+      const res = await service.createPaymentIntent(21, 1);
+
+      expect(res).toEqual({ clientSecret: 'secret_decimal', transactionId: 'pi_decimal', amount: 26090 });
+      expect(stripeMockIntance.paymentIntents.create).toHaveBeenCalledWith({
+        amount: 26090,
+        currency: 'vnd',
+        metadata: { orderId: '21' }
+      }, {
+        idempotencyKey: 'payment-intent-order-21'
+      });
+      expect(paymentRepo.upsertPayment).toHaveBeenCalledWith(
+        21,
+        expect.objectContaining({ amount: 26090, transactionId: 'pi_decimal' }),
+        expect.objectContaining({ amount: 26090 })
+      );
+    });
+
+    it('tái sử dụng payment intent pending hiện có để tránh tạo lặp', async () => {
+      prismaService.order.findUnique.mockResolvedValue({
+        id: 10,
+        customerId: 1,
+        shippingFee: 15000,
+        payment: { status: 'PENDING', method: 'STRIPE', transactionId: 'pi_existing' },
+      });
+      stripeMockIntance.paymentIntents.retrieve.mockResolvedValue({
+        id: 'pi_existing',
+        client_secret: 'secret_existing',
+        status: 'requires_payment_method',
+      });
+
+      const res = await service.createPaymentIntent(10, 1);
+
+      expect(res).toEqual({ clientSecret: 'secret_existing', transactionId: 'pi_existing', amount: 15000 });
+      expect(stripeMockIntance.paymentIntents.retrieve).toHaveBeenCalledWith('pi_existing');
+      expect(stripeMockIntance.paymentIntents.create).not.toHaveBeenCalled();
+      expect(paymentRepo.upsertPayment).not.toHaveBeenCalled();
     });
 
     it('văng NotFoundException nếu order k tồn tại', async () => {
@@ -125,6 +174,20 @@ describe('PaymentService', () => {
         10, 
         expect.objectContaining({ method: 'COD', status: 'COMPLETED', createdById: 99 }), 
         expect.anything() // third arg is the conflict condition object {}
+      );
+    });
+
+    it('làm tròn shipping fee thập phân khi xác nhận COD', async () => {
+      prismaService.order.findUnique.mockResolvedValue({
+        id: 10, shippingFee: 26089.8, payment: null
+      });
+
+      await service.confirmCOD(10, 99);
+
+      expect(paymentRepo.upsertPayment).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({ amount: 26090, method: 'COD', status: 'COMPLETED' }),
+        expect.anything()
       );
     });
 

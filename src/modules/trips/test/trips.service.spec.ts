@@ -8,6 +8,7 @@ import { getQueueToken } from '@nestjs/bullmq'
 import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
 import { NotFoundException } from '@nestjs/common'
 import { Queue } from 'bullmq'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 
 describe('TripsService', () => {
   let service: TripsService
@@ -34,6 +35,10 @@ describe('TripsService', () => {
       addBulk: jest.fn(),
     }
 
+    const eventEmitterMock = {
+      emit: jest.fn(),
+    }
+
     gamificationServiceMock = {
       processTripEmission: jest.fn().mockResolvedValue(undefined),
     }
@@ -56,6 +61,10 @@ describe('TripsService', () => {
         {
           provide: getQueueToken(AUTO_DISPATCH_QUEUE_NAME),
           useValue: queueFactoryMock,
+        },
+        {
+          provide: EventEmitter2,
+          useValue: eventEmitterMock,
         },
       ],
     }).compile()

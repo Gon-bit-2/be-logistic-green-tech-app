@@ -7,7 +7,12 @@ import {
   GetOrderListQuerySchema,
   GetOrderParamsSchema,
   UpdateOrderStatusSchema,
+  OrderQuoteBodySchema,
+  OrderQuoteResSchema,
 } from '../model/order.model'
+
+export class OrderQuoteBodyDto extends createZodDto(OrderQuoteBodySchema) {}
+export class OrderQuoteResDto extends createZodDto(OrderQuoteResSchema) {}
 
 export class CreateOrderDto extends createZodDto(CreateOrderBodySchema) {}
 

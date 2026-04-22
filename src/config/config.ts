@@ -35,6 +35,8 @@ const ConfigSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string(),
   CLOUDINARY_API_KEY: z.string(),
   CLOUDINARY_API_SECRET: z.string(),
+  GOONG_MAPS_API_KEY: z.string(),
+  GOONG_BASE_URL: z.string(),
 })
 
 const configServer = ConfigSchema.safeParse(process.env)
