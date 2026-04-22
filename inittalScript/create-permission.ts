@@ -17,31 +17,33 @@ const DriverModule = [
   'VEHICLES',
   'TRIPS',
   'ORDERS',
-  'TRACKING',
+  'TRACKING-EVENTS',
   'PAYMENTS',
   'LANGUAGE',
   'ROLE-REQUESTS',
   'NOTIFICATIONS',
   'MAPS',
   'WALLET',
+  'GAMIFICATION',
 ]
 
 const CustomerModule = [
   'AUTH',
   'ORDERS',
-  'PAYMENTS',
+  'TRACKING-EVENTS',
   'TRACKING',
   'TRIPS',
-  'HUB',
+  'HUBS',
   'LANGUAGE',
   'ROLE-REQUESTS',
   'NOTIFICATIONS',
   'MAPS',
+  'GAMIFICATION',
 ]
 
 const WarehouseStaffModule = [
   'AUTH',
-  'HUB',
+  'HUBS',
   'ORDERS',
   'VEHICLE',
   'ANALYTICS',
@@ -51,6 +53,8 @@ const WarehouseStaffModule = [
   'NOTIFICATIONS',
   'MAPS',
   'WALLET',
+  'TRIPS',
+  'GAMIFICATION',
 ]
 
 const prisma = new PrismaService()

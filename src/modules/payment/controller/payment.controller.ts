@@ -18,6 +18,7 @@ import { Roles } from 'src/common/decorators/roles.decorator'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import { AuthType } from 'src/common/constants/auth.constant'
 import roleName from 'src/common/constants/role.constant'
+import type { AccessTokenPayload } from 'src/types/jwt.type'
 
 @Controller('payments')
 export class PaymentController {
@@ -48,8 +49,8 @@ export class PaymentController {
    */
   @Get('order/:orderId')
   @Roles(roleName.CUSTOMER, roleName.DRIVER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
-  getPaymentStatus(@Param('orderId', ParseIntPipe) orderId: number) {
-    return this.paymentService.getPaymentByOrderId(orderId)
+  getPaymentStatus(@Param('orderId', ParseIntPipe) orderId: number, @ActiveUser() user: AccessTokenPayload) {
+    return this.paymentService.getPaymentByOrderId(orderId, user)
   }
 
   /**

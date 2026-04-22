@@ -2,8 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentService } from '../service/payment.service';
 import { PaymentRepository } from '../repository/payment.repo';
 import { PrismaService } from 'src/database/prisma.service';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import * as StripeModule from 'stripe'; // Import to mock
+import roleName from 'src/common/constants/role.constant';
 
 jest.mock('src/config/config', () => ({
   STRIPE_SECRET_KEY: 'test_sec_key',
@@ -143,6 +144,40 @@ describe('PaymentService', () => {
       expect(paymentRepo.upsertPayment).not.toHaveBeenCalled();
     });
 
+    it('tạo intent mới với retry idempotency key khi intent cũ không còn tái sử dụng được', async () => {
+      prismaService.order.findUnique.mockResolvedValue({
+        id: 10,
+        customerId: 1,
+        shippingFee: 15000,
+        payment: { status: 'PENDING', method: 'STRIPE', transactionId: 'pi_old' },
+      });
+      stripeMockIntance.paymentIntents.retrieve.mockResolvedValue({
+        id: 'pi_old',
+        client_secret: 'secret_old',
+        status: 'succeeded',
+      });
+      stripeMockIntance.paymentIntents.create.mockResolvedValue({
+        id: 'pi_new', client_secret: 'secret_new'
+      });
+
+      const res = await service.createPaymentIntent(10, 1);
+
+      expect(res).toEqual({ clientSecret: 'secret_new', transactionId: 'pi_new', amount: 15000 });
+      expect(stripeMockIntance.paymentIntents.retrieve).toHaveBeenCalledWith('pi_old');
+      expect(stripeMockIntance.paymentIntents.create).toHaveBeenCalledWith({
+        amount: 15000,
+        currency: 'vnd',
+        metadata: { orderId: '10' }
+      }, {
+        idempotencyKey: 'payment-intent-order-10-retry-pi_old'
+      });
+      expect(paymentRepo.upsertPayment).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({ transactionId: 'pi_new', status: 'PENDING' }),
+        expect.objectContaining({ transactionId: 'pi_new', amount: 15000 })
+      );
+    });
+
     it('văng NotFoundException nếu order k tồn tại', async () => {
       prismaService.order.findUnique.mockResolvedValue(null);
       await expect(service.createPaymentIntent(10, 1)).rejects.toThrow(NotFoundException);
@@ -259,6 +294,43 @@ describe('PaymentService', () => {
       const res = await service.getPaymentByOrderId(1);
       expect(res).toEqual({ id: 1 });
       expect(paymentRepo.findByOrderId).toHaveBeenCalledWith(1);
+    });
+
+    it('customer chỉ xem được payment của order thuộc sở hữu của mình', async () => {
+      prismaService.order.findUnique.mockResolvedValue({ customerId: 7 });
+      paymentRepo.findByOrderId.mockResolvedValue({ id: 1 } as any);
+
+      await service.getPaymentByOrderId(1, {
+        userId: 7,
+        deviceId: 1,
+        roleId: 2,
+        roleName: roleName.CUSTOMER,
+        exp: 1,
+        iat: 1,
+      });
+
+      expect(prismaService.order.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+        select: { customerId: true },
+      });
+      expect(paymentRepo.findByOrderId).toHaveBeenCalledWith(1);
+    });
+
+    it('customer bị chặn nếu order không thuộc sở hữu của mình', async () => {
+      prismaService.order.findUnique.mockResolvedValue({ customerId: 8 });
+
+      await expect(
+        service.getPaymentByOrderId(1, {
+          userId: 7,
+          deviceId: 1,
+          roleId: 2,
+          roleName: roleName.CUSTOMER,
+          exp: 1,
+          iat: 1,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(paymentRepo.findByOrderId).not.toHaveBeenCalled();
     });
   });
 });

@@ -2,6 +2,19 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from 'src/database/prisma.service'
 import { CreateOrderBodyType, GetOrderListQueryType, UpdateOrderStatusType } from 'src/modules/orders/model/order.model'
 
+const paymentSummarySelect = {
+  payment: {
+    select: {
+      amount: true,
+      method: true,
+      orderId: true,
+      paidAt: true,
+      status: true,
+      transactionId: true,
+    },
+  },
+} as const
+
 @Injectable()
 export class OrderRepository {
   constructor(private readonly prismaService: PrismaService) {}
@@ -32,17 +45,27 @@ export class OrderRepository {
       },
       include: {
         items: true,
+        ...paymentSummarySelect,
       },
     })
   }
 
   async findAll(query: GetOrderListQueryType & { customerId?: number; currentHubId?: number }) {
-    const { limit, page, status, customerId, currentHubId } = query
+    const { limit, page, status, customerId, currentHubId, search } = query
     const skip = (page - 1) * limit
     const take = limit
 
     const whereParams: any = {
       deletedAt: null,
+      ...(search && {
+        OR: [
+          { trackingCode: { contains: search, mode: 'insensitive' as const } },
+          { senderName: { contains: search, mode: 'insensitive' as const } },
+          { receiverName: { contains: search, mode: 'insensitive' as const } },
+          { senderAddress: { contains: search, mode: 'insensitive' as const } },
+          { receiverAddress: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }),
       ...(status && { status }),
       ...(customerId && { customerId }),
       ...(currentHubId && { currentHubId }),
@@ -56,7 +79,9 @@ export class OrderRepository {
         where: whereParams,
         include: {
           items: true,
+          ...paymentSummarySelect,
         },
+        orderBy: { createdAt: 'desc' },
         skip,
         take,
       }),
@@ -78,6 +103,7 @@ export class OrderRepository {
       },
       include: {
         items: true,
+        ...paymentSummarySelect,
       },
     })
   }
@@ -88,6 +114,10 @@ export class OrderRepository {
         id,
       },
       data: payload,
+      include: {
+        items: true,
+        ...paymentSummarySelect,
+      },
     })
   }
 
@@ -96,6 +126,10 @@ export class OrderRepository {
       return this.prismaService.order.delete({
         where: {
           id,
+        },
+        include: {
+          items: true,
+          ...paymentSummarySelect,
         },
       })
     }
@@ -106,6 +140,10 @@ export class OrderRepository {
       data: {
         deletedAt: new Date(),
         deletedById,
+      },
+      include: {
+        items: true,
+        ...paymentSummarySelect,
       },
     })
   }
