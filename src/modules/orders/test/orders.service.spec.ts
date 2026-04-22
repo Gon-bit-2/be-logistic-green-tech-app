@@ -6,6 +6,7 @@ import { PrismaService } from 'src/database/prisma.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotificationEventName } from 'src/modules/notification/events/notification.event';
 import { ORDER_STATUS } from 'src/common/constants/order.constant';
+import { MapsService } from 'src/modules/maps/service/maps.service';
 
 // Mock calculateHaversineDistance before testing
 jest.mock('src/utils/geo.util', () => ({
@@ -38,6 +39,14 @@ describe('OrdersService', () => {
       emitAsync: jest.fn().mockResolvedValue([]),
     };
 
+    const mapsServiceMock = {
+      directions: jest.fn().mockResolvedValue({
+        distanceMeters: 5200,
+        durationSeconds: 1200,
+        polyline: 'encoded_polyline',
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
@@ -52,6 +61,10 @@ describe('OrdersService', () => {
         {
           provide: EventEmitter2,
           useValue: eventEmitterMock,
+        },
+        {
+          provide: MapsService,
+          useValue: mapsServiceMock,
         },
       ],
     }).compile();
@@ -190,6 +203,18 @@ describe('OrdersService', () => {
       const res = await service.findAll({});
       expect(res).toEqual({ data: [], totalItems: 0 });
       expect(orderRepo.findAll).toHaveBeenCalledWith({});
+    });
+
+    it('forward search filter để repo xử lý sorting và payment summary', async () => {
+      orderRepo.findAll.mockResolvedValue({ data: [], totalItems: 0 } as any);
+
+      await service.findAll({ search: 'ORD-2026', page: 1, limit: 10 } as any);
+
+      expect(orderRepo.findAll).toHaveBeenCalledWith({
+        search: 'ORD-2026',
+        page: 1,
+        limit: 10,
+      });
     });
   });
 

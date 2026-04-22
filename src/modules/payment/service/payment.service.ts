@@ -1,8 +1,10 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common'
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common'
 import Stripe from 'stripe'
 import envConfig from 'src/config/config'
 import { PaymentRepository } from '../repository/payment.repo'
 import { PrismaService } from 'src/database/prisma.service'
+import roleName from 'src/common/constants/role.constant'
+import type { AccessTokenPayload } from 'src/types/jwt.type'
 /**
  * Interface biểu diễn cấu trúc Event gửi qua Webhook từ Stripe
  * Sử dụng interface cục bộ để tránh lỗi TypeScript Namespace collision với SDK Stripe.
@@ -60,9 +62,13 @@ export class PaymentService {
     }
 
     const amountVnd = this.normalizeStripeAmount(order.shippingFee, 'vnd')
+    const previousTransactionId =
+      order.payment?.method === 'STRIPE' && order.payment.status === 'PENDING'
+        ? order.payment.transactionId
+        : null
 
-    if (order.payment?.method === 'STRIPE' && order.payment.status === 'PENDING' && order.payment.transactionId) {
-      const reusableIntent = await this.getReusablePaymentIntent(order.payment.transactionId)
+    if (previousTransactionId) {
+      const reusableIntent = await this.getReusablePaymentIntent(previousTransactionId)
 
       if (reusableIntent?.client_secret) {
         return {
@@ -81,7 +87,7 @@ export class PaymentService {
         metadata: { orderId: order.id.toString() },
       },
       {
-        idempotencyKey: `payment-intent-order-${order.id}`,
+        idempotencyKey: this.buildPaymentIntentIdempotencyKey(order.id, previousTransactionId),
       },
     )
 
@@ -193,7 +199,22 @@ export class PaymentService {
     return { received: true }
   }
 
-  async getPaymentByOrderId(orderId: number) {
+  async getPaymentByOrderId(orderId: number, user?: AccessTokenPayload) {
+    if (user?.roleName === roleName.CUSTOMER) {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { customerId: true },
+      })
+
+      if (!order) {
+        throw new NotFoundException('Không tìm thấy đơn hàng')
+      }
+
+      if (order.customerId !== user.userId) {
+        throw new ForbiddenException('Error.PermissionDenied.NotResourceOwner')
+      }
+    }
+
     return this.paymentRepo.findByOrderId(orderId)
   }
 
@@ -209,6 +230,14 @@ export class PaymentService {
     }
 
     return null
+  }
+
+  private buildPaymentIntentIdempotencyKey(orderId: number, previousTransactionId: string | null) {
+    if (!previousTransactionId) {
+      return `payment-intent-order-${orderId}`
+    }
+
+    return `payment-intent-order-${orderId}-retry-${previousTransactionId}`
   }
 
   private normalizeStripeAmount(amount: unknown, currency: string): number {

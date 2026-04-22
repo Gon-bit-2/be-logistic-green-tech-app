@@ -23,6 +23,28 @@ type CachedRole = RolePermissionType & {
     [key: string]: permission
   }
 }
+
+function normalizeRouteSegment(value?: string) {
+  if (!value) {
+    return ''
+  }
+
+  if (value === '/' || value === '/*') {
+    return ''
+  }
+
+  return value.startsWith('/') ? value : `/${value}`
+}
+
+export function getPermissionPath(request: { baseUrl?: string; route?: { path?: string | string[] } }) {
+  const baseUrl = normalizeRouteSegment(request.baseUrl)
+  const routePath = Array.isArray(request.route?.path) ? request.route?.path[0] : request.route?.path
+  const normalizedRoutePath = normalizeRouteSegment(routePath)
+  const joinedPath = `${baseUrl}${normalizedRoutePath}` || '/'
+
+  return joinedPath.replace(/\/{2,}/g, '/')
+}
+
 @Injectable()
 export class AccessTokenGuard implements CanActivate {
   constructor(
@@ -60,7 +82,7 @@ export class AccessTokenGuard implements CanActivate {
   private async validateUserPermission(decodedAccessToken: AccessTokenPayload, request: any) {
     const roleId = decodedAccessToken.roleId
 
-    const path: string = request.route.path
+    const path = getPermissionPath(request)
     const cacheKey = `roleId:${roleId}`
     const method = request.method as keyof typeof HTTPMethod
     //
