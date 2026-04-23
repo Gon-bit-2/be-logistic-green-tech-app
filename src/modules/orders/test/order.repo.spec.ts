@@ -72,6 +72,43 @@ describe('OrderRepository', () => {
     })
   })
 
+  it('findAll ưu tiên trackingCode exact-match thay cho search mơ hồ', async () => {
+    await repository.findAll({
+      page: 1,
+      limit: 2,
+      trackingCode: 'GT-ORD-20260003',
+      search: 'ignored-search',
+      currentHubId: 5,
+    } as any)
+
+    expect(prismaService.order.findMany).toHaveBeenCalledWith({
+      where: {
+        deletedAt: null,
+        currentHubId: 5,
+        trackingCode: {
+          equals: 'GT-ORD-20260003',
+          mode: 'insensitive',
+        },
+      },
+      include: {
+        items: true,
+        payment: {
+          select: {
+            amount: true,
+            method: true,
+            orderId: true,
+            paidAt: true,
+            status: true,
+            transactionId: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: 0,
+      take: 2,
+    })
+  })
+
   it('findById include payment summary cho customer detail', async () => {
     await repository.findById(12)
 

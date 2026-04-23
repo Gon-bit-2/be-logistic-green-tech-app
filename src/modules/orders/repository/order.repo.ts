@@ -51,13 +51,20 @@ export class OrderRepository {
   }
 
   async findAll(query: GetOrderListQueryType & { customerId?: number; currentHubId?: number }) {
-    const { limit, page, status, customerId, currentHubId, search } = query
+    const { limit, page, status, customerId, currentHubId, search, trackingCode } = query
     const skip = (page - 1) * limit
     const take = limit
 
     const whereParams: any = {
       deletedAt: null,
-      ...(search && {
+      ...(trackingCode
+        ? {
+            trackingCode: {
+              equals: trackingCode,
+              mode: 'insensitive' as const,
+            },
+          }
+        : search && {
         OR: [
           { trackingCode: { contains: search, mode: 'insensitive' as const } },
           { senderName: { contains: search, mode: 'insensitive' as const } },

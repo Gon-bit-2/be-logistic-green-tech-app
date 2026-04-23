@@ -86,6 +86,7 @@ export const GetOrderListResSchema = z.object({
 
 export const GetOrderListQuerySchema = PaginationQuerySchema.extend({
   search: z.string().trim().optional(),
+  trackingCode: z.string().trim().min(1).optional(),
   status: OrderStatusSchema.optional(),
 })
 

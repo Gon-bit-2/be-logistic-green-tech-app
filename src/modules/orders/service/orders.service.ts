@@ -16,6 +16,8 @@ import {
   OrderStatusUpdatedEvent,
 } from 'src/modules/notification/events/notification.event'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
+import roleName from 'src/common/constants/role.constant'
+import type { AccessTokenPayload } from 'src/types/jwt.type'
 
 @Injectable()
 export class OrdersService {
@@ -210,8 +212,31 @@ export class OrdersService {
     return Math.round(baseFee + distanceFee + heavyFee)
   }
 
-  async findAll(query: GetOrderListQueryType & { customerId?: number; currentHubId?: number }) {
-    return this.orderRepo.findAll(query)
+  async findAll(
+    query: GetOrderListQueryType & { customerId?: number; currentHubId?: number },
+    actor?: AccessTokenPayload,
+  ) {
+    let nextQuery = { ...query }
+
+    if (actor?.roleName === roleName.WAREHOUSE_STAFF) {
+      const warehouseUser = await this.prismaService.user.findFirst({
+        where: {
+          id: actor.userId,
+          deletedAt: null,
+          isDeleted: false,
+        },
+        select: {
+          hubId: true,
+        },
+      })
+
+      nextQuery = {
+        ...nextQuery,
+        currentHubId: warehouseUser?.hubId ?? -1,
+      }
+    }
+
+    return this.orderRepo.findAll(nextQuery)
   }
 
   async findById(id: number) {
