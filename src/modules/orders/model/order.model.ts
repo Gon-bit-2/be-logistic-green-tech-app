@@ -14,6 +14,7 @@ export const OrderStatusSchema = z.enum([
 ])
 
 export const ServiceTypeSchema = z.enum([SERVICE_TYPE.EXPRESS, SERVICE_TYPE.STANDARD, SERVICE_TYPE.ECO_GREEN])
+export const PaymentMethodSchema = z.enum(['STRIPE', 'COD'])
 
 export const OrderItemSchema = z.object({
   id: z.number().optional(),
@@ -112,6 +113,7 @@ export const CreateOrderBodySchema = z.object({
   preferredDeliveryTimeEnd: z.coerce.date().optional(),
 
   serviceType: ServiceTypeSchema.default(SERVICE_TYPE.STANDARD),
+  paymentMethod: PaymentMethodSchema.default('STRIPE'),
 
   items: z.array(OrderItemSchema.omit({ id: true, orderId: true })).min(1, 'Đơn hàng phải có ít nhất 1 món hàng'),
 })
@@ -133,7 +135,7 @@ export const UpdateOrderStatusSchema = z.object({
   status: OrderStatusSchema,
 })
 
-export const OrderQuoteBodySchema = CreateOrderBodySchema.omit({ customerId: true })
+export const OrderQuoteBodySchema = CreateOrderBodySchema.omit({ customerId: true, paymentMethod: true })
 
 export const OrderQuoteResSchema = z.object({
   distanceMeters: z.number(),

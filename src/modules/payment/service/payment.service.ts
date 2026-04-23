@@ -55,6 +55,9 @@ export class PaymentService {
 
     if (!order) throw new NotFoundException(`Order #${orderId} không tồn tại.`)
     if (order.customerId !== userId) throw new BadRequestException('Bạn không sở hữu đơn hàng này.')
+    if (order.payment?.method === 'COD') {
+      throw new BadRequestException('Đơn hàng COD không hỗ trợ khởi tạo thanh toán trực tuyến.')
+    }
 
     // Kiểm tra đã thanh toán chưa
     if (order.payment?.status === 'COMPLETED') {
@@ -127,27 +130,78 @@ export class PaymentService {
     })
 
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng')
-    if (order.payment?.status === 'COMPLETED') {
+    if (order.payment?.method === 'STRIPE') {
+      throw new BadRequestException('Đơn hàng thanh toán online không thể xác nhận COD.')
+    }
+    if (order.payment?.status === 'COMPLETED' || order.isCodCollected) {
       throw new BadRequestException('Đơn hàng đã được thanh toán trước đó')
     }
 
-    // Upsert or Update COD Payment
-    if (!order.payment) {
-      await this.paymentRepo.upsertPayment(
-        order.id,
-        {
-          orderId: order.id,
-          amount: this.normalizeStripeAmount(order.shippingFee, 'vnd'),
-          method: 'COD',
+    const amount = this.normalizeStripeAmount(order.shippingFee, 'vnd')
+
+    await this.prisma.$transaction(async (tx) => {
+      const now = new Date()
+
+      if (!order.payment) {
+        await tx.payment.create({
+          data: {
+            orderId: order.id,
+            amount,
+            method: 'COD',
+            status: 'COMPLETED',
+            paidAt: now,
+            createdById: driverId,
+            updatedById: driverId,
+          },
+        })
+      } else {
+        await tx.payment.update({
+          where: { orderId: order.id },
+          data: {
+            amount,
+            method: 'COD',
+            status: 'COMPLETED',
+            paidAt: now,
+            updatedById: driverId,
+          },
+        })
+      }
+
+      const wallet = await tx.wallet.upsert({
+        where: { userId: driverId },
+        create: { userId: driverId },
+        update: {},
+      })
+
+      await tx.transaction.create({
+        data: {
+          walletId: wallet.id,
+          amount,
+          type: 'COD_COLLECTION',
           status: 'COMPLETED',
-          paidAt: new Date(),
-          createdById: driverId,
+          referenceId: `ORDER_${order.id}`,
+          description: `Thu hộ COD cho đơn hàng #${order.trackingCode || order.id}`,
         },
-        {},
-      )
-    } else {
-      await this.paymentRepo.updateCodPayment(order.id, driverId)
-    }
+      })
+
+      await tx.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          codCollected: {
+            increment: amount,
+          },
+        },
+      })
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          codAmount: amount,
+          isCodCollected: true,
+          codCollectedAt: now,
+        },
+      })
+    })
 
     this.logger.log(`[PAYMENT] Tài xế #${driverId} xác nhận COD cho Order #${orderId}`)
     return { success: true, message: 'Đã xác nhận thu hộ tiền mặt (COD) thành công' }

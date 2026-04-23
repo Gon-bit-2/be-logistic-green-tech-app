@@ -101,7 +101,9 @@ describe('TrackingService', () => {
       const result = await service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, payload as any);
 
       expect(result).toEqual({ id: 10 });
-      expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(1, payload, true);
+      expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(1, payload, true, {
+        codCollection: undefined,
+      });
       expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
     });
 
@@ -190,6 +192,59 @@ describe('TrackingService', () => {
       });
       // Test GreenTech Queue added
       expect(greenTechQueue.add).toHaveBeenCalledWith(CALCULATE_EMISSION_JOB_NAME, { tripId: 100 });
+    });
+
+    it('gộp thu COD khi driver xác nhận DELIVERED cho đơn COD', async () => {
+      prismaService.order.findFirst.mockResolvedValue({
+        id: 4,
+        customerId: 12,
+        trackingCode: 'ORD004',
+        status: ORDER_STATUS.OUT_FOR_DELIVERY,
+        currentTripId: 88,
+        currentHubId: null,
+        isCodCollected: false,
+        payment: {
+          amount: 42500,
+          method: 'COD',
+          status: 'PENDING',
+        },
+      });
+      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 12 } as any);
+      prismaService.trip.findUnique.mockResolvedValue({
+        id: 88,
+        status: 'IN_PROGRESS',
+        ordersOnBoard: [{ id: 4, status: ORDER_STATUS.DELIVERED }],
+      });
+
+      await service.createEvent(
+        { userId: 22, roleName: 'DRIVER' } as any,
+        {
+          orderId: 4,
+          eventType: TRACKING_EVENT_TYPE.STATUS_CHANGE,
+          status: ORDER_STATUS.DELIVERED,
+          pod: {
+            receiverName: 'Minh',
+            packageCondition: 'INTACT',
+            images: [{ url: 'https://example.com/pod.png', type: 'PACKAGE' }],
+          },
+        } as any,
+      );
+
+      expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(
+        22,
+        expect.objectContaining({
+          orderId: 4,
+          status: ORDER_STATUS.DELIVERED,
+        }),
+        true,
+        {
+          codCollection: {
+            amount: 42500,
+            driverId: 22,
+            orderReference: 'ORD004',
+          },
+        },
+      );
     });
 
     it('bắn notification khi đơn chuyển sang OUT_FOR_DELIVERY', async () => {

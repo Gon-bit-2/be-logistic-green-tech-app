@@ -41,7 +41,22 @@ export class TrackingService {
     // 1. Kiểm tra Order tồn tại và lấy trạng thái hiện tại
     const order = await this.prismaService.order.findFirst({
       where: { id: payload.orderId, deletedAt: null },
-      select: { id: true, status: true, trackingCode: true, currentTripId: true, currentHubId: true, customerId: true },
+      select: {
+        id: true,
+        status: true,
+        trackingCode: true,
+        currentTripId: true,
+        currentHubId: true,
+        customerId: true,
+        isCodCollected: true,
+        payment: {
+          select: {
+            amount: true,
+            method: true,
+            status: true,
+          },
+        },
+      },
     })
 
     if (!order) {
@@ -77,6 +92,17 @@ export class TrackingService {
       )
     }
 
+    const shouldCollectCodOnDelivery =
+      shouldUpdateOrderStatus &&
+      payload.status === ORDER_STATUS.DELIVERED &&
+      order.payment?.method === 'COD' &&
+      order.payment.status !== 'COMPLETED' &&
+      !order.isCodCollected
+
+    if (shouldCollectCodOnDelivery && actor.roleName !== roleName.DRIVER) {
+      throw new ForbiddenException('Error.PermissionDenied.CodCollectionRequiresDriver')
+    }
+
     // 3. Nếu là EXCEPTION (giao thất bại) → kiểm tra số lần đã fail
     if (payload.eventType === TRACKING_EVENT_TYPE.EXCEPTION) {
       const failedCount = await this.trackingRepo.countFailedAttempts(payload.orderId)
@@ -93,7 +119,15 @@ export class TrackingService {
     }
 
     // 4. Gọi Repository tạo event + update status (trong Transaction)
-    const event = await this.trackingRepo.createEventWithStatusUpdate(createdById, payload, shouldUpdateOrderStatus)
+    const event = await this.trackingRepo.createEventWithStatusUpdate(createdById, payload, shouldUpdateOrderStatus, {
+      codCollection: shouldCollectCodOnDelivery
+        ? {
+            amount: Number(order.payment?.amount ?? 0),
+            driverId: createdById,
+            orderReference: order.trackingCode || String(order.id),
+          }
+        : undefined,
+    })
 
     if (shouldUpdateOrderStatus && payload.status && this.shouldNotifyOrderStatus(payload.status)) {
       await this.emitNotificationEvent(NotificationEventName.ORDER_STATUS_UPDATED, {

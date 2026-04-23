@@ -67,10 +67,17 @@ describe('Orders API', () => {
 
     await request(app.getHttpServer()).get('/orders').expect(200)
 
-    expect(ordersService.findAll).toHaveBeenCalledWith({
-      page: 1,
-      limit: 10,
-    })
+    expect(ordersService.findAll).toHaveBeenCalledWith(
+      {
+        page: 1,
+        limit: 10,
+        customerId: undefined,
+      },
+      expect.objectContaining({
+        userId: 99,
+        roleName: 'ADMIN',
+      }),
+    )
   })
 
   it('PUT /orders/:id/status parses id and validates status body', async () => {
