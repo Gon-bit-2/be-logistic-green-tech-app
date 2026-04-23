@@ -21,6 +21,8 @@ import {
   CreateAddressBookBodyDTO,
   ForgotPasswordBodyDTO,
   GetAuthorizationUrlResDTO,
+  GoogleSessionBodyDTO,
+  GoogleSessionResDTO,
   LoginBodyDTO,
   LoginResDTO,
   RefreshTokenBodyDTO,
@@ -166,8 +168,7 @@ export class AuthController {
       const data = await this.googleService.googleCallback({ state, code })
       return res.redirect(
         buildGoogleRedirectUrl(envConfig.GOOGLE_CLIENT_REDIRECT_URI, {
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken,
+          sessionToken: data.sessionToken,
         }),
       )
     } catch (error) {
@@ -180,6 +181,14 @@ export class AuthController {
       )
     }
   }
+
+  @Post('google/session')
+  @isPublic()
+  @ZodSerializerDto(GoogleSessionResDTO)
+  exchangeGoogleSession(@Body() body: GoogleSessionBodyDTO) {
+    return this.googleService.redeemGoogleSession(body.sessionToken)
+  }
+
   @Post('forgot-password')
   @isPublic()
   @ZodSerializerDto(MessageResDTO)
