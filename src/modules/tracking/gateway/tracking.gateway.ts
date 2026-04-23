@@ -13,30 +13,71 @@ import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import { OnEvent } from '@nestjs/event-emitter'
 import { Auth } from 'src/common/decorators/auth.decorator'
 import { AuthType } from 'src/common/constants/auth.constant'
+import { WsJwtGuard } from 'src/common/guards/ws-jwt.guard'
 
 export interface AuthenticatedSocket extends Socket {
-  user?: AccessTokenPayload
+  /** User payload đã được WsJwtGuard giải mã từ JWT token */
+  data: Socket['data'] & {
+    user?: AccessTokenPayload
+    disconnectReason?: string
+  }
 }
 
 // ===== KẾT NỐI REAL-TIME TRACKING =====
 // Cung cấp namespace riêng biệt cho phép theo dõi thời gian thực vị trí tài xế
 // Dễ dàng kết nối từ mobile app và web app với kiến trúc Pub/Sub
+//
+// CORS: Giới hạn origin thay vì cho phép tất cả ('*') để tránh bị exploit
+// Authentication: JWT token bắt buộc khi connect qua handshake auth
 @WebSocketGateway({
-  cors: { origin: '*' },
+  cors: {
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:8386',
+    ],
+    credentials: true,
+  },
   namespace: 'tracking',
 })
-@Auth(AuthType.None)
+@Auth(AuthType.None) // Bypass HTTP guards vì WebSocket dùng WsJwtGuard riêng
 export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server
 
   private readonly logger = new Logger(TrackingGateway.name)
 
+  constructor(private readonly wsJwtGuard: WsJwtGuard) {}
+
   /**
-   * Handle client connections (Tài xế hoặc Khách hàng)
-   * Có thể mở rộng để validate JWT token ngay tại đây qua client.handshake.auth
+   * Handle client connections — BẮT BUỘC xác thực JWT token.
+   *
+   * Client phải gửi token khi kết nối:
+   *   io('/tracking', { auth: { token: accessToken } })
+   *
+   * Nếu token không hợp lệ hoặc hết hạn, socket sẽ bị disconnect ngay lập tức.
+   * Điều này ngăn chặn:
+   *   - Kẻ tấn công gửi fake GPS data giả mạo tài xế
+   *   - Người lạ join tracking room để theo dõi vị trí trái phép
+   *   - Spam fake location updates gây nhiễu hệ thống
    */
-  handleConnection(client: AuthenticatedSocket) {
+  async handleConnection(client: AuthenticatedSocket) {
+    // Xác thực JWT token từ handshake auth
+    const isAuthenticated = await this.wsJwtGuard.validateClient(client)
+
+    if (!isAuthenticated) {
+      this.logger.warn(
+        `🚫 Rejected unauthenticated WebSocket connection: ${client.id} | origin=${client.handshake.headers.origin ?? 'unknown'}`,
+      )
+      client.emit('exception', {
+        statusCode: 401,
+        message: 'Authentication required. Please provide a valid token via auth.token.',
+        timestamp: new Date().toISOString(),
+      })
+      client.disconnect(true)
+      return
+    }
+
+    // Đăng ký event handlers cho connection lifecycle
     client.once('disconnect', (reason) => {
       client.data.disconnectReason = reason
     })
@@ -46,8 +87,9 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       this.logger.warn(`Socket error from ${client.id}: ${message}`)
     })
 
+    const user = client.data.user
     this.logger.log(
-      `🔗 Client connected: ${client.id} | namespace=${client.nsp.name} | transport=${client.conn.transport.name} | origin=${client.handshake.headers.origin ?? 'unknown'}`,
+      `🔗 Client connected: ${client.id} | userId=${user?.userId} | role=${user?.roleName} | transport=${client.conn.transport.name}`,
     )
   }
 
@@ -55,8 +97,9 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
    * Handle client disconnections
    */
   handleDisconnect(client: AuthenticatedSocket) {
+    const user = client.data.user
     this.logger.log(
-      `❌ Client disconnected: ${client.id} | reason=${String(client.data.disconnectReason ?? 'unknown')}`,
+      `❌ Client disconnected: ${client.id} | userId=${user?.userId ?? 'unknown'} | reason=${String(client.data.disconnectReason ?? 'unknown')}`,
     )
   }
 
@@ -65,26 +108,28 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
    *
    * Payload: { tripId: number, lat: number, lng: number }
    * System sẽ tự động broadcast (Publish) vị trí này cho tất cả những ai đang Subscribe room của tripId đó.
+   *
+   * Bảo mật: Chỉ user đã xác thực mới có thể gửi location update.
+   * User info được lấy từ socket.data.user (đã verify ở handleConnection).
    */
-  // @UseGuards(WsGuard) // TODO: Cần implement WsGuard sử dụng TokenService riêng cho WebSocket // Chỉ User đăng nhập mới cho push/pull data
   @SubscribeMessage('driverLocationUpdate')
   handleLocationUpdate(
     @MessageBody() data: { lat: number; lng: number; tripId: number },
     @ConnectedSocket() client: AuthenticatedSocket,
   ) {
-    // 💡 Kiến trúc Clean: Gateway chỉ lo IO, không chứa Business Logic nặng.
-    // Nếu cần lưu lịch sử GPS vào Redis/DB thì tiêm TrackingService vào đây.
-
-    // 1. Lấy thông tin user hiện tại từ token đã được Guard giải mã
-    const user = client.user
+    // Kiểm tra user đã được xác thực (phòng trường hợp race condition)
+    const user = client.data.user
+    if (!user) {
+      return { status: 'error', message: 'Unauthorized' }
+    }
 
     this.logger.debug(
-      `📍 Tài xế (ID: ${user?.userId}) cập nhật GPS chuyến đi #${data.tripId}: [${data.lat}, ${data.lng}]`,
+      `📍 Tài xế (ID: ${user.userId}) cập nhật GPS chuyến đi #${data.tripId}: [${data.lat}, ${data.lng}]`,
     )
 
-    // 2. Phát lại thông tin vào broadcast room của chuyến đi
+    // Phát lại thông tin vào broadcast room của chuyến đi
     this.server.to(`trip_${data.tripId}`).emit('locationUpdated', {
-      driverId: user?.userId,
+      driverId: user.userId,
       tripId: data.tripId,
       lat: data.lat,
       lng: data.lng,
@@ -97,13 +142,19 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   /**
    * KHÁCH HÀNG (CUSTOMER) tham gia room để nhận live tracking
+   *
+   * Bảo mật: Chỉ user đã xác thực mới join được room.
    */
-  // @UseGuards(WsGuard) // TODO: Cần implement WsGuard sử dụng TokenService riêng cho WebSocket
   @SubscribeMessage('joinTripTracking')
   handleJoinRoom(@MessageBody() data: { tripId: number }, @ConnectedSocket() client: AuthenticatedSocket) {
+    const user = client.data.user
+    if (!user) {
+      return { event: 'error', message: 'Unauthorized' }
+    }
+
     // Cho phép socket tham gia vào Room riêng biệt
     client.join(`trip_${data.tripId}`)
-    this.logger.log(`👥 Client ${client.id} joined tracking room: trip_${data.tripId}`)
+    this.logger.log(`👥 Client ${client.id} (userId=${user.userId}) joined tracking room: trip_${data.tripId}`)
 
     return { event: 'joined', message: `Successfully joined trip_${data.tripId}` }
   }
@@ -111,11 +162,15 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   /**
    * KHÁCH HÀNG rời room tracking (tối ưu bộ nhớ trên Socket server)
    */
-  // @UseGuards(WsGuard) // TODO: Cần implement WsGuard sử dụng TokenService riêng cho WebSocket
   @SubscribeMessage('leaveTripTracking')
   handleLeaveRoom(@MessageBody() data: { tripId: number }, @ConnectedSocket() client: AuthenticatedSocket) {
+    const user = client.data.user
+    if (!user) {
+      return { event: 'error', message: 'Unauthorized' }
+    }
+
     client.leave(`trip_${data.tripId}`)
-    this.logger.log(`🚶‍♂️ Client ${client.id} left tracking room: trip_${data.tripId}`)
+    this.logger.log(`🚶‍♂️ Client ${client.id} (userId=${user.userId}) left tracking room: trip_${data.tripId}`)
 
     return { event: 'left', message: `Successfully left trip_${data.tripId}` }
   }

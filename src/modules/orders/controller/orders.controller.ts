@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Param, Delete, ParseIntPipe, Put, Query, Patch } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { OrdersService } from '../service/orders.service'
 import { CreateOrderDto, GetOrderListDto, UpdateOrderStatusDto, OrderQuoteBodyDto } from '../dto/order.dto'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
@@ -11,13 +12,24 @@ import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
+  /**
+   * Tính phí vận chuyển & thời gian dự kiến (không tạo đơn).
+   * Rate limit: 10 request / 60 giây — ngăn chặn spam request liên tục.
+   */
   @Post('quote')
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
   quote(@Body() payload: OrderQuoteBodyDto) {
     return this.ordersService.quote(payload)
   }
 
+  /**
+   * Tạo đơn hàng mới.
+   * Rate limit: 5 request / 60 giây — ngăn chặn tạo đơn spam
+   * (1 user bình thường không cần tạo quá 5 đơn/phút).
+   */
   @Post()
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
   create(@Body() createOrderDto: CreateOrderDto, @ActiveUser('userId') userId: number) {
     const customerId = createOrderDto.customerId || userId
