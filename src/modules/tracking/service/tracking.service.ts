@@ -14,7 +14,7 @@ import { GREEN_TECH_QUEUE_NAME, CALCULATE_EMISSION_JOB_NAME } from 'src/common/c
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { NotificationEventName, OrderStatusUpdatedEvent } from 'src/modules/notification/events/notification.event'
 import roleName from 'src/common/constants/role.constant'
-import type { AccessTokenPayload } from 'src/types/jwt.type'
+import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 
 @Injectable()
 export class TrackingService {

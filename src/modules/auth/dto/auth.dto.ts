@@ -5,6 +5,8 @@ import {
   CreateAddressBookBodySchema,
   ForgotPasswordBodySchema,
   GetAuthorizationUrlResSchema,
+  GoogleSessionBodySchema,
+  GoogleSessionResSchema,
   LoginBodySchema,
   LoginResSchema,
   LogoutBodySchema,
@@ -30,6 +32,8 @@ export class RefreshTokenBodyDTO extends createZodDto(RefreshTokenBodySchema) {}
 export class RefreshTokenResDTO extends createZodDto(RefreshTokenResSchema) {}
 export class LogoutBodyDTO extends createZodDto(LogoutBodySchema) {}
 export class GetAuthorizationUrlResDTO extends createZodDto(GetAuthorizationUrlResSchema) {}
+export class GoogleSessionBodyDTO extends createZodDto(GoogleSessionBodySchema) {}
+export class GoogleSessionResDTO extends createZodDto(GoogleSessionResSchema) {}
 export class ForgotPasswordBodyDTO extends createZodDto(ForgotPasswordBodySchema) {}
 export class UpdateProfileBodyDTO extends createZodDto(UpdateProfileBodySchema) {}
 export class UpdateProfileResDTO extends createZodDto(UpdateProfileResSchema) {}

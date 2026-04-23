@@ -1,4 +1,3 @@
-import { optimizeRouteWithOSRM } from 'src/utils/routing.util'
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
@@ -11,6 +10,7 @@ import { GamificationService } from '../../green-tech/service/gamification.servi
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { BadRequestException } from '@nestjs/common'
+import { optimizeRouteWithOSRM } from 'src/common/utils/routing.util'
 
 @Injectable()
 export class TripsService {

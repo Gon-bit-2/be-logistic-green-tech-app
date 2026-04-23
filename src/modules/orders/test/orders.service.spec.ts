@@ -7,18 +7,20 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotificationEventName } from 'src/modules/notification/events/notification.event';
 import { ORDER_STATUS } from 'src/common/constants/order.constant';
 import { MapsService } from 'src/modules/maps/service/maps.service';
+import { TrackingRepository } from 'src/modules/tracking/repository/tracking.repo';
 
 // Mock calculateHaversineDistance before testing
-jest.mock('src/utils/geo.util', () => ({
+jest.mock('src/common/utils/geo.util', () => ({
   calculateHaversineDistance: jest.fn(),
 }));
-import { calculateHaversineDistance } from 'src/utils/geo.util';
+import { calculateHaversineDistance } from 'src/common/utils/geo.util';
 
 describe('OrdersService', () => {
   let service: OrdersService;
   let orderRepo: jest.Mocked<OrderRepository>;
   let prismaService: any; // Mucking Prisma is easier by object assignment
   let eventEmitter: jest.Mocked<EventEmitter2>;
+  let trackingRepo: jest.Mocked<TrackingRepository>;
 
   beforeEach(async () => {
     const orderRepoMock = {
@@ -40,6 +42,10 @@ describe('OrdersService', () => {
 
     const eventEmitterMock = {
       emitAsync: jest.fn().mockResolvedValue([]),
+    };
+
+    const trackingRepoMock = {
+      createEventWithStatusUpdate: jest.fn(),
     };
 
     const mapsServiceMock = {
@@ -69,6 +75,10 @@ describe('OrdersService', () => {
           provide: MapsService,
           useValue: mapsServiceMock,
         },
+        {
+          provide: TrackingRepository,
+          useValue: trackingRepoMock,
+        },
       ],
     }).compile();
 
@@ -76,6 +86,7 @@ describe('OrdersService', () => {
     orderRepo = module.get(OrderRepository);
     prismaService = module.get(PrismaService);
     eventEmitter = module.get(EventEmitter2);
+    trackingRepo = module.get(TrackingRepository);
   });
 
   afterEach(() => {
@@ -257,7 +268,7 @@ describe('OrdersService', () => {
     });
   });
 
-  describe('update & delete', () => {
+  describe('update, cancel & delete', () => {
     it('gọi hàm update của repo', async () => {
       orderRepo.update.mockResolvedValue({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.DELIVERED } as any);
       const payload: any = { status: ORDER_STATUS.DELIVERED };
@@ -278,6 +289,96 @@ describe('OrdersService', () => {
       await service.update(2, { status: ORDER_STATUS.ASSIGNED } as any);
 
       expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
+    });
+
+    it('hủy đơn thành công khi customer là owner và status = PENDING', async () => {
+      orderRepo.findById
+        .mockResolvedValueOnce({
+          id: 10,
+          customerId: 7,
+          trackingCode: 'ORD010',
+          status: ORDER_STATUS.PENDING,
+        } as any)
+        .mockResolvedValueOnce({
+          id: 10,
+          customerId: 7,
+          trackingCode: 'ORD010',
+          status: ORDER_STATUS.CANCELLED,
+        } as any);
+      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 99 } as any);
+
+      const result = await service.cancelByCustomer(10, { userId: 7, roleName: 'CUSTOMER' } as any);
+
+      expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({
+          orderId: 10,
+          eventType: 'STATUS_CHANGE',
+          status: ORDER_STATUS.CANCELLED,
+          source: 'CUSTOMER_APP',
+        }),
+        true,
+      );
+      expect(result).toEqual({
+        id: 10,
+        customerId: 7,
+        trackingCode: 'ORD010',
+        status: ORDER_STATUS.CANCELLED,
+      });
+      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
+        userId: 7,
+        orderId: 10,
+        trackingCode: 'ORD010',
+        status: ORDER_STATUS.CANCELLED,
+      });
+    });
+
+    it('hủy đơn thành công khi status = ASSIGNED', async () => {
+      orderRepo.findById
+        .mockResolvedValueOnce({
+          id: 11,
+          customerId: 8,
+          trackingCode: 'ORD011',
+          status: ORDER_STATUS.ASSIGNED,
+        } as any)
+        .mockResolvedValueOnce({
+          id: 11,
+          customerId: 8,
+          trackingCode: 'ORD011',
+          status: ORDER_STATUS.CANCELLED,
+        } as any);
+      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 100 } as any);
+
+      await service.cancelByCustomer(11, { userId: 8, roleName: 'CUSTOMER' } as any);
+
+      expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(
+        8,
+        expect.objectContaining({
+          orderId: 11,
+          status: ORDER_STATUS.CANCELLED,
+        }),
+        true,
+      );
+    });
+
+    it.each([
+      ORDER_STATUS.PICKED_UP,
+      ORDER_STATUS.IN_TRANSIT,
+      ORDER_STATUS.DELIVERED,
+      ORDER_STATUS.CANCELLED,
+    ])('từ chối hủy khi status = %s', async (status) => {
+      orderRepo.findById.mockResolvedValue({
+        id: 12,
+        customerId: 7,
+        trackingCode: 'ORD012',
+        status,
+      } as any);
+
+      await expect(
+        service.cancelByCustomer(12, { userId: 7, roleName: 'CUSTOMER' } as any),
+      ).rejects.toThrow('Đơn hàng chỉ có thể hủy khi đang chờ xử lý hoặc đã phân công.');
+
+      expect(trackingRepo.createEventWithStatusUpdate).not.toHaveBeenCalled();
     });
 
     it('gọi hàm delete của repo', async () => {

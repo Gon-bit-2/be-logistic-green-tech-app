@@ -12,7 +12,7 @@ import { Roles } from 'src/common/decorators/roles.decorator'
 import { ResourceAccess } from 'src/common/decorators/resource-access.decorator'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import roleName from 'src/common/constants/role.constant'
-import type { AccessTokenPayload } from 'src/types/jwt.type'
+import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 
 @Controller('trips')
 export class TripsController {

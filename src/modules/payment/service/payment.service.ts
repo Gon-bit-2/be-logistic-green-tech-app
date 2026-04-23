@@ -1,10 +1,17 @@
-import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common'
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+  ServiceUnavailableException,
+} from '@nestjs/common'
 import Stripe from 'stripe'
 import envConfig from 'src/config/config'
 import { PaymentRepository } from '../repository/payment.repo'
 import { PrismaService } from 'src/database/prisma.service'
 import roleName from 'src/common/constants/role.constant'
-import type { AccessTokenPayload } from 'src/types/jwt.type'
+import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 /**
  * Interface biểu diễn cấu trúc Event gửi qua Webhook từ Stripe
  * Sử dụng interface cục bộ để tránh lỗi TypeScript Namespace collision với SDK Stripe.
@@ -66,9 +73,7 @@ export class PaymentService {
 
     const amountVnd = this.normalizeStripeAmount(order.shippingFee, 'vnd')
     const previousTransactionId =
-      order.payment?.method === 'STRIPE' && order.payment.status === 'PENDING'
-        ? order.payment.transactionId
-        : null
+      order.payment?.method === 'STRIPE' && order.payment.status === 'PENDING' ? order.payment.transactionId : null
 
     if (previousTransactionId) {
       const reusableIntent = await this.getReusablePaymentIntent(previousTransactionId)
@@ -216,17 +221,15 @@ export class PaymentService {
     const secret = envConfig.STRIPE_WEBHOOK_SECRET
 
     if (!secret) {
-      this.logger.warn(
-        'STRIPE_WEBHOOK_SECRET chưa được cấu hình. Bypass signature check (KHÔNG AN TOÀN TRONG PRODUCTION).',
-      )
-      event = JSON.parse(payload.toString())
-    } else {
-      try {
-        event = this.stripe.webhooks.constructEvent(payload, signature, secret) as unknown as StripeWebhookEvent
-      } catch (err: unknown) {
-        this.logger.error(`Webhook signature verification failed: ${(err as Error).message}`)
-        throw new BadRequestException(`Webhook Error: ${(err as Error).message}`)
-      }
+      this.logger.error('STRIPE_WEBHOOK_SECRET chưa được cấu hình. Từ chối xử lý webhook để tránh giả mạo.')
+      throw new ServiceUnavailableException('Webhook Stripe chưa sẵn sàng')
+    }
+
+    try {
+      event = this.stripe.webhooks.constructEvent(payload, signature, secret) as unknown as StripeWebhookEvent
+    } catch (err: unknown) {
+      this.logger.error(`Webhook signature verification failed: ${(err as Error).message}`)
+      throw new BadRequestException(`Webhook Error: ${(err as Error).message}`)
     }
 
     // Xử lý các loại Event

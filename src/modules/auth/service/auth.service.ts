@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common'
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager'
 import { addMilliseconds } from 'date-fns'
+import { createHash } from 'node:crypto'
 import {
   CreateAddressBookBodyType,
   ForgotPasswordBodyType,
@@ -31,10 +32,14 @@ import { SharedRoleRepository } from 'src/common/repositories/shared-role.repo'
 import { TypeOfVerificationCode, TypeOfVerificationCodeType } from 'src/common/constants/auth.constant'
 import { generateOTP } from 'src/common/utils/helpers'
 import envConfig from 'src/config/config'
-import { IAccessTokenPayload } from 'src/types/jwt.type'
 import { EmailService } from 'src/common/services/email.service'
+import { IAccessTokenPayload } from 'src/common/types/jwt.type'
 @Injectable()
 export class AuthService {
+  private static readonly DUMMY_PASSWORD_HASH = '$2b$10$7EqJtq98hPqEX7fNZaFWoOeFKb1YI7DiIP9N6byN1Nsx3Rp3XIanG'
+  private static readonly INVALID_LOGIN_MESSAGE = 'Email hoặc mật khẩu không chính xác'
+  private static readonly INVALID_FORGOT_PASSWORD_MESSAGE = 'Thông tin đặt lại mật khẩu không hợp lệ'
+
   constructor(
     private readonly sharedRoleRepository: SharedRoleRepository,
     private readonly emailService: EmailService,
@@ -49,6 +54,28 @@ export class AuthService {
 
   private getTwoFactorPendingSecretCacheKey(userId: number) {
     return `2fa:pending:${userId}`
+  }
+
+  private hashRefreshToken(refreshToken: string) {
+    return createHash('sha256').update(refreshToken).digest('hex')
+  }
+
+  private buildInvalidLoginException() {
+    return new UnprocessableEntityException([
+      {
+        message: AuthService.INVALID_LOGIN_MESSAGE,
+        path: 'email',
+      },
+    ])
+  }
+
+  private buildInvalidForgotPasswordException() {
+    return new UnprocessableEntityException([
+      {
+        message: AuthService.INVALID_FORGOT_PASSWORD_MESSAGE,
+        path: 'email',
+      },
+    ])
   }
 
   async getProfile(userId: number) {
@@ -217,12 +244,9 @@ export class AuthService {
       ])
     }
     if (body.type === TypeOfVerificationCode.FORGOT_PASSWORD && !user) {
-      throw new UnprocessableEntityException([
-        {
-          message: 'Email không tồn tại',
-          path: 'email',
-        },
-      ])
+      return {
+        message: 'Nếu email tồn tại, mã OTP đã được gửi',
+      }
     }
     //2. Tạo mã OTP
     const code = generateOTP()
@@ -293,21 +317,12 @@ export class AuthService {
       email: body.email,
     })
     if (!user) {
-      throw new UnprocessableEntityException([
-        {
-          message: 'Email Không Tồn Tại',
-          path: 'email',
-        },
-      ])
+      await this.hashingService.compare(body.password, AuthService.DUMMY_PASSWORD_HASH)
+      throw this.buildInvalidLoginException()
     }
     const isMatchPassword = await this.hashingService.compare(body.password, user.password)
     if (!isMatchPassword) {
-      throw new UnprocessableEntityException([
-        {
-          message: 'Mật Khẩu Không Đúng',
-          path: 'password',
-        },
-      ])
+      throw this.buildInvalidLoginException()
     }
     //
     if (user.totpSecret) {
@@ -349,7 +364,7 @@ export class AuthService {
     //
     const decodedRefreshToken = await this.tokenService.verifyRefreshToken(refreshToken)
     await this.authRepository.createRefreshToken({
-      token: refreshToken,
+      tokenHash: this.hashRefreshToken(refreshToken),
       userId,
       expiresAt: new Date(decodedRefreshToken.exp * 1000),
       deviceId,
@@ -359,10 +374,10 @@ export class AuthService {
   async refreshToken({ refreshToken, userAgent, ip }: RefreshTokenBodyType & { userAgent: string; ip: string }) {
     //1 check token hợp lệ
     const { userId } = await this.tokenService.verifyRefreshToken(refreshToken)
+    const refreshTokenHash = this.hashRefreshToken(refreshToken)
+    const refreshTokenCandidates = [refreshTokenHash, refreshToken]
     //2 check refreshtoken exist
-    const tokenInDB = await this.authRepository.findUniqueRefreshTokenIncludeUserRole({
-      token: refreshToken,
-    })
+    const tokenInDB = await this.authRepository.findFirstRefreshTokenIncludeUserRoleByTokens(refreshTokenCandidates)
     if (!tokenInDB) {
       throw new UnauthorizedException('Refresh Token đã sử dụng')
     }
@@ -372,6 +387,7 @@ export class AuthService {
         roleId,
         role: { name: roleName },
       },
+      token: storedRefreshToken,
     } = tokenInDB
     // 3. Chuẩn bị token mới (chỉ xử lý logic JWT, không ghi CSDL)
     const [newAccessToken, newRefreshTokenStr] = await Promise.all([
@@ -379,6 +395,7 @@ export class AuthService {
       this.tokenService.signRefreshToken({ userId }),
     ])
     const decodedRefreshToken = await this.tokenService.verifyRefreshToken(newRefreshTokenStr)
+    const newRefreshTokenHash = this.hashRefreshToken(newRefreshTokenStr)
 
     // 4. Chạy Transaction đảm bảo tính toàn vẹn dữ liệu
     await this.prismaService.$transaction([
@@ -387,11 +404,11 @@ export class AuthService {
         data: { userAgent, ip },
       }),
       this.prismaService.refreshToken.delete({
-        where: { token: refreshToken },
+        where: { token: storedRefreshToken },
       }),
       this.prismaService.refreshToken.create({
         data: {
-          token: newRefreshTokenStr,
+          token: newRefreshTokenHash,
           userId,
           expiresAt: new Date(decodedRefreshToken.exp * 1000),
           deviceId,
@@ -406,9 +423,20 @@ export class AuthService {
     try {
       //1. verify refreshtoken
       await this.tokenService.verifyRefreshToken(refreshToken)
+      const storedRefreshToken = await this.authRepository.findFirstRefreshTokenByTokens([
+        this.hashRefreshToken(refreshToken),
+        refreshToken,
+      ])
+      if (!storedRefreshToken) {
+        throw new UnauthorizedException({
+          message: 'Refresh Token Đã Được sử dụng',
+        })
+      }
 
       //2. delete token
-      const deleteToken = await this.authRepository.deleteRefreshToken({ token: refreshToken })
+      const deleteToken = await this.authRepository.deleteRefreshToken({
+        tokenHash: storedRefreshToken.token,
+      })
 
       //3. cập nhập device
       await this.authRepository.updateDevice(deleteToken.deviceId, {
@@ -426,22 +454,23 @@ export class AuthService {
   }
   async forgotPassword(body: ForgotPasswordBodyType) {
     const { email, code, newPassword } = body
-    //1: check email exists
     const user = await this.shareUserRepository.findUnique({ email })
-    if (!user) {
-      throw new UnprocessableEntityException([
-        {
-          message: 'Email Không Tồn Tại',
-          path: 'email',
-        },
-      ])
+
+    try {
+      await this.validateVerificationCode({
+        email,
+        code,
+        type: TypeOfVerificationCode.FORGOT_PASSWORD,
+      })
+    } catch (error) {
+      if (error instanceof UnprocessableEntityException) {
+        throw this.buildInvalidForgotPasswordException()
+      }
+      throw error
     }
-    //2: kiểm tra mã otp hợp lệ
-    await this.validateVerificationCode({
-      email,
-      code,
-      type: TypeOfVerificationCode.FORGOT_PASSWORD,
-    })
+    if (!user) {
+      throw this.buildInvalidForgotPasswordException()
+    }
     //3: cập nhập và xóa đi otp
     const hashedPassword = await this.hashingService.hash(newPassword)
 

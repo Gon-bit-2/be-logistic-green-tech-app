@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentService } from '../service/payment.service';
 import { PaymentRepository } from '../repository/payment.repo';
 import { PrismaService } from 'src/database/prisma.service';
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import * as StripeModule from 'stripe'; // Import to mock
 import roleName from 'src/common/constants/role.constant';
 
@@ -355,6 +355,19 @@ describe('PaymentService', () => {
       const res = await service.handleStripeWebhook('signature', Buffer.from('{}'));
       expect(res).toEqual({ received: true });
       expect(paymentRepo.updateByTransactionId).not.toHaveBeenCalled();
+    });
+
+    it('từ chối webhook nếu chưa cấu hình webhook secret', async () => {
+      const envConfig = require('src/config/config');
+      const previousSecret = envConfig.STRIPE_WEBHOOK_SECRET;
+      envConfig.STRIPE_WEBHOOK_SECRET = undefined;
+
+      await expect(service.handleStripeWebhook('signature', Buffer.from('{}'))).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+
+      envConfig.STRIPE_WEBHOOK_SECRET = previousSecret;
+      expect(stripeMockIntance.webhooks.constructEvent).not.toHaveBeenCalled();
     });
   });
 

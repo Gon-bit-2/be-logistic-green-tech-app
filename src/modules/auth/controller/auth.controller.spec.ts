@@ -25,6 +25,7 @@ describe('AuthController', () => {
     authService = {}
     googleService = {
       googleCallback: jest.fn(),
+      redeemGoogleSession: jest.fn(),
     }
     response = {
       redirect: jest.fn(),
@@ -33,16 +34,34 @@ describe('AuthController', () => {
     controller = new AuthController(authService, googleService)
   })
 
-  it('redirects to client callback with tokens after successful Google login', async () => {
+  it('redirects to client callback with a one-time session token after successful Google login', async () => {
     googleService.googleCallback.mockResolvedValue({
-      accessToken: 'access-token',
-      refreshToken: 'refresh-token',
+      sessionToken: '7d4a08ca-283e-4bf7-bb93-9b19b593c396',
     })
 
     await controller.googleCallback('state', 'google-code', undefined, response)
 
     expect(response.redirect).toHaveBeenCalledWith(
-      'appecomerce://callback?accessToken=access-token&refreshToken=refresh-token',
+      'appecomerce://callback?sessionToken=7d4a08ca-283e-4bf7-bb93-9b19b593c396',
+    )
+  })
+
+  it('redeems Google session token via service', async () => {
+    googleService.redeemGoogleSession.mockResolvedValue({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+    })
+
+    const result = await controller.exchangeGoogleSession({
+      sessionToken: '7d4a08ca-283e-4bf7-bb93-9b19b593c396',
+    } as any)
+
+    expect(result).toEqual({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+    })
+    expect(googleService.redeemGoogleSession).toHaveBeenCalledWith(
+      '7d4a08ca-283e-4bf7-bb93-9b19b593c396',
     )
   })
 

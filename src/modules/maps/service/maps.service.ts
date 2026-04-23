@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common'
 import { AutocompleteQueryDTO, DirectionsBodyDTO, GeocodeQueryDTO, PlaceDetailQueryDTO } from '../dto/map.dto'
 import envConfig from 'src/config/config'
+import { GeocodeResult, PlaceResult, Prediction, RouteResult } from '../types/map.type'
 
 @Injectable()
 export class MapsService {
@@ -24,11 +25,6 @@ export class MapsService {
     try {
       const response = await fetch(`${this.baseUrl}/Place/AutoComplete?${params.toString()}`)
 
-      type Prediction = {
-        place_id: string
-        description: string
-        structured_formatting?: { main_text?: string; secondary_text?: string }
-      }
       const data = (await response.json()) as {
         error?: { message: string }
         status?: string
@@ -70,12 +66,6 @@ export class MapsService {
     try {
       const response = await fetch(`${this.baseUrl}/Place/Detail?${params.toString()}`)
 
-      type PlaceResult = {
-        place_id: string
-        name?: string
-        formatted_address: string
-        geometry: { location: { lat: number; lng: number } }
-      }
       const data = (await response.json()) as {
         error?: { message: string }
         status?: string
@@ -115,11 +105,6 @@ export class MapsService {
     try {
       const response = await fetch(`${this.baseUrl}/Geocode?${params.toString()}`)
 
-      type GeocodeResult = {
-        formatted_address: string
-        geometry: { location: { lat: number; lng: number } }
-        place_id: string
-      }
       const data = (await response.json()) as {
         error?: { message: string }
         status?: string
@@ -161,14 +146,6 @@ export class MapsService {
     try {
       const response = await fetch(`${this.baseUrl}/Direction?${params.toString()}`)
 
-      type RouteResult = {
-        overview_polyline: { points: string }
-        bounds: unknown
-        legs: Array<{
-          distance: { value: number }
-          duration: { value: number }
-        }>
-      }
       const data = (await response.json()) as {
         error?: { message: string }
         status?: string

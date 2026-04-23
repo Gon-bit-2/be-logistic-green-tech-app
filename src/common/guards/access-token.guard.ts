@@ -15,7 +15,7 @@ import { RolePermissionType } from '../model/share-role.model'
 import { keyBy } from 'lodash'
 import { TokenService } from 'src/common/services/token.service'
 import { PrismaService } from 'src/database/prisma.service'
-import { AccessTokenPayload } from 'src/types/jwt.type'
+import { AccessTokenPayload } from '../types/jwt.type'
 
 type permission = RolePermissionType['permissions'][number]
 type CachedRole = RolePermissionType & {

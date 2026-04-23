@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import {
   CreateOrderBodyType,
@@ -8,7 +8,7 @@ import {
 } from '../model/order.model'
 import { OrderRepository } from '../repository/order.repo'
 import { MapsService } from 'src/modules/maps/service/maps.service'
-import { calculateHaversineDistance } from 'src/utils/geo.util'
+import { calculateHaversineDistance } from 'src/common/utils/geo.util'
 import { PrismaService } from 'src/database/prisma.service'
 import {
   NotificationEventName,
@@ -17,7 +17,11 @@ import {
 } from 'src/modules/notification/events/notification.event'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import roleName from 'src/common/constants/role.constant'
-import type { AccessTokenPayload } from 'src/types/jwt.type'
+import { TrackingRepository } from 'src/modules/tracking/repository/tracking.repo'
+import { EVENT_SOURCE, TRACKING_EVENT_TYPE } from 'src/common/constants/tracking.constant'
+import { AccessTokenPayload } from 'src/common/types/jwt.type'
+
+const CUSTOMER_CANCELLABLE_STATUSES = new Set<string>([ORDER_STATUS.PENDING, ORDER_STATUS.ASSIGNED])
 
 @Injectable()
 export class OrdersService {
@@ -33,6 +37,7 @@ export class OrdersService {
     private readonly prismaService: PrismaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly mapsService: MapsService,
+    private readonly trackingRepo: TrackingRepository,
   ) {}
 
   async quote(payload: OrderQuoteBodyType) {
@@ -257,6 +262,45 @@ export class OrdersService {
     }
 
     return updatedOrder
+  }
+
+  async cancelByCustomer(id: number, actor: AccessTokenPayload) {
+    const order = await this.orderRepo.findById(id)
+
+    if (!order) {
+      throw new NotFoundException(`Đơn hàng #${id} không tồn tại`)
+    }
+
+    if (!CUSTOMER_CANCELLABLE_STATUSES.has(order.status)) {
+      throw new BadRequestException('Đơn hàng chỉ có thể hủy khi đang chờ xử lý hoặc đã phân công.')
+    }
+
+    await this.trackingRepo.createEventWithStatusUpdate(
+      actor.userId,
+      {
+        orderId: id,
+        eventType: TRACKING_EVENT_TYPE.STATUS_CHANGE,
+        status: ORDER_STATUS.CANCELLED,
+        source: EVENT_SOURCE.CUSTOMER_APP,
+        description: 'Khách hàng đã hủy đơn hàng.',
+      },
+      true,
+    )
+
+    const cancelledOrder = await this.orderRepo.findById(id)
+
+    if (!cancelledOrder) {
+      throw new NotFoundException(`Đơn hàng #${id} không tồn tại sau khi hủy`)
+    }
+
+    await this.emitNotificationEvent(NotificationEventName.ORDER_STATUS_UPDATED, {
+      userId: cancelledOrder.customerId,
+      orderId: cancelledOrder.id,
+      trackingCode: cancelledOrder.trackingCode,
+      status: ORDER_STATUS.CANCELLED,
+    })
+
+    return cancelledOrder
   }
 
   async delete(id: number, deletedById: number) {

@@ -18,7 +18,7 @@ import { Roles } from 'src/common/decorators/roles.decorator'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import { AuthType } from 'src/common/constants/auth.constant'
 import roleName from 'src/common/constants/role.constant'
-import type { AccessTokenPayload } from 'src/types/jwt.type'
+import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 
 @Controller('payments')
 export class PaymentController {

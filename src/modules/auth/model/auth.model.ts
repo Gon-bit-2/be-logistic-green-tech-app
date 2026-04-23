@@ -144,6 +144,16 @@ export const GetAuthorizationUrlResSchema = z.object({
 })
 export type GetAuthorizationUrlResType = z.infer<typeof GetAuthorizationUrlResSchema>
 
+export const GoogleSessionBodySchema = z
+  .object({
+    sessionToken: z.string().uuid(),
+  })
+  .strict()
+export type GoogleSessionBodyType = z.infer<typeof GoogleSessionBodySchema>
+
+export const GoogleSessionResSchema = LoginResSchema
+export type GoogleSessionResType = z.infer<typeof GoogleSessionResSchema>
+
 //forgot password
 export const ForgotPasswordBodySchema = z
   .object({

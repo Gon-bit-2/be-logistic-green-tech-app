@@ -2,22 +2,17 @@ import { Controller, Post, UseInterceptors, UploadedFile, BadRequestException, U
 import { UploadService } from '../service/upload.service'
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express'
 import { type Express } from 'express'
-import { Multer } from 'multer'
+import { MAX_UPLOAD_FILE_COUNT, uploadMulterOptions } from '../upload.constants'
 
 @Controller('upload')
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
   @Post('pod')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', uploadMulterOptions))
   async uploadProofOfDelivery(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('Vui lòng cung cấp file ảnh POD (Proof Of Delivery).')
-    }
-
-    // You can validate file types here: file.mimetype
-    if (!file.mimetype.match(/\/(jpg|jpeg|png|webp|gif)$/)) {
-      throw new BadRequestException('Định dạng file không hỗ trợ, vui lòng tải lên ảnh (jpg, png, webp).')
     }
 
     try {
@@ -35,19 +30,13 @@ export class UploadController {
   }
 
   @Post('multiple-pod')
-  @UseInterceptors(FilesInterceptor('files', 5))
+  @UseInterceptors(FilesInterceptor('files', MAX_UPLOAD_FILE_COUNT, uploadMulterOptions))
   async uploadMultipleProofOfDelivery(@UploadedFiles() files: Array<Express.Multer.File>) {
     if (!files || files.length === 0) {
       throw new BadRequestException('Vui lòng cung cấp ít nhất 1 file ảnh.')
     }
 
-    const uploadPromises = files.map((file) => {
-      // type checking
-      if (!file.mimetype.match(/\/(jpg|jpeg|png|webp|gif)$/)) {
-        throw new BadRequestException('Một trong số định dạng file không hỗ trợ.')
-      }
-      return this.uploadService.uploadFile(file, 'logistic_pod')
-    })
+    const uploadPromises = files.map((file) => this.uploadService.uploadFile(file, 'logistic_pod'))
 
     const results = await Promise.all(uploadPromises)
 
