@@ -18,6 +18,7 @@ export const HubSchema = z.object({
     .number({ error: 'Kinh độ phải là số' })
     .min(-180, 'Kinh độ phải nằm trong khoảng -180 đến 180')
     .max(180, 'Kinh độ phải nằm trong khoảng -180 đến 180'),
+  imageUrl: z.string().url().nullable().optional(), // URL ảnh đại diện kho (Cloudinary)
 })
 
 export const CreateHubBodySchema = HubSchema.pick({
@@ -26,6 +27,8 @@ export const CreateHubBodySchema = HubSchema.pick({
   address: true,
   latitude: true,
   longitude: true,
+}).extend({
+  imageUrl: z.string().url().optional(), // Ảnh không bắt buộc khi tạo hub
 }).strict()
 
 export const UpdateHubBodySchema = CreateHubBodySchema.partial()
