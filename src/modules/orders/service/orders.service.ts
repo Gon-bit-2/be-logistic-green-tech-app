@@ -40,20 +40,44 @@ export class OrdersService {
     private readonly trackingRepo: TrackingRepository,
   ) {}
 
-  async quote(payload: OrderQuoteBodyType) {
+  /**
+   * Tính toán các chỉ số đơn hàng dùng chung cho cả quote() và create().
+   *
+   * DRY: Tránh duplicate logic tính weight, volume, phí vận chuyển, CO2.
+   * Khi thay đổi công thức phí hoặc CO2, chỉ cần sửa 1 chỗ duy nhất.
+   */
+  private calculateOrderMetrics(items: OrderQuoteBodyType['items'], distanceKm: number) {
     let totalWeight = 0
     let totalVolume = 0
 
-    payload.items.forEach((item) => {
+    items.forEach((item) => {
       const itemWeight = item.weight * item.quantity
       totalWeight += itemWeight
+
       let itemVolume = 0
       if (item.length && item.width && item.height) {
+        // Volume = (L * W * H) / 1,000,000 (m3) với giả định đầu vào là cm
         itemVolume = ((item.length * item.width * item.height) / 1000000) * item.quantity
       }
       totalVolume += itemVolume
     })
 
+    const shippingFee = this.calculateShippingFee(distanceKm, totalWeight)
+
+    // Tính toán lượng CO2 tiết kiệm ước tính (Green Tech)
+    // - Xe tải Diesel nhẹ (~1 tấn) xả khoảng 0.25 kg CO2 / km
+    // - Xe điện (EV Van) xả 0 kg CO2 / km (tailpipe)
+    // Note: Con số chính xác sẽ được tính lại bằng `emissionRatePerKm` khi hoàn thành Trip.
+    const averageDieselEmissionPerKm = 0.25
+    const avgVehicleCapacityWeight = 1000
+    const loadRatio = Math.min(totalWeight / avgVehicleCapacityWeight, 1)
+    const effectiveLoadRatio = Math.max(loadRatio, 0.05)
+    const estimatedCo2Saved = averageDieselEmissionPerKm * distanceKm * effectiveLoadRatio
+
+    return { totalWeight, totalVolume, shippingFee, estimatedCo2Saved }
+  }
+
+  async quote(payload: OrderQuoteBodyType) {
     const distanceKm = calculateHaversineDistance(
       payload.senderLat,
       payload.senderLng,
@@ -61,13 +85,7 @@ export class OrdersService {
       payload.receiverLng,
     )
 
-    const shippingFee = this.calculateShippingFee(distanceKm, totalWeight)
-
-    const averageDieselEmissionPerKm = 0.25
-    const avgVehicleCapacityWeight = 1000
-    const loadRatio = Math.min(totalWeight / avgVehicleCapacityWeight, 1)
-    const effectiveLoadRatio = Math.max(loadRatio, 0.05)
-    const estimatedCo2Saved = averageDieselEmissionPerKm * distanceKm * effectiveLoadRatio
+    const metrics = this.calculateOrderMetrics(payload.items, distanceKm)
 
     const directions = await this.mapsService.directions({
       origin: { lat: payload.senderLat, lng: payload.senderLng },
@@ -78,10 +96,10 @@ export class OrdersService {
     return {
       distanceMeters: directions.distanceMeters,
       durationSeconds: directions.durationSeconds,
-      shippingFee,
+      shippingFee: metrics.shippingFee,
       currency: 'VND',
       serviceType: payload.serviceType,
-      estimatedCo2Saved,
+      estimatedCo2Saved: metrics.estimatedCo2Saved,
       polyline: directions.polyline,
     }
   }
@@ -134,23 +152,7 @@ export class OrdersService {
   }
 
   async create(createdById: number, customerId: number, payload: CreateOrderBodyType) {
-    let totalWeight = 0
-    let totalVolume = 0
-
-    // 1. Tính toán Tổng quan: Khối lượng và Thể tích
-    payload.items.forEach((item) => {
-      const itemWeight = item.weight * item.quantity
-      totalWeight += itemWeight
-
-      let itemVolume = 0
-      if (item.length && item.width && item.height) {
-        // Volume = (L * W * H) / 1,000,000 (m3) với giả định đầu vào là cm
-        itemVolume = ((item.length * item.width * item.height) / 1000000) * item.quantity
-      }
-      totalVolume += itemVolume
-    })
-
-    // 2. Tính Khoảng cách (Haversine Formula) bằng km
+    // 1. Tính Khoảng cách (Haversine Formula) bằng km
     const distanceKm = calculateHaversineDistance(
       payload.senderLat,
       payload.senderLng,
@@ -158,32 +160,18 @@ export class OrdersService {
       payload.receiverLng,
     )
 
-    // 3. Tính Phí Vận Chuyển
-    const shippingFee = this.calculateShippingFee(distanceKm, totalWeight)
+    // 2. Tính toán metrics (weight, volume, phí, CO2) — dùng chung với quote()
+    const metrics = this.calculateOrderMetrics(payload.items, distanceKm)
 
-    // 4. Tính toán lượng CO2 tiết kiệm ước tính (Green Tech)
-    // Hệ số tham khảo thực tế:
-    // - Xe tải Diesel nhẹ (~1 tấn) xả khoảng 0.25 kg CO2 / km
-    // - Xe điện (EV Van) xả 0 kg CO2 / km (tailpipe)
-    // Co2 tiết kiệm = (0.25 kg/km) * distanceKm * (Tỷ trọng đơn hàng / Tải trọng xe 1000kg)
-    // Note: Con số chính xác sẽ được tính lại bằng `emissionRatePerKm` của xe thực tế khi hoàn thành Trip.
-    const averageDieselEmissionPerKm = 0.25 // kg CO2 / km
-    const avgVehicleCapacityWeight = 1000 // kg
-    const loadRatio = Math.min(totalWeight / avgVehicleCapacityWeight, 1) // Tránh ratio > 1 nếu đơn quá nặng
-
-    // Đảm bảo đơn nhỏ bé không bị CO2 = 0 bằng cách chèn minimum load factor (VD: 5%)
-    const effectiveLoadRatio = Math.max(loadRatio, 0.05)
-    const estimatedCo2Saved = averageDieselEmissionPerKm * distanceKm * effectiveLoadRatio
-
-    // 5. Geo-Fencing: Tìm Hub gần nhất với tọa độ người gửi và gán vào đơn
+    // 3. Geo-Fencing: Tìm Hub gần nhất với tọa độ người gửi và gán vào đơn
     const currentHubId = await this.findNearestHubId(payload.senderLat, payload.senderLng)
 
-    // 6. Giao tiếp với Repository bằng Type chuẩn của Domain
+    // 4. Giao tiếp với Repository bằng Type chuẩn của Domain
     const createdOrder = await this.orderRepo.create(createdById, customerId, payload, {
-      totalWeight,
-      totalVolume,
-      shippingFee,
-      estimatedCo2Saved,
+      totalWeight: metrics.totalWeight,
+      totalVolume: metrics.totalVolume,
+      shippingFee: metrics.shippingFee,
+      estimatedCo2Saved: metrics.estimatedCo2Saved,
       currentHubId,
       paymentMethod: payload.paymentMethod ?? 'STRIPE',
     })

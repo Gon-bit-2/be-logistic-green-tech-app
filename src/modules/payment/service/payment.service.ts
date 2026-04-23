@@ -44,9 +44,9 @@ export class PaymentService {
     private readonly paymentRepo: PaymentRepository,
     private readonly prisma: PrismaService,
   ) {
-    // Khởi tạo Stripe client
+    // Khởi tạo Stripe client — sử dụng apiVersion mặc định của SDK
+    // (tránh hardcode version cũ + ép 'as any' bypass type safety)
     this.stripe = new Stripe(envConfig.STRIPE_SECRET_KEY, {
-      apiVersion: '2023-10-16' as any, // Sử dụng version ổn định
       typescript: true,
     })
   }

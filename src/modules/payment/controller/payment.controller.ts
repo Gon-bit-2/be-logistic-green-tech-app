@@ -11,7 +11,7 @@ import {
   type RawBodyRequest,
 } from '@nestjs/common'
 import type { Request } from 'express'
-import { SkipThrottle } from '@nestjs/throttler'
+import { Throttle } from '@nestjs/throttler'
 import { PaymentService } from '../service/payment.service'
 import { Auth, isPublic } from 'src/common/decorators/auth.decorator'
 import { Roles } from 'src/common/decorators/roles.decorator'
@@ -25,10 +25,12 @@ export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
   /**
-   * Tạo PaymentIntent (Khách hàng bấm thanh toán qua mạng)
+   * Tạo PaymentIntent (Khách hàng bấm thanh toán qua mạng).
+   * Rate limit: 3 request / 60 giây — ngăn spam tạo PaymentIntent
+   * (mỗi intent tạo trên Stripe đều tốn resource, không nên bypass throttle).
    */
   @Post('create-intent/:orderId')
-  @SkipThrottle()
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
   @Roles(roleName.CUSTOMER)
   createIntent(@Param('orderId', ParseIntPipe) orderId: number, @ActiveUser('userId') userId: number) {
     return this.paymentService.createPaymentIntent(orderId, userId)
