@@ -302,6 +302,7 @@ model Vehicle {
   capacityWeight    Float // Tải trọng tối đa (kg)
   capacityVolume    Float // Thể tích thùng xe (m3) - Dùng cho thuật toán Bin Packing
   emissionRatePerKm Float // Hệ số xả thải (g CO2/km) - Dùng tính Green Tech
+  imageUrl          String? // URL ảnh đại diện xe (Cloudinary)
   isActive          Boolean     @default(true)
 
   hubId Int? // Biên chế xe thuộc kho bãi nào
@@ -329,6 +330,7 @@ model Hub {
   latitude  Float
   longitude Float
   isActive  Boolean @default(true)
+  imageUrl  String? // URL ảnh đại diện kho (Cloudinary)
 
   // ===== Sức chứa Kho (Warehouse Constraints) =====
   capacityVolume Float @default(10000) // Tổng thể tích kệ chứa hàng (m3)

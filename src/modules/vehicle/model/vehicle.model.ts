@@ -10,6 +10,7 @@ export const VehicleSchema = z.object({
   capacityWeight: z.number().positive(),
   capacityVolume: z.number().positive(),
   emissionRatePerKm: z.number().positive(),
+  imageUrl: z.string().url().nullable(), // URL ảnh đại diện xe (Cloudinary)
   isActive: z.boolean(),
   hubId: z.number().int().positive().nullable(),
   createdAt: z.date(),
@@ -28,6 +29,8 @@ export const CreateVehicleBodySchema = VehicleSchema.pick({
   capacityVolume: true,
   emissionRatePerKm: true,
   hubId: true,
+}).extend({
+  imageUrl: z.string().url().optional(), // Ảnh không bắt buộc khi tạo xe
 }).strict()
 
 export const UpdateVehicleBodySchema = CreateVehicleBodySchema.extend({
