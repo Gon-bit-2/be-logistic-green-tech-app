@@ -6,7 +6,7 @@ import { Auth, isPublic } from 'src/common/decorators/auth.decorator'
 import { Roles } from 'src/common/decorators/roles.decorator'
 import roleName from 'src/common/constants/role.constant'
 import { AuthType } from 'src/common/constants/auth.constant'
-import type { AccessTokenPayload } from 'src/types/jwt.type'
+import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 
 @Controller('tracking-events')
 export class TrackingController {

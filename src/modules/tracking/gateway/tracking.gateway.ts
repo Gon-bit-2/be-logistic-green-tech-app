@@ -9,7 +9,7 @@ import {
 } from '@nestjs/websockets'
 import { Server, Socket } from 'socket.io'
 import { Logger } from '@nestjs/common'
-import { AccessTokenPayload } from 'src/types/jwt.type'
+import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import { OnEvent } from '@nestjs/event-emitter'
 import { Auth } from 'src/common/decorators/auth.decorator'
 import { AuthType } from 'src/common/constants/auth.constant'
@@ -55,7 +55,9 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
    * Handle client disconnections
    */
   handleDisconnect(client: AuthenticatedSocket) {
-    this.logger.log(`❌ Client disconnected: ${client.id} | reason=${String(client.data.disconnectReason ?? 'unknown')}`)
+    this.logger.log(
+      `❌ Client disconnected: ${client.id} | reason=${String(client.data.disconnectReason ?? 'unknown')}`,
+    )
   }
 
   /**

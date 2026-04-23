@@ -11,7 +11,7 @@ import envConfig from 'src/config/config'
 import { PaymentRepository } from '../repository/payment.repo'
 import { PrismaService } from 'src/database/prisma.service'
 import roleName from 'src/common/constants/role.constant'
-import type { AccessTokenPayload } from 'src/types/jwt.type'
+import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 /**
  * Interface biểu diễn cấu trúc Event gửi qua Webhook từ Stripe
  * Sử dụng interface cục bộ để tránh lỗi TypeScript Namespace collision với SDK Stripe.
@@ -73,9 +73,7 @@ export class PaymentService {
 
     const amountVnd = this.normalizeStripeAmount(order.shippingFee, 'vnd')
     const previousTransactionId =
-      order.payment?.method === 'STRIPE' && order.payment.status === 'PENDING'
-        ? order.payment.transactionId
-        : null
+      order.payment?.method === 'STRIPE' && order.payment.status === 'PENDING' ? order.payment.transactionId : null
 
     if (previousTransactionId) {
       const reusableIntent = await this.getReusablePaymentIntent(previousTransactionId)

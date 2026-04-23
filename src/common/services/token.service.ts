@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 import { StringValue } from 'ms'
 import envConfig from 'src/config/config'
-import { AccessTokenPayload, IAccessTokenPayload, IRefreshTokenPayload, RefreshTokenPayload } from 'src/types/jwt.type'
+import { AccessTokenPayload, IAccessTokenPayload, IRefreshTokenPayload, RefreshTokenPayload } from '../types/jwt.type'
 
 @Injectable()
 export class TokenService {

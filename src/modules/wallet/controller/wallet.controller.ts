@@ -1,4 +1,4 @@
-import type { AccessTokenPayload } from 'src/types/jwt.type'
+import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common'
 import { WalletService } from '../service/wallet.service'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { generateTrackingCode } from 'src/common/utils/genTrackingCode'
 import { PrismaService } from 'src/database/prisma.service'
 import { CreateOrderBodyType, GetOrderListQueryType, UpdateOrderStatusType } from 'src/modules/orders/model/order.model'
 
@@ -41,6 +42,7 @@ export class OrderRepository {
       data: {
         ...restPayload,
         ...orderCalculatedData,
+        trackingCode: generateTrackingCode(),
         codAmount: shouldUseCod ? normalizedAmount : 0,
         createdById,
         customerId,
@@ -78,14 +80,14 @@ export class OrderRepository {
             },
           }
         : search && {
-        OR: [
-          { trackingCode: { contains: search, mode: 'insensitive' as const } },
-          { senderName: { contains: search, mode: 'insensitive' as const } },
-          { receiverName: { contains: search, mode: 'insensitive' as const } },
-          { senderAddress: { contains: search, mode: 'insensitive' as const } },
-          { receiverAddress: { contains: search, mode: 'insensitive' as const } },
-        ],
-      }),
+            OR: [
+              { trackingCode: { contains: search, mode: 'insensitive' as const } },
+              { senderName: { contains: search, mode: 'insensitive' as const } },
+              { receiverName: { contains: search, mode: 'insensitive' as const } },
+              { senderAddress: { contains: search, mode: 'insensitive' as const } },
+              { receiverAddress: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }),
       ...(status && { status }),
       ...(customerId && { customerId }),
       ...(currentHubId && { currentHubId }),

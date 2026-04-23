@@ -1,11 +1,11 @@
-import { Controller, Get, Post, Body, Param, Delete, ParseIntPipe, Put, Query } from '@nestjs/common'
+import { Controller, Get, Post, Body, Param, Delete, ParseIntPipe, Put, Query, Patch } from '@nestjs/common'
 import { OrdersService } from '../service/orders.service'
 import { CreateOrderDto, GetOrderListDto, UpdateOrderStatusDto, OrderQuoteBodyDto } from '../dto/order.dto'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import { ResourceAccess } from 'src/common/decorators/resource-access.decorator'
 import { Roles } from 'src/common/decorators/roles.decorator'
 import roleName from 'src/common/constants/role.constant'
-import type { AccessTokenPayload } from 'src/types/jwt.type'
+import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 
 @Controller('orders')
 export class OrdersController {
@@ -59,6 +59,18 @@ export class OrdersController {
   ) {
     return this.ordersService.update(id, payload)
   }
+
+  @Patch(':id/cancel')
+  @Roles(roleName.CUSTOMER)
+  @ResourceAccess({
+    model: 'order',
+    paramName: 'id',
+    ownerField: 'customerId',
+  })
+  cancel(@Param('id', ParseIntPipe) id: number, @ActiveUser() user: AccessTokenPayload) {
+    return this.ordersService.cancelByCustomer(id, user)
+  }
+
   @Delete(':id')
   @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
   @ResourceAccess({

@@ -32,8 +32,8 @@ import { SharedRoleRepository } from 'src/common/repositories/shared-role.repo'
 import { TypeOfVerificationCode, TypeOfVerificationCodeType } from 'src/common/constants/auth.constant'
 import { generateOTP } from 'src/common/utils/helpers'
 import envConfig from 'src/config/config'
-import { IAccessTokenPayload } from 'src/types/jwt.type'
 import { EmailService } from 'src/common/services/email.service'
+import { IAccessTokenPayload } from 'src/common/types/jwt.type'
 @Injectable()
 export class AuthService {
   private static readonly DUMMY_PASSWORD_HASH = '$2b$10$7EqJtq98hPqEX7fNZaFWoOeFKb1YI7DiIP9N6byN1Nsx3Rp3XIanG'
