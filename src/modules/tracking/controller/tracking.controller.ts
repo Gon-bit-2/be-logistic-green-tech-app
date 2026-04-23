@@ -6,6 +6,7 @@ import { Auth, isPublic } from 'src/common/decorators/auth.decorator'
 import { Roles } from 'src/common/decorators/roles.decorator'
 import roleName from 'src/common/constants/role.constant'
 import { AuthType } from 'src/common/constants/auth.constant'
+import type { AccessTokenPayload } from 'src/types/jwt.type'
 
 @Controller('tracking-events')
 export class TrackingController {
@@ -14,8 +15,8 @@ export class TrackingController {
   @Post()
   @Auth(AuthType.Bearer)
   @Roles(roleName.DRIVER, roleName.WAREHOUSE_STAFF, roleName.ADMIN)
-  createEvent(@Body() payload: CreateTrackingEventDto, @ActiveUser('userId') userId: number) {
-    return this.trackingService.createEvent(userId, payload)
+  createEvent(@Body() payload: CreateTrackingEventDto, @ActiveUser() user: AccessTokenPayload) {
+    return this.trackingService.createEvent(user, payload)
   }
 
   @Get()

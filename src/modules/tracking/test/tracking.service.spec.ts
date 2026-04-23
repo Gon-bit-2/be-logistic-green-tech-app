@@ -11,6 +11,7 @@ import { ORDER_STATUS } from 'src/common/constants/order.constant';
 import { Queue } from 'bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotificationEventName } from 'src/modules/notification/events/notification.event';
+import { ForbiddenException } from '@nestjs/common';
 
 describe('TrackingService', () => {
   let service: TrackingService;
@@ -28,6 +29,9 @@ describe('TrackingService', () => {
 
     const prismaServiceMock = {
       order: {
+        findFirst: jest.fn(),
+      },
+      user: {
         findFirst: jest.fn(),
       },
       trip: {
@@ -79,7 +83,13 @@ describe('TrackingService', () => {
 
   describe('createEvent', () => {
     it('Tạo event bình thường + chuyển trạng thái hợp lệ', async () => {
-      prismaService.order.findFirst.mockResolvedValue({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.PENDING });
+      prismaService.order.findFirst.mockResolvedValue({
+        id: 1,
+        customerId: 7,
+        trackingCode: 'ORD001',
+        status: ORDER_STATUS.PENDING,
+        currentHubId: 5,
+      });
       trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 10 } as any);
 
       const payload = {
@@ -88,7 +98,7 @@ describe('TrackingService', () => {
         status: ORDER_STATUS.ASSIGNED, // PENDING -> ASSIGNED (hợp lệ)
       };
 
-      const result = await service.createEvent(1, payload as any);
+      const result = await service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, payload as any);
 
       expect(result).toEqual({ id: 10 });
       expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(1, payload, true);
@@ -97,19 +107,35 @@ describe('TrackingService', () => {
 
     it('văng NotFoundException nếu order ko tồn tại', async () => {
       prismaService.order.findFirst.mockResolvedValue(null);
-      await expect(service.createEvent(1, { orderId: 1 } as any)).rejects.toThrow(NotFoundException);
+      await expect(
+        service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, { orderId: 1 } as any),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('văng lỗi BadRequestException khi chuyển trạng thái sai logic (Vd: PENDING -> DELIVERED)', async () => {
-      prismaService.order.findFirst.mockResolvedValue({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.PENDING });
+      prismaService.order.findFirst.mockResolvedValue({
+        id: 1,
+        customerId: 7,
+        trackingCode: 'ORD001',
+        status: ORDER_STATUS.PENDING,
+        currentHubId: 5,
+      });
 
       const payload = { orderId: 1, eventType: TRACKING_EVENT_TYPE.STATUS_CHANGE, status: ORDER_STATUS.DELIVERED };
       // PENDING không thể chuyển ngay sang DELIVERED (theo constant)
-      await expect(service.createEvent(1, payload as any)).rejects.toThrow(BadRequestException);
+      await expect(service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, payload as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('vượt MAX_DELIVERY_ATTEMPTS thì văng BadRequestException khi cố Exception', async () => {
-      prismaService.order.findFirst.mockResolvedValue({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.OUT_FOR_DELIVERY });
+      prismaService.order.findFirst.mockResolvedValue({
+        id: 1,
+        customerId: 7,
+        trackingCode: 'ORD001',
+        status: ORDER_STATUS.OUT_FOR_DELIVERY,
+        currentHubId: 5,
+      });
       trackingRepo.countFailedAttempts.mockResolvedValue(3); // Giả lập đã fail 3 lần (cả lần hiện tại)
 
       const payload = {
@@ -118,7 +144,9 @@ describe('TrackingService', () => {
         failureReasonCode: 'NOT_HOME',
       };
 
-      await expect(service.createEvent(1, payload as any)).rejects.toThrow(BadRequestException);
+      await expect(service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, payload as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('khi DELIVERED thì tự động enqueue BullMQ cập nhật trip status', async () => {
@@ -128,6 +156,7 @@ describe('TrackingService', () => {
         trackingCode: 'ORD001',
         status: ORDER_STATUS.OUT_FOR_DELIVERY,
         currentTripId: 100,
+        currentHubId: 5,
       });
       trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 10 } as any);
       
@@ -146,7 +175,7 @@ describe('TrackingService', () => {
         status: ORDER_STATUS.DELIVERED, // OUT_FOR_DELIVERY -> DELIVERED (hợp lệ)
       };
 
-      await service.createEvent(1, payload as any);
+      await service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, payload as any);
 
       expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
         userId: 7,
@@ -170,10 +199,11 @@ describe('TrackingService', () => {
         trackingCode: 'ORD002',
         status: ORDER_STATUS.IN_TRANSIT,
         currentTripId: null,
+        currentHubId: 5,
       });
       trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 11 } as any);
 
-      await service.createEvent(1, {
+      await service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, {
         orderId: 2,
         eventType: TRACKING_EVENT_TYPE.STATUS_CHANGE,
         status: ORDER_STATUS.OUT_FOR_DELIVERY,
@@ -185,6 +215,30 @@ describe('TrackingService', () => {
         trackingCode: 'ORD002',
         status: ORDER_STATUS.OUT_FOR_DELIVERY,
       });
+    });
+
+    it('chặn warehouse staff tạo event cho đơn ngoài hub của mình', async () => {
+      prismaService.order.findFirst.mockResolvedValue({
+        id: 3,
+        customerId: 10,
+        trackingCode: 'ORD003',
+        status: ORDER_STATUS.ARRIVED_AT_HUB,
+        currentTripId: null,
+        currentHubId: 9,
+      });
+      prismaService.user.findFirst.mockResolvedValue({ hubId: 8 });
+
+      await expect(
+        service.createEvent(
+          { userId: 15, roleName: 'WAREHOUSE_STAFF' } as any,
+          {
+            orderId: 3,
+            eventType: TRACKING_EVENT_TYPE.STATUS_CHANGE,
+            status: ORDER_STATUS.OUT_FOR_DELIVERY,
+          } as any,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(trackingRepo.createEventWithStatusUpdate).not.toHaveBeenCalled();
     });
   });
 

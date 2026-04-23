@@ -33,6 +33,9 @@ describe('OrdersService', () => {
       hub: {
         findMany: jest.fn(),
       },
+      user: {
+        findFirst: jest.fn(),
+      },
     };
 
     const eventEmitterMock = {
@@ -214,6 +217,33 @@ describe('OrdersService', () => {
         search: 'ORD-2026',
         page: 1,
         limit: 10,
+      });
+    });
+
+    it('inject currentHubId khi actor là warehouse staff', async () => {
+      prismaService.user.findFirst.mockResolvedValue({ hubId: 8 });
+      orderRepo.findAll.mockResolvedValue({ data: [], totalItems: 0 } as any);
+
+      await service.findAll(
+        { trackingCode: 'GT-ORD-20260003', page: 1, limit: 10 } as any,
+        { userId: 99, roleName: 'WAREHOUSE_STAFF' } as any,
+      );
+
+      expect(prismaService.user.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 99,
+          deletedAt: null,
+          isDeleted: false,
+        },
+        select: {
+          hubId: true,
+        },
+      });
+      expect(orderRepo.findAll).toHaveBeenCalledWith({
+        trackingCode: 'GT-ORD-20260003',
+        page: 1,
+        limit: 10,
+        currentHubId: 8,
       });
     });
   });

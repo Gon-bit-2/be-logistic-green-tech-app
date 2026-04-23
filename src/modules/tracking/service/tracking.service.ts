@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common'
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common'
 import { TrackingRepository } from '../repository/tracking.repo'
 import { CreateTrackingEventType } from '../model/tracking.model'
 import { PrismaService } from 'src/database/prisma.service'
@@ -13,6 +13,8 @@ import {
 import { GREEN_TECH_QUEUE_NAME, CALCULATE_EMISSION_JOB_NAME } from 'src/common/constants/queue.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { NotificationEventName, OrderStatusUpdatedEvent } from 'src/modules/notification/events/notification.event'
+import roleName from 'src/common/constants/role.constant'
+import type { AccessTokenPayload } from 'src/types/jwt.type'
 
 @Injectable()
 export class TrackingService {
@@ -34,15 +36,33 @@ export class TrackingService {
    * Tạo tracking event mới
    * Bao gồm: validate state machine, kiểm tra POD, kiểm tra failed attempts
    */
-  async createEvent(createdById: number, payload: CreateTrackingEventType) {
+  async createEvent(actor: AccessTokenPayload, payload: CreateTrackingEventType) {
+    const createdById = actor.userId
     // 1. Kiểm tra Order tồn tại và lấy trạng thái hiện tại
     const order = await this.prismaService.order.findFirst({
       where: { id: payload.orderId, deletedAt: null },
-      select: { id: true, status: true, trackingCode: true, currentTripId: true, customerId: true },
+      select: { id: true, status: true, trackingCode: true, currentTripId: true, currentHubId: true, customerId: true },
     })
 
     if (!order) {
       throw new NotFoundException(`Đơn hàng #${payload.orderId} không tồn tại`)
+    }
+
+    if (actor.roleName === roleName.WAREHOUSE_STAFF) {
+      const warehouseUser = await this.prismaService.user.findFirst({
+        where: {
+          id: actor.userId,
+          deletedAt: null,
+          isDeleted: false,
+        },
+        select: {
+          hubId: true,
+        },
+      })
+
+      if (!warehouseUser?.hubId || warehouseUser.hubId !== order.currentHubId) {
+        throw new ForbiddenException('Error.PermissionDenied.NotYourHub')
+      }
     }
 
     // 2. Nếu là STATUS_CHANGE → validate State Machine

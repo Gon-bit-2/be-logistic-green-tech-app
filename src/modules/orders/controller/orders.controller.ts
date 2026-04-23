@@ -31,7 +31,7 @@ export class OrdersController {
     if (user.roleName === roleName.CUSTOMER) {
       customerId = user.userId
     }
-    return this.ordersService.findAll({ ...query, customerId })
+    return this.ordersService.findAll({ ...query, customerId }, user)
   }
 
   @Get(':id')
