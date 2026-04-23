@@ -42,6 +42,8 @@ describe('AuthService', () => {
       createDevice: jest.fn(),
       createRefreshToken: jest.fn(),
       findUniqueRefreshTokenIncludeUserRole: jest.fn(),
+      findFirstRefreshTokenIncludeUserRoleByTokens: jest.fn(),
+      findFirstRefreshTokenByTokens: jest.fn(),
       deleteRefreshToken: jest.fn(),
       updateDevice: jest.fn(),
       findAddressBooksByUserId: jest.fn(),
@@ -351,9 +353,11 @@ describe('AuthService', () => {
 
     it('văng lỗi nếu gửi mã FORGOT cho email ko tồn tại', async () => {
       shareUserRepo.findUnique.mockResolvedValue(null) // Ko tồn tại
-      await expect(service.sendOTP({ email: 't@t.c', type: TypeOfVerificationCode.FORGOT_PASSWORD })).rejects.toThrow(
-        UnprocessableEntityException,
-      )
+      await expect(service.sendOTP({ email: 't@t.c', type: TypeOfVerificationCode.FORGOT_PASSWORD })).resolves.toEqual({
+        message: 'Nếu email tồn tại, mã OTP đã được gửi',
+      })
+      expect(verificationCodeRepo.createVerificationCode).not.toHaveBeenCalled()
+      expect(emailService.sendOTPToEMAIL).not.toHaveBeenCalled()
     })
 
     it('văng lỗi nếu Gửi Mail Fail qua provider', async () => {
@@ -388,9 +392,11 @@ describe('AuthService', () => {
 
     it('Báo lỗi sai email', async () => {
       authRepo.findUniqueIncludeRole.mockResolvedValue(null)
+      hashingService.compare.mockResolvedValue(false)
       await expect(
         service.login({ email: 't@t.c', password: 'password', ip: '1.2.3.4', userAgent: 'Chrome' }),
       ).rejects.toThrow(UnprocessableEntityException)
+      expect(hashingService.compare).toHaveBeenCalled()
     })
 
     it('Báo lỗi sai mật khẩu', async () => {
@@ -415,8 +421,9 @@ describe('AuthService', () => {
   describe('refreshToken', () => {
     it('refresh token thành công', async () => {
       tokenService.verifyRefreshToken.mockResolvedValue({ userId: 1, exp: 99999 } as any)
-      authRepo.findUniqueRefreshTokenIncludeUserRole.mockResolvedValue({
+      authRepo.findFirstRefreshTokenIncludeUserRoleByTokens.mockResolvedValue({
         deviceId: 10,
+        token: 'stored-refresh-token',
         user: { roleId: 2, role: { name: 'CUST' } },
       } as any)
       tokenService.signAccessToken.mockResolvedValue('newAT')
@@ -424,12 +431,13 @@ describe('AuthService', () => {
 
       const res = await service.refreshToken({ refreshToken: 'oldRT', userAgent: 'X', ip: '127' })
       expect(res).toEqual({ accessToken: 'newAT', refreshToken: 'newRT' })
+      expect(authRepo.findFirstRefreshTokenIncludeUserRoleByTokens).toHaveBeenCalledWith(expect.any(Array))
       expect(prismaService.$transaction).toHaveBeenCalled() // Ensure the database rotated the code
     })
 
     it('văng Unauthorized khi db k thấy RT cũ (tức là đã revoke)', async () => {
       tokenService.verifyRefreshToken.mockResolvedValue({ userId: 1 } as any)
-      authRepo.findUniqueRefreshTokenIncludeUserRole.mockResolvedValue(null)
+      authRepo.findFirstRefreshTokenIncludeUserRoleByTokens.mockResolvedValue(null)
       await expect(service.refreshToken({ refreshToken: 'RT', ip: '1', userAgent: '1' })).rejects.toThrow(
         UnauthorizedException,
       )
@@ -439,6 +447,7 @@ describe('AuthService', () => {
   describe('logout', () => {
     it('đăng xuất và disable device', async () => {
       tokenService.verifyRefreshToken.mockResolvedValue({} as any)
+      authRepo.findFirstRefreshTokenByTokens.mockResolvedValue({ token: 'stored-refresh-token', deviceId: 10 } as any)
       authRepo.deleteRefreshToken.mockResolvedValue({ deviceId: 10 } as any)
 
       const res = await service.logout('RT')
@@ -473,6 +482,15 @@ describe('AuthService', () => {
       shareUserRepo.findUnique.mockResolvedValue(null)
       await expect(
         service.forgotPassword({ email: 'nope', code: '', newPassword: '', confirmNewPassword: '' }),
+      ).rejects.toThrow(UnprocessableEntityException)
+    })
+
+    it('thất bại do mã OTP không hợp lệ nhưng không lộ chi tiết', async () => {
+      shareUserRepo.findUnique.mockResolvedValue({ id: 1, email: 't@t.c' } as any)
+      authRepo.findUniqueVerificationCode.mockResolvedValue(null)
+
+      await expect(
+        service.forgotPassword({ email: 't@t.c', code: '000000', newPassword: 'NEW123', confirmNewPassword: 'NEW123' }),
       ).rejects.toThrow(UnprocessableEntityException)
     })
   })

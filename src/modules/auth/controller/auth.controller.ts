@@ -113,6 +113,9 @@ export class AuthController {
 
   @Post('login')
   @isPublic()
+  @Throttle({
+    default: { limit: 5, ttl: 60000 },
+  })
   @ZodSerializerDto(LoginResDTO)
   login(@Body() body: LoginBodyDTO, @UserAgent() userAgent: string, @Ip() ip: string) {
     return this.authService.login({
@@ -191,6 +194,9 @@ export class AuthController {
 
   @Post('forgot-password')
   @isPublic()
+  @Throttle({
+    default: { limit: 3, ttl: 900000 },
+  })
   @ZodSerializerDto(MessageResDTO)
   forgotPassword(@Body() body: ForgotPasswordBodyDTO) {
     return this.authService.forgotPassword(body)

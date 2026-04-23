@@ -52,17 +52,51 @@ export class AuthRepository {
     })
     return user
   }
-  async createRefreshToken(data: { token: string; userId: number; expiresAt: Date; deviceId: number }) {
-    return await this.prismaService.refreshToken.create({ data })
+  async createRefreshToken(data: { tokenHash: string; userId: number; expiresAt: Date; deviceId: number }) {
+    return await this.prismaService.refreshToken.create({
+      data: {
+        token: data.tokenHash,
+        userId: data.userId,
+        expiresAt: data.expiresAt,
+        deviceId: data.deviceId,
+      },
+    })
   }
-  async findUniqueRefreshTokenIncludeUserRole(uniqueObject: { token: string }) {
+  async findUniqueRefreshTokenIncludeUserRole(uniqueObject: { tokenHash: string }) {
     return await this.prismaService.refreshToken.findUnique({
-      where: uniqueObject,
+      where: {
+        token: uniqueObject.tokenHash,
+      },
       include: {
         user: {
           include: {
             role: true,
           },
+        },
+      },
+    })
+  }
+  async findFirstRefreshTokenIncludeUserRoleByTokens(tokens: string[]) {
+    return await this.prismaService.refreshToken.findFirst({
+      where: {
+        token: {
+          in: tokens,
+        },
+      },
+      include: {
+        user: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    })
+  }
+  async findFirstRefreshTokenByTokens(tokens: string[]) {
+    return await this.prismaService.refreshToken.findFirst({
+      where: {
+        token: {
+          in: tokens,
         },
       },
     })
@@ -82,9 +116,11 @@ export class AuthRepository {
       data,
     })
   }
-  async deleteRefreshToken(uniqueObject: { token: string }) {
+  async deleteRefreshToken(uniqueObject: { tokenHash: string }) {
     return await this.prismaService.refreshToken.delete({
-      where: uniqueObject,
+      where: {
+        token: uniqueObject.tokenHash,
+      },
     })
   }
   async findUniqueVerificationCode(uniqueObject: { email: string; code: string; type: TypeOfVerificationCodeType }) {

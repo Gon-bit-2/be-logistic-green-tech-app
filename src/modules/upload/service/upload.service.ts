@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
 import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from 'cloudinary'
 import envConfig from '../../../config/config'
-import * as streamifier from 'streamifier'
+import { unlink } from 'node:fs/promises'
 
 @Injectable()
 export class UploadService {
@@ -13,17 +13,21 @@ export class UploadService {
     })
   }
 
-  uploadFile(file: Express.Multer.File, folder: string = 'logistic_green_tech'): Promise<UploadApiResponse> {
-    return new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        { folder },
-        (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
-          if (error) return reject(new BadRequestException('Lỗi tải ảnh lên Cloudinary: ' + error.message))
-          if (!result) return reject(new BadRequestException('Lỗi máy chủ: Không nhận được kết quả từ Cloudinary'))
-          resolve(result)
-        },
-      )
-      streamifier.createReadStream(file.buffer).pipe(uploadStream)
-    })
+  async uploadFile(file: Express.Multer.File, folder: string = 'logistic_green_tech'): Promise<UploadApiResponse> {
+    if (!file.path) {
+      throw new BadRequestException('Không thể xử lý file tải lên')
+    }
+
+    try {
+      return await cloudinary.uploader.upload(file.path, {
+        folder,
+        resource_type: 'image',
+      })
+    } catch (error) {
+      const cloudinaryError = error as UploadApiErrorResponse | Error
+      throw new BadRequestException('Lỗi tải ảnh lên Cloudinary: ' + cloudinaryError.message)
+    } finally {
+      await unlink(file.path).catch(() => undefined)
+    }
   }
 }
