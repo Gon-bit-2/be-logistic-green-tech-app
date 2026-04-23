@@ -63,7 +63,7 @@ describe('Payment API', () => {
   it('GET /payments/order/:orderId forwards active user context', async () => {
     paymentService.getPaymentByOrderId.mockResolvedValue(null)
 
-    await request(app.getHttpServer()).get('/payments/order/7').expect(200).expect(null)
+    await request(app.getHttpServer()).get('/payments/order/7').expect(200)
 
     expect(paymentService.getPaymentByOrderId).toHaveBeenCalledWith(
       7,

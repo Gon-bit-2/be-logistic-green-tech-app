@@ -132,4 +132,98 @@ describe('OrderRepository', () => {
       },
     })
   })
+
+  it('create khởi tạo payment placeholder STRIPE ngay khi tạo đơn', async () => {
+    prismaService.order.create.mockResolvedValue({ id: 21 } as any)
+
+    await repository.create(
+      5,
+      7,
+      {
+        paymentMethod: 'STRIPE',
+        receiverAddress: 'Receiver',
+        receiverLat: 10.2,
+        receiverLng: 106.2,
+        receiverName: 'Receiver',
+        receiverPhone: '0911111111',
+        senderAddress: 'Sender',
+        senderLat: 10.1,
+        senderLng: 106.1,
+        senderName: 'Sender',
+        senderPhone: '0900000000',
+        items: [{ name: 'Box', quantity: 1, weight: 2 }],
+        serviceType: 'STANDARD',
+      } as any,
+      {
+        totalWeight: 2,
+        totalVolume: 0.1,
+        shippingFee: 42500,
+        estimatedCo2Saved: 0.0625,
+        currentHubId: 3,
+        paymentMethod: 'STRIPE',
+      },
+    )
+
+    expect(prismaService.order.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        codAmount: 0,
+        payment: {
+          create: {
+            amount: 42500,
+            method: 'STRIPE',
+            status: 'PENDING',
+            createdById: 5,
+          },
+        },
+      }),
+      include: expect.any(Object),
+    })
+  })
+
+  it('create khởi tạo payment placeholder COD và codAmount theo shippingFee', async () => {
+    prismaService.order.create.mockResolvedValue({ id: 22 } as any)
+
+    await repository.create(
+      5,
+      7,
+      {
+        paymentMethod: 'COD',
+        receiverAddress: 'Receiver',
+        receiverLat: 10.2,
+        receiverLng: 106.2,
+        receiverName: 'Receiver',
+        receiverPhone: '0911111111',
+        senderAddress: 'Sender',
+        senderLat: 10.1,
+        senderLng: 106.1,
+        senderName: 'Sender',
+        senderPhone: '0900000000',
+        items: [{ name: 'Box', quantity: 1, weight: 2 }],
+        serviceType: 'STANDARD',
+      } as any,
+      {
+        totalWeight: 2,
+        totalVolume: 0.1,
+        shippingFee: 42500,
+        estimatedCo2Saved: 0.0625,
+        currentHubId: 3,
+        paymentMethod: 'COD',
+      },
+    )
+
+    expect(prismaService.order.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        codAmount: 42500,
+        payment: {
+          create: {
+            amount: 42500,
+            method: 'COD',
+            status: 'PENDING',
+            createdById: 5,
+          },
+        },
+      }),
+      include: expect.any(Object),
+    })
+  })
 })

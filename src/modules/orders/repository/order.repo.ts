@@ -29,18 +29,31 @@ export class OrderRepository {
       shippingFee: number
       estimatedCo2Saved: number
       currentHubId: number | null
+      paymentMethod: 'STRIPE' | 'COD'
     },
   ) {
-    const { items, ...restPayload } = payload
+    const { items, paymentMethod: _paymentMethod, ...restPayload } = payload
+    const { paymentMethod: calculatedPaymentMethod, ...orderCalculatedData } = calculatedData
+    const normalizedAmount = Number(calculatedData.shippingFee)
+    const shouldUseCod = calculatedPaymentMethod === 'COD'
 
     return this.prismaService.order.create({
       data: {
         ...restPayload,
-        ...calculatedData,
+        ...orderCalculatedData,
+        codAmount: shouldUseCod ? normalizedAmount : 0,
         createdById,
         customerId,
         items: {
           create: items,
+        },
+        payment: {
+          create: {
+            amount: normalizedAmount,
+            method: calculatedPaymentMethod,
+            status: 'PENDING',
+            createdById,
+          },
         },
       },
       include: {

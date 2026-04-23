@@ -45,7 +45,22 @@ export class WalletService {
   async reconcileCodForDriver(adminId: number, driverId: number, amount: number, referenceId: string, description?: string) {
     const desc = description || `Đối soát COD bởi Admin #${adminId}`;
     try {
-      return await this.walletRepo.reconcileCod(driverId, amount, referenceId, desc);
+      const result = await this.walletRepo.reconcileCod(driverId, amount, referenceId, desc);
+
+      const orderReferenceMatch = /^ORDER_(\d+)$/i.exec(referenceId.trim());
+      if (orderReferenceMatch) {
+        await this.prisma.order.updateMany({
+          where: {
+            id: Number(orderReferenceMatch[1]),
+            isCodCollected: true,
+          },
+          data: {
+            codReconciledAt: new Date(),
+          },
+        });
+      }
+
+      return result;
     } catch (error: any) {
       throw new BadRequestException(error.message || 'Lỗi đối soát COD');
     }

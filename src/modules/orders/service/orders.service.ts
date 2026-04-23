@@ -180,6 +180,7 @@ export class OrdersService {
       shippingFee,
       estimatedCo2Saved,
       currentHubId,
+      paymentMethod: payload.paymentMethod ?? 'STRIPE',
     })
 
     await this.emitNotificationEvent(NotificationEventName.ORDER_CREATED, {

@@ -30,6 +30,7 @@ describe('PaymentService', () => {
   let service: PaymentService;
   let paymentRepo: jest.Mocked<PaymentRepository>;
   let prismaService: any;
+  let prismaTransactionClient: any;
   let stripeMockIntance: any; // Used to assert stripe calls
 
   beforeEach(async () => {
@@ -40,10 +41,30 @@ describe('PaymentService', () => {
       findByOrderId: jest.fn(),
     };
 
+    prismaTransactionClient = {
+      order: {
+        update: jest.fn(),
+      },
+      payment: {
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      transaction: {
+        create: jest.fn(),
+      },
+      wallet: {
+        upsert: jest.fn(),
+        update: jest.fn(),
+      },
+    };
+
     const prismaServiceMock = {
       order: {
         findUnique: jest.fn(),
       },
+      $transaction: jest.fn(async (callback: (tx: any) => Promise<unknown>) =>
+        callback(prismaTransactionClient),
+      ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -194,53 +215,102 @@ describe('PaymentService', () => {
       });
       await expect(service.createPaymentIntent(10, 1)).rejects.toThrow(BadRequestException);
     });
+
+    it('văng BadRequestException nếu order đang được đánh dấu COD', async () => {
+      prismaService.order.findUnique.mockResolvedValue({
+        id: 10,
+        customerId: 1,
+        shippingFee: 15000,
+        payment: { status: 'PENDING', method: 'COD' },
+      });
+
+      await expect(service.createPaymentIntent(10, 1)).rejects.toThrow(BadRequestException);
+      expect(stripeMockIntance.paymentIntents.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('confirmCOD', () => {
     it('nhập payment COD thành công khi chưa thanh toán lần nào', async () => {
       prismaService.order.findUnique.mockResolvedValue({ 
-        id: 10, shippingFee: 20000, payment: null 
+        id: 10, shippingFee: 20000, trackingCode: 'ORD010', isCodCollected: false, payment: null 
       });
+      prismaTransactionClient.wallet.upsert.mockResolvedValue({ id: 501 });
 
       const res = await service.confirmCOD(10, 99); // driverId = 99
 
       expect(res).toEqual({ success: true, message: 'Đã xác nhận thu hộ tiền mặt (COD) thành công' });
-      expect(paymentRepo.upsertPayment).toHaveBeenCalledWith(
-        10, 
-        expect.objectContaining({ method: 'COD', status: 'COMPLETED', createdById: 99 }), 
-        expect.anything() // third arg is the conflict condition object {}
-      );
+      expect(prismaService.$transaction).toHaveBeenCalled();
+      expect(prismaTransactionClient.payment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          orderId: 10,
+          amount: 20000,
+          method: 'COD',
+          status: 'COMPLETED',
+          createdById: 99,
+          updatedById: 99,
+        }),
+      });
+      expect(prismaTransactionClient.transaction.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          walletId: 501,
+          amount: 20000,
+          type: 'COD_COLLECTION',
+          status: 'COMPLETED',
+          referenceId: 'ORDER_10',
+        }),
+      });
+      expect(prismaTransactionClient.order.update).toHaveBeenCalledWith({
+        where: { id: 10 },
+        data: expect.objectContaining({
+          codAmount: 20000,
+          isCodCollected: true,
+        }),
+      });
     });
 
     it('làm tròn shipping fee thập phân khi xác nhận COD', async () => {
       prismaService.order.findUnique.mockResolvedValue({
-        id: 10, shippingFee: 26089.8, payment: null
+        id: 10, shippingFee: 26089.8, trackingCode: 'ORD010', isCodCollected: false, payment: null
       });
+      prismaTransactionClient.wallet.upsert.mockResolvedValue({ id: 501 });
 
       await service.confirmCOD(10, 99);
 
-      expect(paymentRepo.upsertPayment).toHaveBeenCalledWith(
-        10,
-        expect.objectContaining({ amount: 26090, method: 'COD', status: 'COMPLETED' }),
-        expect.anything()
-      );
+      expect(prismaTransactionClient.payment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ amount: 26090, method: 'COD', status: 'COMPLETED' }),
+      });
     });
 
     it('chỉ update driver COD khi payment COD đã được create hờ trc đó nhưng chưa thanh toán', async () => {
       prismaService.order.findUnique.mockResolvedValue({ 
-        id: 10, payment: { status: 'PENDING', method: 'COD' } 
+        id: 10, shippingFee: 20000, trackingCode: 'ORD010', isCodCollected: false, payment: { status: 'PENDING', method: 'COD' } 
       });
+      prismaTransactionClient.wallet.upsert.mockResolvedValue({ id: 501 });
 
       const res = await service.confirmCOD(10, 99);
       expect(res.success).toBe(true);
-      expect(paymentRepo.updateCodPayment).toHaveBeenCalledWith(10, 99);
+      expect(prismaTransactionClient.payment.update).toHaveBeenCalledWith({
+        where: { orderId: 10 },
+        data: expect.objectContaining({ method: 'COD', status: 'COMPLETED', updatedById: 99 }),
+      });
     });
 
     it('văng BadRequestException nếu hóa đơn đã đc thanh toán', async () => {
       prismaService.order.findUnique.mockResolvedValue({ 
-        id: 10, payment: { status: 'COMPLETED' } 
+        id: 10, isCodCollected: false, payment: { status: 'COMPLETED' } 
       });
       await expect(service.confirmCOD(10, 99)).rejects.toThrow(BadRequestException);
+    });
+
+    it('chặn confirmCOD trên đơn thanh toán online', async () => {
+      prismaService.order.findUnique.mockResolvedValue({
+        id: 10,
+        isCodCollected: false,
+        payment: { status: 'PENDING', method: 'STRIPE' },
+      });
+
+      await expect(service.confirmCOD(10, 99)).rejects.toThrow(BadRequestException);
+      expect(prismaService.$transaction).not.toHaveBeenCalled();
     });
   });
 
