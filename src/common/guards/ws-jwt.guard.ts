@@ -71,14 +71,14 @@ export class WsJwtGuard implements CanActivate {
     const authToken = client.handshake?.auth?.token as string | undefined
 
     if (authToken && typeof authToken === 'string') {
-      return authToken
+      return authToken.startsWith('Bearer ') ? authToken.slice(7) : authToken
     }
 
     // Fallback: lấy từ query params (cho mobile hoặc client cũ)
     const queryToken = client.handshake?.query?.token as string | undefined
 
     if (queryToken && typeof queryToken === 'string') {
-      return queryToken
+      return queryToken.startsWith('Bearer ') ? queryToken.slice(7) : queryToken
     }
 
     return null

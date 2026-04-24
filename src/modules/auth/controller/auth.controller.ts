@@ -136,6 +136,7 @@ export class AuthController {
     })
   }
   @Post('logout')
+  @isPublic()
   @HttpCode(200)
   @ZodSerializerDto(MessageResDTO)
   logout(@Body() body: RefreshTokenBodyDTO) {

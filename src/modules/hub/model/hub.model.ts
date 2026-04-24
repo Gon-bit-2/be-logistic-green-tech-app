@@ -27,9 +27,11 @@ export const CreateHubBodySchema = HubSchema.pick({
   address: true,
   latitude: true,
   longitude: true,
-}).extend({
-  imageUrl: z.string().url().optional(), // Ảnh không bắt buộc khi tạo hub
-}).strict()
+})
+  .extend({
+    imageUrl: z.string().url().optional(), // Ảnh không bắt buộc khi tạo hub
+  })
+  .strict()
 
 export const UpdateHubBodySchema = CreateHubBodySchema.partial()
 
