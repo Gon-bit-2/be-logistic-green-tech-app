@@ -3,9 +3,14 @@ import { NotificationType } from 'src/common/constants/notification.constant'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
 import roleName from 'src/common/constants/role.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
+import { DriverAssignmentRequestStatus } from 'src/common/constants/driver-assignment-request.constant'
 import { NotificationRepository } from '../repository/notification.repo'
 import { GetNotificationsQueryType, NotificationPayloadType } from '../model/notification.model'
-import type { OrderNotifiableStatus } from '../events/notification.event'
+import type {
+  DriverAssignmentRequestReviewedEvent,
+  DriverAssignmentRequestSubmittedEvent,
+  OrderNotifiableStatus,
+} from '../events/notification.event'
 
 @Injectable()
 export class NotificationService {
@@ -116,6 +121,48 @@ export class NotificationService {
         orderId: input.orderId,
         trackingCode: input.trackingCode,
         orderStatus: input.status,
+      },
+    })
+  }
+
+  async createDriverAssignmentRequestSubmittedNotifications(input: DriverAssignmentRequestSubmittedEvent) {
+    const payload: NotificationPayloadType = {
+      assignmentRequestId: input.assignmentRequestId,
+      driverId: input.driverId,
+      hubId: input.hubId,
+      orderId: input.orderId,
+      orderTrackingCode: input.orderTrackingCode,
+      status: DriverAssignmentRequestStatus.PENDING,
+    }
+
+    await this.notificationRepository.createManyForUsers(input.recipientUserIds, {
+      type: NotificationType.DRIVER_ASSIGNMENT_REQUEST_SUBMITTED,
+      title: 'Tài xế xin nhận đơn mới',
+      message: `${input.driverFullName} vừa gửi yêu cầu nhận đơn ${input.orderTrackingCode}.`,
+      payload,
+    })
+  }
+
+  async createDriverAssignmentRequestReviewedNotification(input: DriverAssignmentRequestReviewedEvent) {
+    const isApproved = input.status === DriverAssignmentRequestStatus.APPROVED
+
+    await this.notificationRepository.createManyForUsers([input.userId], {
+      type: isApproved
+        ? NotificationType.DRIVER_ASSIGNMENT_REQUEST_APPROVED
+        : NotificationType.DRIVER_ASSIGNMENT_REQUEST_REJECTED,
+      title: isApproved ? 'Yêu cầu nhận đơn đã được duyệt' : 'Yêu cầu nhận đơn bị từ chối',
+      message: isApproved
+        ? `Yêu cầu nhận đơn ${input.orderTrackingCode} của bạn đã được staff chấp nhận.`
+        : `Yêu cầu nhận đơn ${input.orderTrackingCode} của bạn đã bị từ chối.`,
+      payload: {
+        assignmentRequestId: input.assignmentRequestId,
+        driverId: input.driverId,
+        hubId: input.hubId,
+        orderId: input.orderId,
+        orderTrackingCode: input.orderTrackingCode,
+        reviewNote: input.reviewNote ?? undefined,
+        reviewedById: input.reviewedById,
+        status: input.status,
       },
     })
   }

@@ -25,6 +25,8 @@ const DriverModule = [
   'MAPS',
   'WALLET',
   'GAMIFICATION',
+  'HUBS',
+  'UPLOAD',
 ]
 
 const CustomerModule = [
@@ -40,6 +42,7 @@ const CustomerModule = [
   'NOTIFICATIONS',
   'MAPS',
   'GAMIFICATION',
+  'UPLOAD',
 ]
 
 const WarehouseStaffModule = [
@@ -57,6 +60,7 @@ const WarehouseStaffModule = [
   'WALLET',
   'TRIPS',
   'GAMIFICATION',
+  'UPLOAD',
 ]
 
 const prisma = new PrismaService()

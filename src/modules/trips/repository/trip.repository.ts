@@ -95,6 +95,9 @@ export class TripRepository {
     orderIds: number[],
     stopsData: Omit<TripStopType, 'id' | 'tripId'>[],
     totalDistance?: number,
+    options?: {
+      assignmentRequestToApproveId?: number | null
+    },
   ) {
     return this.prismaService.$transaction(async (tx) => {
       // ====== OPTIMISTIC CONCURRENCY CHECK ======
@@ -150,6 +153,30 @@ export class TripRepository {
         },
       })
 
+      await tx.driverAssignmentRequest.updateMany({
+        where: {
+          orderId: { in: validOrderIds },
+          status: 'PENDING',
+          ...(options?.assignmentRequestToApproveId
+            ? { id: { not: options.assignmentRequestToApproveId } }
+            : {}),
+        },
+        data: {
+          status: 'CANCELLED',
+          reviewedAt: new Date(),
+        },
+      })
+
+      if (options?.assignmentRequestToApproveId) {
+        await tx.driverAssignmentRequest.update({
+          where: { id: options.assignmentRequestToApproveId },
+          data: {
+            reviewedAt: new Date(),
+            status: 'APPROVED',
+          },
+        })
+      }
+
       return trip
     })
   }
@@ -185,8 +212,21 @@ export class TripRepository {
             include: {
               order: {
                 select: {
+                  currentHubId: true,
                   id: true,
+                  preferredDeliveryTimeEnd: true,
+                  preferredDeliveryTimeStart: true,
+                  receiverAddress: true,
+                  receiverLat: true,
+                  receiverLng: true,
+                  receiverName: true,
+                  receiverPhone: true,
+                  senderAddress: true,
+                  senderLat: true,
+                  senderLng: true,
                   status: true,
+                  totalVolume: true,
+                  totalWeight: true,
                   trackingCode: true,
                 },
               },
@@ -235,7 +275,17 @@ export class TripRepository {
           orderBy: { stopSequence: 'asc' }, // Trả về đã sort sẵn cho giao diện dễ render
           include: {
             hub: true,
-            order: true,
+            order: {
+              include: {
+                payment: {
+                  select: {
+                    amount: true,
+                    method: true,
+                    status: true,
+                  },
+                },
+              },
+            },
           },
         },
         vehicle: true,
@@ -266,8 +316,21 @@ export class TripRepository {
           include: {
             order: {
               select: {
+                currentHubId: true,
                 id: true,
+                preferredDeliveryTimeEnd: true,
+                preferredDeliveryTimeStart: true,
+                receiverAddress: true,
+                receiverLat: true,
+                receiverLng: true,
+                receiverName: true,
+                receiverPhone: true,
+                senderAddress: true,
+                senderLat: true,
+                senderLng: true,
                 status: true,
+                totalVolume: true,
+                totalWeight: true,
                 trackingCode: true,
               },
             },

@@ -4,6 +4,7 @@ import { NotificationType } from 'src/common/constants/notification.constant'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
 import { PaginationQuerySchema } from 'src/common/model/request.model'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
+import { DriverAssignmentRequestStatus } from 'src/common/constants/driver-assignment-request.constant'
 
 export const RoleRequestNotificationPayloadSchema = z
   .object({
@@ -27,7 +28,29 @@ export const OrderNotificationPayloadSchema = z
   })
   .strict()
 
-export const NotificationPayloadSchema = z.union([RoleRequestNotificationPayloadSchema, OrderNotificationPayloadSchema])
+export const DriverAssignmentRequestNotificationPayloadSchema = z
+  .object({
+    assignmentRequestId: z.number().int().positive(),
+    driverId: z.number().int().positive(),
+    hubId: z.number().int().positive(),
+    orderId: z.number().int().positive(),
+    orderTrackingCode: z.string().min(1),
+    reviewNote: z.string().min(1).max(1000).optional(),
+    reviewedById: z.number().int().positive().optional(),
+    status: z.enum([
+      DriverAssignmentRequestStatus.PENDING,
+      DriverAssignmentRequestStatus.APPROVED,
+      DriverAssignmentRequestStatus.REJECTED,
+      DriverAssignmentRequestStatus.CANCELLED,
+    ]),
+  })
+  .strict()
+
+export const NotificationPayloadSchema = z.union([
+  RoleRequestNotificationPayloadSchema,
+  OrderNotificationPayloadSchema,
+  DriverAssignmentRequestNotificationPayloadSchema,
+])
 
 export const NotificationSchema = z.object({
   id: z.number().int().positive(),
@@ -36,6 +59,9 @@ export const NotificationSchema = z.object({
     NotificationType.ROLE_REQUEST_SUBMITTED,
     NotificationType.ROLE_REQUEST_APPROVED,
     NotificationType.ROLE_REQUEST_REJECTED,
+    NotificationType.DRIVER_ASSIGNMENT_REQUEST_SUBMITTED,
+    NotificationType.DRIVER_ASSIGNMENT_REQUEST_APPROVED,
+    NotificationType.DRIVER_ASSIGNMENT_REQUEST_REJECTED,
     NotificationType.ORDER_CREATED,
     NotificationType.ORDER_OUT_FOR_DELIVERY,
     NotificationType.ORDER_DELIVERED,
