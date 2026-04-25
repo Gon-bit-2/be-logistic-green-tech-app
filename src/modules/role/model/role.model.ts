@@ -9,6 +9,7 @@ export const CreateRoleRequestBodySchema = z
   .object({
     targetRoleName: RoleRequestTargetRoleSchema,
     reason: z.string().trim().min(1).max(1000),
+    hubId: z.number().int().positive(),
   })
   .strict()
 

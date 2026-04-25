@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from 'src/database/prisma.service'
-import { CreateHubBodyType, GetAllHubsQueryType, UpdateHubBodyType } from 'src/modules/hub/model/hub.model'
+import {
+  CreateHubBodyType,
+  GetAllHubsQueryType,
+  GetHubAssignableUsersQueryType,
+  UpdateHubBodyType,
+} from 'src/modules/hub/model/hub.model'
 
 @Injectable()
 export class HubRepository {
@@ -36,16 +41,39 @@ export class HubRepository {
   }
 
   async findById(id: number) {
-    return await this.prisma.hub.findUnique({
+    const hub = await this.prisma.hub.findUnique({
       where: { id },
       include: {
-        staff: {
-          where: { deletedAt: null },
-          select: { id: true, fullName: true, email: true, phone: true },
-        },
         _count: { select: { vehicles: true } },
       },
     })
+
+    if (!hub) return null
+
+    const members = await this.prisma.user.findMany({
+      where: {
+        hubId: id,
+        deletedAt: null,
+        isDeleted: false,
+        role: { name: { in: ['WAREHOUSE_STAFF', 'DRIVER'] } },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        hubId: true,
+        roleId: true,
+        role: { select: { name: true } },
+      },
+      orderBy: { id: 'asc' },
+    })
+
+    return {
+      ...hub,
+      staff: members.filter((member) => member.role.name === 'WAREHOUSE_STAFF'),
+      drivers: members.filter((member) => member.role.name === 'DRIVER'),
+    }
   }
 
   async findByCode(code: string) {
@@ -78,6 +106,50 @@ export class HubRepository {
     return await this.prisma.user.update({
       where: { id: userId },
       data: { hubId: null },
+    })
+  }
+
+  async assignDriver(hubId: number, userId: number) {
+    return await this.assignStaff(hubId, userId)
+  }
+
+  async removeDriver(userId: number) {
+    return await this.removeStaff(userId)
+  }
+
+  async findAssignableUsers(hubId: number, query: GetHubAssignableUsersQueryType) {
+    const search = query.search?.trim()
+
+    return this.prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        isDeleted: false,
+        role: { name: query.role },
+        OR: [{ hubId }, { hubId: null }],
+        ...(search
+          ? {
+              AND: [
+                {
+                  OR: [
+                    { fullName: { contains: search, mode: 'insensitive' } },
+                    { email: { contains: search, mode: 'insensitive' } },
+                    { phone: { contains: search, mode: 'insensitive' } },
+                  ],
+                },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        hubId: true,
+        role: { select: { name: true } },
+      },
+      orderBy: [{ hubId: 'desc' }, { fullName: 'asc' }, { id: 'asc' }],
+      take: 100,
     })
   }
 }

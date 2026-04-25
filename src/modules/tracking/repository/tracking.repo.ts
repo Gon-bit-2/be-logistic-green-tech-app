@@ -23,6 +23,7 @@ export class TrackingRepository {
     shouldUpdateOrderStatus: boolean,
     options?: {
       codCollection?: CodCollectionOptions
+      extraOrderUpdate?: Record<string, unknown>
     },
   ) {
     return this.prismaService.$transaction(async (tx) => {
@@ -81,6 +82,10 @@ export class TrackingRepository {
             updateData.isCodCollected = true
             updateData.codCollectedAt = now
           }
+        }
+
+        if (options?.extraOrderUpdate) {
+          Object.assign(updateData, options.extraOrderUpdate)
         }
 
         await tx.order.update({

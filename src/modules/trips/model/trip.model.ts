@@ -1,5 +1,6 @@
 import { STOP_TYPE, TRIP_STATUS } from 'src/common/constants/strip.constant'
 import { PaginationQuerySchema } from 'src/common/model/request.model'
+import { ProofOfDeliveryInputSchema } from 'src/modules/tracking/model/tracking.model'
 import z from 'zod'
 
 export const TripStatusSchema = z.enum([
@@ -44,6 +45,7 @@ export const GetTripListQuerySchema = PaginationQuerySchema.extend({
   status: TripStatusSchema.optional(),
   vehicleId: z.coerce.number().optional(),
   driverId: z.coerce.number().optional(),
+  hubId: z.coerce.number().int().positive().optional(),
 })
 
 // Response DTOs
@@ -75,6 +77,7 @@ export const GetTripParamsSchema = z
 
 // Manual Trip Creation
 export const CreateManualTripSchema = z.object({
+  hubId: z.number().int().positive().optional(),
   vehicleId: z.number().int().positive(),
   driverId: z.number().int().positive(),
   orderIds: z.array(z.number().int().positive()).min(1),
@@ -90,6 +93,32 @@ export const AddOrdersToTripSchema = z.object({
   orderIds: z.array(z.number().int().positive()).min(1),
 })
 
+export const DispatchPreviewQuerySchema = z.object({
+  hubId: z.coerce.number().int().positive().optional(),
+})
+
+export const DispatchApproveStopSchema = z.object({
+  orderId: z.number().int().positive().nullable().optional(),
+  hubId: z.number().int().positive().nullable().optional(),
+  stopSequence: z.number().int().positive(),
+  stopType: StopTypeSchema,
+  expectedArrivalTime: z.coerce.date().nullable().optional(),
+  actualArrivalTime: z.coerce.date().nullable().optional(),
+})
+
+export const DispatchApproveSchema = z.object({
+  hubId: z.number().int().positive(),
+  vehicleId: z.number().int().positive(),
+  driverId: z.number().int().positive(),
+  orderIds: z.array(z.number().int().positive()).min(1),
+  stops: z.array(DispatchApproveStopSchema).min(1).optional(),
+})
+
+export const UpdateTripStatusSchema = z.object({
+  status: TripStatusSchema,
+  podByOrderId: z.record(z.string(), ProofOfDeliveryInputSchema).optional(),
+})
+
 // TypeScript types
 export type TripType = z.infer<typeof TripSchema>
 export type TripStopType = z.infer<typeof TripStopSchema>
@@ -103,3 +132,6 @@ export type GetTripParamsType = z.infer<typeof GetTripParamsSchema>
 export type CreateManualTripType = z.infer<typeof CreateManualTripSchema>
 export type AssignVehicleType = z.infer<typeof AssignVehicleSchema>
 export type AddOrdersToTripType = z.infer<typeof AddOrdersToTripSchema>
+export type DispatchPreviewQueryType = z.infer<typeof DispatchPreviewQuerySchema>
+export type DispatchApproveType = z.infer<typeof DispatchApproveSchema>
+export type UpdateTripStatusType = z.infer<typeof UpdateTripStatusSchema>

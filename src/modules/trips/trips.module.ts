@@ -7,6 +7,7 @@ import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
 import { TripsProcessor } from './processor/trips.processor'
 import { PrismaService } from 'src/database/prisma.service'
 import { GreenTechModule } from '../green-tech/green-tech.module'
+import { TrackingRepository } from 'src/modules/tracking/repository/tracking.repo'
 
 @Module({
   imports: [
@@ -31,7 +32,7 @@ import { GreenTechModule } from '../green-tech/green-tech.module'
     }),
   ],
   controllers: [TripsController],
-  providers: [TripsService, TripRepository, TripsProcessor, PrismaService],
+  providers: [TripsService, TripRepository, TripsProcessor, PrismaService, TrackingRepository],
   exports: [TripsService],
 })
 export class TripsModule {}

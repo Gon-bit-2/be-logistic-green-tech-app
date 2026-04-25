@@ -4,9 +4,11 @@ import {
   AssignVehicleDto,
   AutoDispatchQueryDto,
   CreateManualTripDto,
+  DispatchApproveDto,
+  DispatchPreviewQueryDto,
   GetTripListDto,
+  UpdateTripStatusDto,
 } from '../dto/trip.dto'
-import { TRIP_STATUS } from 'src/common/constants/strip.constant'
 import { TripsService } from '../service/trips.service'
 import { Roles } from 'src/common/decorators/roles.decorator'
 import { ResourceAccess } from 'src/common/decorators/resource-access.decorator'
@@ -20,20 +22,40 @@ export class TripsController {
 
   @Post('manual')
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
-  async createManualTrip(@Body() body: CreateManualTripDto) {
-    return this.tripsService.createManualTrip(body)
+  async createManualTrip(@Body() body: CreateManualTripDto, @ActiveUser() user: AccessTokenPayload) {
+    return this.tripsService.createManualTrip(body, user)
+  }
+
+  @Get('dispatch-preview')
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  dispatchPreview(@Query() query: DispatchPreviewQueryDto, @ActiveUser() user: AccessTokenPayload) {
+    return this.tripsService.previewDispatch(query.hubId, user)
+  }
+
+  @Post('dispatch-approve')
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  dispatchApprove(@Body() body: DispatchApproveDto, @ActiveUser() user: AccessTokenPayload) {
+    return this.tripsService.approveDispatch(body, user)
   }
 
   @Patch(':id/vehicle')
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
-  async assignVehicleToTrip(@Param('id', ParseIntPipe) id: number, @Body() body: AssignVehicleDto) {
-    return this.tripsService.assignVehicleToTrip(id, body)
+  async assignVehicleToTrip(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: AssignVehicleDto,
+    @ActiveUser() user: AccessTokenPayload,
+  ) {
+    return this.tripsService.assignVehicleToTrip(id, body, user)
   }
 
   @Post(':id/orders')
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
-  async addOrdersToTrip(@Param('id', ParseIntPipe) id: number, @Body() body: AddOrdersToTripDto) {
-    return this.tripsService.addOrdersToTrip(id, body)
+  async addOrdersToTrip(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: AddOrdersToTripDto,
+    @ActiveUser() user: AccessTokenPayload,
+  ) {
+    return this.tripsService.addOrdersToTrip(id, body, user)
   }
 
   @Post('auto-dispatch')
@@ -70,7 +92,7 @@ export class TripsController {
     if (user.roleName === roleName.DRIVER) {
       driverId = user.userId
     }
-    return this.tripsService.findAll({ ...query, driverId })
+    return this.tripsService.findAll({ ...query, driverId }, user)
   }
 
   @Get(':id')
@@ -91,8 +113,12 @@ export class TripsController {
     paramName: 'id',
     ownerField: 'driverId',
   })
-  updateStatus(@Param('id', ParseIntPipe) id: number, @Body('status') status: keyof typeof TRIP_STATUS) {
-    return this.tripsService.updateStatus(id, status)
+  updateStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: UpdateTripStatusDto,
+    @ActiveUser() user: AccessTokenPayload,
+  ) {
+    return this.tripsService.updateStatus(id, body, user)
   }
 
   @Patch(':id/cancel-order/:orderId')

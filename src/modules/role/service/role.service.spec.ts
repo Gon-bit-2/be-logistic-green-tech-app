@@ -83,6 +83,7 @@ describe('RoleService', () => {
       role: { name: roleName.CUSTOMER },
     } as any)
     roleRepo.findPendingByRequesterId.mockResolvedValue(null)
+    roleRepo.findActiveHubById.mockResolvedValue({ id: 5 } as any)
     sharedRoleRepo.getRoleIdByName.mockResolvedValue(3)
     roleRepo.createRoleRequest.mockResolvedValue({ id: 11 } as any)
     userRepo.findActiveAdmins.mockResolvedValue([{ id: 1 }, { id: 2 }] as any)
@@ -90,6 +91,7 @@ describe('RoleService', () => {
     const result = await service.create(7, {
       targetRoleName: roleName.DRIVER,
       reason: 'Muon lam tai xe',
+      hubId: 5,
     })
 
     expect(result).toEqual({ id: 11 })
@@ -98,6 +100,7 @@ describe('RoleService', () => {
       currentRoleId: 2,
       targetRoleId: 3,
       reason: 'Muon lam tai xe',
+      assignedHubId: 5,
     })
     expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
       NotificationEventName.ROLE_REQUEST_SUBMITTED,
@@ -157,7 +160,7 @@ describe('RoleService', () => {
     ).rejects.toThrow(ConflictException)
   })
 
-  it('approve DRIVER cập nhật role và clear hubId', async () => {
+  it('approve DRIVER cập nhật role và gán hubId', async () => {
     prismaService.$transaction.mockImplementation(async (callback) => {
       return await callback({})
     })
@@ -167,7 +170,9 @@ describe('RoleService', () => {
       targetRoleId: 3,
       status: RoleRequestStatus.PENDING,
       targetRole: { name: roleName.DRIVER },
+      assignedHubId: 8,
     } as any)
+    roleRepo.findActiveHubById.mockResolvedValue({ id: 8 } as any)
     roleRepo.updateRoleRequest.mockResolvedValue({
       id: 12,
       requesterId: 7,
@@ -185,7 +190,7 @@ describe('RoleService', () => {
       7,
       {
         roleId: 3,
-        hubId: null,
+        hubId: 8,
       },
       expect.anything(),
     )

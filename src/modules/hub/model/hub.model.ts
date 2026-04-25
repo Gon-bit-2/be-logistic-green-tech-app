@@ -1,5 +1,6 @@
 import z from 'zod'
 import { PaginationQuerySchema } from 'src/common/model/request.model'
+import roleName from 'src/common/constants/role.constant'
 
 export const HubSchema = z.object({
   id: z.number(),
@@ -50,9 +51,20 @@ export const AssignStaffBodySchema = z
   })
   .strict()
 
+export const AssignDriverBodySchema = AssignStaffBodySchema
+
+export const GetHubAssignableUsersQuerySchema = z
+  .object({
+    role: z.enum([roleName.WAREHOUSE_STAFF, roleName.DRIVER]),
+    search: z.string().trim().optional(),
+  })
+  .strict()
+
 export type HubSchemaType = z.infer<typeof HubSchema>
 export type CreateHubBodyType = z.infer<typeof CreateHubBodySchema>
 export type UpdateHubBodyType = z.infer<typeof UpdateHubBodySchema>
 export type GetAllHubsQueryType = z.infer<typeof GetAllHubsQuerySchema>
 export type GetAllHubsResType = z.infer<typeof GetAllHubsResSchema>
 export type AssignStaffBodyType = z.infer<typeof AssignStaffBodySchema>
+export type AssignDriverBodyType = z.infer<typeof AssignDriverBodySchema>
+export type GetHubAssignableUsersQueryType = z.infer<typeof GetHubAssignableUsersQuerySchema>

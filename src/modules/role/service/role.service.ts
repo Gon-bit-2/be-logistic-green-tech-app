@@ -49,12 +49,18 @@ export class RoleService {
       throw new ConflictException('Bạn đang có một yêu cầu chờ xử lý')
     }
 
+    const requestedHub = await this.roleRepository.findActiveHubById(body.hubId)
+    if (!requestedHub) {
+      throw new NotFoundException('Không tìm thấy hub hợp lệ để đăng ký vai trò')
+    }
+
     const targetRoleId = await this.sharedRoleRepository.getRoleIdByName(body.targetRoleName)
     const createdRoleRequest = await this.roleRepository.createRoleRequest({
       requesterId: userId,
       currentRoleId: user.roleId,
       targetRoleId,
       reason: body.reason,
+      assignedHubId: requestedHub.id,
     })
 
     const admins = await this.shareUserRepository.findActiveAdmins()
@@ -88,14 +94,15 @@ export class RoleService {
       }
 
       let assignedHubId: number | null = null
-      if (roleRequest.targetRole.name === roleName.WAREHOUSE_STAFF) {
-        if (!body.hubId) {
-          throw new BadRequestException('Cần chọn hub khi duyệt vai trò WAREHOUSE_STAFF')
+      if (roleRequest.targetRole.name === roleName.WAREHOUSE_STAFF || roleRequest.targetRole.name === roleName.DRIVER) {
+        const hubId = body.hubId ?? roleRequest.assignedHubId
+        if (!hubId) {
+          throw new BadRequestException(`Cần chọn hub khi duyệt vai trò ${roleRequest.targetRole.name}`)
         }
 
-        const hub = await this.roleRepository.findActiveHubById(body.hubId, tx)
+        const hub = await this.roleRepository.findActiveHubById(hubId, tx)
         if (!hub) {
-          throw new NotFoundException('Không tìm thấy hub hợp lệ để gán cho WAREHOUSE_STAFF')
+          throw new NotFoundException(`Không tìm thấy hub hợp lệ để gán cho ${roleRequest.targetRole.name}`)
         }
         assignedHubId = hub.id
       }

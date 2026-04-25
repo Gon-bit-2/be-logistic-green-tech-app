@@ -1,5 +1,10 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
-import { CreateHubBodyType, GetAllHubsQueryType, UpdateHubBodyType } from 'src/modules/hub/model/hub.model'
+import {
+  CreateHubBodyType,
+  GetAllHubsQueryType,
+  GetHubAssignableUsersQueryType,
+  UpdateHubBodyType,
+} from 'src/modules/hub/model/hub.model'
 import { HubRepository } from 'src/modules/hub/repository/hub.repo'
 import { ShareUserRepository } from 'src/common/repositories/shared-user.repo'
 import roleName from 'src/common/constants/role.constant'
@@ -81,5 +86,44 @@ export class HubService {
     }
 
     return this.hubRepo.removeStaff(userId)
+  }
+
+  async assignDriver(hubId: number, userId: number) {
+    await this.findById(hubId)
+
+    const user = await this.shareUserRepo.findUniqueIncludeRolePermissions({ id: userId })
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng')
+    }
+
+    if (user.role.name !== roleName.DRIVER) {
+      throw new BadRequestException('Chỉ có thể gán tài xế có vai trò DRIVER vào kho')
+    }
+
+    return this.hubRepo.assignDriver(hubId, userId)
+  }
+
+  async removeDriver(hubId: number, userId: number) {
+    await this.findById(hubId)
+
+    const user = await this.shareUserRepo.findUniqueIncludeRolePermissions({ id: userId })
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng')
+    }
+
+    if (user.role.name !== roleName.DRIVER) {
+      throw new BadRequestException('Chỉ có thể xoá tài xế có vai trò DRIVER khỏi kho')
+    }
+
+    if (user.hubId !== hubId) {
+      throw new BadRequestException('Tài xế này không thuộc kho trung chuyển đã chọn')
+    }
+
+    return this.hubRepo.removeDriver(userId)
+  }
+
+  async findAssignableUsers(hubId: number, query: GetHubAssignableUsersQueryType) {
+    await this.findById(hubId)
+    return this.hubRepo.findAssignableUsers(hubId, query)
   }
 }

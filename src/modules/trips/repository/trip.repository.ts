@@ -103,6 +103,7 @@ export class TripRepository {
         where: {
           id: { in: orderIds },
           status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
+          currentTripId: null,
         },
         select: { id: true },
       })
@@ -141,6 +142,7 @@ export class TripRepository {
         where: {
           id: { in: validOrderIds },
           status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
+          currentTripId: null,
         },
         data: {
           status: ORDER_STATUS.ASSIGNED,
@@ -156,7 +158,7 @@ export class TripRepository {
    * Lấy danh sách Trip (có phân trang)
    */
   async findAll(query: GetTripListQueryType) {
-    const { limit, page, status, vehicleId, driverId } = query
+    const { limit, page, status, vehicleId, driverId, hubId } = query
     const skip = (page - 1) * limit
     const take = limit
 
@@ -164,6 +166,7 @@ export class TripRepository {
       ...(status && { status }),
       ...(vehicleId && { vehicleId }),
       ...(driverId && { driverId }),
+      ...(hubId && { vehicle: { hubId } }),
     }
 
     const [totalItems, data] = await Promise.all([

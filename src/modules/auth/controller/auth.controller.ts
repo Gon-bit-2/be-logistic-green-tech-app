@@ -44,6 +44,27 @@ import { UserAgent } from 'src/common/decorators/user-agent.decorator'
 import envConfig from 'src/config/config'
 import { buildGoogleRedirectUrl } from 'src/modules/auth/utils/google-redirect.util'
 
+const DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE = 'Có lỗi khi đăng nhập bằng google vui lòng thử lại cách khác'
+const PUBLIC_GOOGLE_CALLBACK_ERROR_MESSAGES = new Set([
+  'Thiếu mã xác thực từ Google',
+  'Google OAuth state không hợp lệ hoặc đã hết hạn',
+  'Không thể lấy thông tin người dùng',
+])
+
+function getGoogleCallbackErrorMessage(error: unknown) {
+  if (!(error instanceof Error)) {
+    return DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE
+  }
+
+  const message = error.message.trim()
+
+  if (PUBLIC_GOOGLE_CALLBACK_ERROR_MESSAGES.has(message) || message.startsWith('Google OAuth error: ')) {
+    return message
+  }
+
+  return DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -176,8 +197,7 @@ export class AuthController {
         }),
       )
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Có lỗi khi đăng nhập bằng google vui lòng thử lại cách khác'
+      const message = getGoogleCallbackErrorMessage(error)
       return res.redirect(
         buildGoogleRedirectUrl(envConfig.GOOGLE_CLIENT_REDIRECT_URI, {
           errorMessage: message,

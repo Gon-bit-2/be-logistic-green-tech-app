@@ -9,6 +9,9 @@ import {
   CreateManualTripSchema,
   AssignVehicleSchema,
   AddOrdersToTripSchema,
+  DispatchApproveSchema,
+  DispatchPreviewQuerySchema,
+  UpdateTripStatusSchema,
 } from '../model/trip.model'
 
 export class GetTripListDto extends createZodDto(GetTripListQuerySchema) {}
@@ -20,3 +23,6 @@ export class GetTripParamsDto extends createZodDto(GetTripParamsSchema) {}
 export class CreateManualTripDto extends createZodDto(CreateManualTripSchema) {}
 export class AssignVehicleDto extends createZodDto(AssignVehicleSchema) {}
 export class AddOrdersToTripDto extends createZodDto(AddOrdersToTripSchema) {}
+export class DispatchPreviewQueryDto extends createZodDto(DispatchPreviewQuerySchema) {}
+export class DispatchApproveDto extends createZodDto(DispatchApproveSchema) {}
+export class UpdateTripStatusDto extends createZodDto(UpdateTripStatusSchema) {}

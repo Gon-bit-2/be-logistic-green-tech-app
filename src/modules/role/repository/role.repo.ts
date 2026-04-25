@@ -59,6 +59,7 @@ export class RoleRepository {
       currentRoleId: number
       targetRoleId: number
       reason: string
+      assignedHubId: number
     },
     client?: PrismaExecutor,
   ) {

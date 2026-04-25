@@ -3,9 +3,11 @@ import { ZodSerializerDto } from 'nestjs-zod'
 import { IsAdmin } from 'src/common/decorators/roles.decorator'
 import {
   AssignStaffBodyDTO,
+  AssignDriverBodyDTO,
   CreateHubBodyDTO,
   GetAllHubsQueryDTO,
   GetAllHubsResDTO,
+  GetHubAssignableUsersQueryDTO,
   HubDetailResDTO,
   UpdateHubBodyDTO,
 } from 'src/modules/hub/dto/hub.dto'
@@ -28,6 +30,12 @@ export class HubController {
   @ZodSerializerDto(GetAllHubsResDTO)
   findAll(@Query() query: GetAllHubsQueryDTO) {
     return this.hubService.findAll(query)
+  }
+
+  @Get(':id/assignable-users')
+  @IsAdmin()
+  findAssignableUsers(@Param('id', ParseIntPipe) id: number, @Query() query: GetHubAssignableUsersQueryDTO) {
+    return this.hubService.findAssignableUsers(id, query)
   }
 
   @Get(':id')
@@ -62,5 +70,19 @@ export class HubController {
   async removeStaff(@Param('id', ParseIntPipe) id: number, @Param('userId', ParseIntPipe) userId: number) {
     await this.hubService.removeStaff(id, userId)
     return { message: 'Xoá nhân viên khỏi kho trung chuyển thành công' }
+  }
+
+  @Post(':id/drivers')
+  @IsAdmin()
+  assignDriver(@Param('id', ParseIntPipe) id: number, @Body() body: AssignDriverBodyDTO) {
+    return this.hubService.assignDriver(id, body.userId)
+  }
+
+  @Delete(':id/drivers/:userId')
+  @IsAdmin()
+  @ZodSerializerDto(MessageResDTO)
+  async removeDriver(@Param('id', ParseIntPipe) id: number, @Param('userId', ParseIntPipe) userId: number) {
+    await this.hubService.removeDriver(id, userId)
+    return { message: 'Xoá tài xế khỏi kho trung chuyển thành công' }
   }
 }

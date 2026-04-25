@@ -82,4 +82,18 @@ describe('AuthController', () => {
       'appecomerce://callback?errorMessage=Google+OAuth+error%3A+access_denied',
     )
   })
+
+  it('does not redirect internal Google login errors back to the client URL', async () => {
+    googleService.googleCallback.mockRejectedValue(
+      new Error(
+        '\nInvalid `Object.create()` invocation in D:\\Works\\logistic-green-tech\\backend\\dist\\main.js:928:2450',
+      ),
+    )
+
+    await controller.googleCallback('state', 'google-code', undefined, response)
+
+    expect(response.redirect).toHaveBeenCalledWith(
+      'appecomerce://callback?errorMessage=C%C3%B3+l%E1%BB%97i+khi+%C4%91%C4%83ng+nh%E1%BA%ADp+b%E1%BA%B1ng+google+vui+l%C3%B2ng+th%E1%BB%AD+l%E1%BA%A1i+c%C3%A1ch+kh%C3%A1c',
+    )
+  })
 })
