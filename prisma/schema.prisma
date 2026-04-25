@@ -1,0 +1,897 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  output          = "../generated/prisma"
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [pg_trgm, unaccent]
+}
+
+// schema.prisma
+
+// ================= MODELS =================
+
+// 1. QUẢN LÝ NGƯỜI DÙNG & PHÂN QUYỀN
+model User {
+  id         Int     @id @default(autoincrement())
+  email      String
+  password   String
+  fullName   String
+  avatar     String? // URL ảnh đại diện
+  phone      String?
+  totpSecret String? // Dùng cho 2FA (TOTP)
+  isDeleted  Boolean @default(false)
+  roleId     Int // Mặc định là CUSTOMER, có thể là ADMIN, DRIVER, WAREHOUSE_STAFF
+  role       Role    @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  hubId       Int? // Phân quyền cho WAREHOUSE_STAFF thuộc kho nào
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdById Int? // Ai tạo tài khoản này (Admin tạo cho nhân viên)
+  updatedById Int? // Ai cập nhật lần cuối (Admin hoặc chính người dùng)
+  deletedAt   DateTime? // Thời điểm xóa tài khoản (soft delete)
+
+  wallet Wallet? // Liên kết ví điện tử (1-to-1)
+
+  // Relations
+  createdBy               User?                @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedBy               User?                @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdUsers            User[]               @relation("UserCreatedBy")
+  updatedUsers            User[]               @relation("UserUpdatedBy")
+  assignedHub             Hub?                 @relation("HubStaff", fields: [hubId], references: [id])
+  orders                  Order[]              @relation("CustomerOrders")
+  tripsDriven             Trip[]               @relation("DriverTrips")
+  trackingLogs            OrderTrackingEvent[] @relation("UserTrackingLogs")
+  createdPermissions      Permission[]         @relation("PermissionCreatedBy")
+  updatedPermissions      Permission[]         @relation("PermissionUpdatedBy")
+  deletedPermissions      Permission[]         @relation("PermissionDeletedBy")
+  createdTripEmissionLogs TripEmissionLog[]    @relation("TripEmissionLogCreatedBy")
+  updatedTripEmissionLogs TripEmissionLog[]    @relation("TripEmissionLogUpdatedBy")
+  deletedTripEmissionLogs TripEmissionLog[]    @relation("TripEmissionLogDeletedBy")
+  createdOrders           Order[]              @relation("OrderCreatedBy")
+  updatedOrders           Order[]              @relation("OrderUpdatedBy")
+  deletedOrders           Order[]              @relation("OrderDeletedBy")
+  refreshTokens           RefreshToken[]
+  notifications           Notification[]       @relation("UserNotifications")
+  requestedRoleChanges    RoleRequest[]        @relation("RoleRequestRequester")
+  reviewedRoleChanges     RoleRequest[]        @relation("RoleRequestReviewedBy")
+  createdRoles            Role[]               @relation("RoleCreatedBy")
+  updatedRoles            Role[]               @relation("RoleUpdatedBy")
+  deletedRoles            Role[]               @relation("RoleDeletedBy")
+  devices                 Device[]
+  vehicleDeletedBy        Vehicle[]            @relation("VehicleDeletedBy")
+  vehicleCreatedBy        Vehicle[]            @relation("VehicleCreatedBy")
+  vehicleUpdatedBy        Vehicle[]            @relation("VehicleUpdatedBy")
+  userTranslationsCreated UserTranslation[]    @relation("UserTranslationCreatedBy")
+  userTranslationsUpdated UserTranslation[]    @relation("UserTranslationUpdatedBy")
+  userTranslationsDeleted UserTranslation[]    @relation("UserTranslationDeletedBy")
+  languagesCreated        Language[]           @relation("LanguageCreatedBy")
+  languagesUpdated        Language[]           @relation("LanguageUpdatedBy")
+  languagesDeleted        Language[]           @relation("LanguageDeletedBy")
+  userTranslations        UserTranslation[]
+  hubsCreated             Hub[]                @relation("HubCreatedBy")
+  hubsUpdated             Hub[]                @relation("HubUpdatedBy")
+  hubsDeleted             Hub[]                @relation("HubDeletedBy")
+  // Phase 4: Payment audit relations
+  createdPayments         Payment[]            @relation("PaymentCreatedBy")
+  updatedPayments         Payment[]            @relation("PaymentUpdatedBy")
+  // V1.5 Gamification
+  greenProfile            UserGreenProfile?
+  addressBooks            AddressBook[]
+
+  @@unique([email, isDeleted])
+  @@index([roleId])
+  @@index([hubId])
+  @@index([deletedAt])
+  @@index([email])
+  @@index([isDeleted])
+  @@map("users")
+}
+
+model AddressBook {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  label       String?  @db.VarChar(100)
+  contactName String   @db.VarChar(255)
+  phone       String   @db.VarChar(20)
+  address     String   @db.VarChar(500)
+  latitude    Float?
+  longitude   Float?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([userId, deletedAt])
+  @@index([userId, isDefault])
+  @@map("address_books")
+}
+
+model UserTranslation {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  languageId  String
+  language    Language @relation(fields: [languageId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  fullName    String   @db.VarChar(255)
+  description String   @db.Text
+  address     String?  @db.VarChar(500)
+  createdById Int?
+  createdBy   User?    @relation("UserTranslationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById Int?
+  updatedBy   User?    @relation("UserTranslationUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("UserTranslationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, languageId])
+  @@map("user_translations")
+}
+
+model Language {
+  id               String            @id
+  code             String            @unique
+  name             String
+  userTranslations UserTranslation[]
+
+  createdById Int?
+  createdBy   User? @relation("LanguageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById Int?
+  updatedBy   User? @relation("LanguageUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("LanguageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([id, code])
+  @@map("languages")
+}
+
+model Role {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  description String?
+  isActive    Boolean      @default(true)
+  // Relations
+  users       User[]
+  permissions Permission[] @relation("RolePermissions")
+  createdById Int?
+  createdBy   User?        @relation("RoleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById Int?
+  updatedBy   User?        @relation("RoleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  currentRoleRequests RoleRequest[] @relation("RoleRequestCurrentRole")
+  targetRoleRequests  RoleRequest[] @relation("RoleRequestTargetRole")
+
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("RoleDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([deletedAt])
+  @@map("roles")
+}
+
+model VerificationCode {
+  id    Int                  @id @default(autoincrement())
+  email String               @db.VarChar(500)
+  code  String               @db.VarChar(50)
+  type  VerificationCodeType
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([email, type])
+  @@index([expiresAt])
+}
+
+model Permission {
+  id          Int        @id @default(autoincrement())
+  name        String     @db.VarChar(500)
+  description String     @default("")
+  path        String     @db.VarChar(1000)
+  method      HTTPMethod
+  module      String     @default("") @db.VarChar(500)
+  roles       Role[]     @relation("RolePermissions")
+
+  createdById Int?
+  createdBy   User? @relation("PermissionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById Int?
+  updatedBy   User? @relation("PermissionUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("PermissionDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([deletedAt])
+  @@index([module])
+  @@index([path, method])
+}
+
+model Device {
+  id            Int            @id @default(autoincrement())
+  userId        Int
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userAgent     String
+  ip            String
+  lastActive    DateTime       @updatedAt // Thay updatedAt bằng lastActive cho ý nghĩa rõ hơn
+  createdAt     DateTime       @default(now())
+  isActive      Boolean        @default(true) // Trạng thái thiết bị (đang login hay đã logout)
+  refreshTokens RefreshToken[] // Liên kết 1-n với RefreshToken
+}
+
+model RefreshToken {
+  token  String @unique @db.VarChar(1000)
+  userId Int
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  deviceId  Int
+  device    Device   @relation(fields: [deviceId], references: [id])
+
+  @@index([expiresAt])
+}
+
+model RoleRequest {
+  id            Int               @id @default(autoincrement())
+  requesterId   Int
+  requester     User              @relation("RoleRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  currentRoleId Int
+  currentRole   Role              @relation("RoleRequestCurrentRole", fields: [currentRoleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  targetRoleId  Int
+  targetRole    Role              @relation("RoleRequestTargetRole", fields: [targetRoleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reason        String            @db.VarChar(1000)
+  status        RoleRequestStatus @default(PENDING)
+  reviewNote    String?           @db.VarChar(1000)
+  reviewedById  Int?
+  reviewedBy    User?             @relation("RoleRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  reviewedAt    DateTime?
+  assignedHubId Int?
+  assignedHub   Hub?              @relation("RoleRequestAssignedHub", fields: [assignedHubId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([requesterId])
+  @@index([status])
+  @@index([targetRoleId])
+  @@index([requesterId, status])
+  @@map("role_requests")
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  user      User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  type      NotificationType
+  title     String           @db.VarChar(255)
+  message   String           @db.VarChar(1000)
+  payload   Json?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// 2. MODULE: FLEET & GREEN TECH (Quản lý xe và thông số môi trường)
+model Vehicle {
+  id                Int         @id @default(autoincrement())
+  licensePlate      String      @unique
+  type              VehicleType
+  fuelType          FuelType
+  capacityWeight    Float // Tải trọng tối đa (kg)
+  capacityVolume    Float // Thể tích thùng xe (m3) - Dùng cho thuật toán Bin Packing
+  emissionRatePerKm Float // Hệ số xả thải (g CO2/km) - Dùng tính Green Tech
+  imageUrl          String? // URL ảnh đại diện xe (Cloudinary)
+  isActive          Boolean     @default(true)
+
+  hubId Int? // Biên chế xe thuộc kho bãi nào
+  hub   Hub? @relation("HubVehicles", fields: [hubId], references: [id])
+
+  trips       Trip[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("VehicleDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdById Int?
+  createdBy   User?     @relation("VehicleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById Int?
+  updatedBy   User?     @relation("VehicleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@map("vehicles")
+}
+
+model Hub {
+  id        Int     @id @default(autoincrement())
+  code      String  @unique // Mã kho (VD: SGN-HUB-01)
+  name      String
+  address   String
+  latitude  Float
+  longitude Float
+  isActive  Boolean @default(true)
+  imageUrl  String? // URL ảnh đại diện kho (Cloudinary)
+
+  // ===== Sức chứa Kho (Warehouse Constraints) =====
+  capacityVolume Float @default(10000) // Tổng thể tích kệ chứa hàng (m3)
+
+  // Relations
+  staff               User[]     @relation("HubStaff")
+  tripStops           TripStop[]
+  ordersCurrentlyHere Order[]    @relation("OrdersAtHub") // Hàng đang tồn kho tại đây
+  vehicles            Vehicle[]  @relation("HubVehicles") // Xe biên chế tại kho
+  assignedRoleRequests RoleRequest[] @relation("RoleRequestAssignedHub")
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  deletedAt           DateTime?
+  deletedById         Int?
+  deletedBy           User?      @relation("HubDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdById         Int?
+  createdBy           User?      @relation("HubCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById         Int?
+  updatedBy           User?      @relation("HubUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@map("hubs")
+}
+
+// 3. MODULE: ORDER MANAGEMENT (Quản lý đơn hàng)
+model Order {
+  id           Int    @id @default(autoincrement())
+  trackingCode String @unique @default(cuid())
+  customerId   Int
+
+  senderName    String
+  senderPhone   String
+  senderAddress String
+  senderLat     Float
+  senderLng     Float
+
+  receiverName    String
+  receiverPhone   String
+  receiverAddress String
+  receiverLat     Float
+  receiverLng     Float
+
+  status      OrderStatus @default(PENDING)
+  serviceType ServiceType @default(STANDARD)
+
+  // ===== Ràng buộc Vận Hành (Time Windows) =====
+  // VRPTW (Vehicle Routing Problem with Time Windows) constraint
+  preferredDeliveryTimeStart DateTime? // Khách yêu cầu giao từ giờ này
+  preferredDeliveryTimeEnd   DateTime? // Khách yêu cầu giao muộn nhất lúc này
+
+  totalWeight       Float // Tổng khối lượng (kg)
+  totalVolume       Float // Tổng thể tích (m3)
+  shippingFee       Decimal  @db.Decimal(18, 2)
+  estimatedCo2Saved Decimal? @db.Decimal(18, 6) // Lượng CO2 dự kiến tiết kiệm được
+
+  currentHubId  Int? // Null nếu đang đi trên đường, có ID nếu đang nằm trong kho
+  currentTripId Int? // Null nếu nằm trong kho, có ID nếu đang gán trên xe chờ bốc hoặc trên đường đi
+
+  // ===== COD (TIỀN MẶT) =====
+  codAmount       Decimal   @default(0) @db.Decimal(18, 2)
+  isCodCollected  Boolean   @default(false)
+  codCollectedAt  DateTime?
+  codReconciledAt DateTime? // Thời điểm đối soát với công ty
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdById Int? // Ai tạo đơn hàng này (Khách hàng tự tạo hoặc nhân viên tạo hộ)
+  updatedById Int? // Ai cập nhật lần cuối (Nhân viên hoặc hệ thống tự động cập nhật trạng thái)
+  deletedAt   DateTime? // Thời điểm hủy đơn hàng (soft delete)
+  deletedById Int? // Ai hủy đơn hàng (Nhân viên hoặc khách hàng)
+
+  // Relations
+  customer            User                      @relation("CustomerOrders", fields: [customerId], references: [id])
+  currentHub          Hub?                      @relation("OrdersAtHub", fields: [currentHubId], references: [id])
+  currentTrip         Trip?                     @relation("OrdersOnTrip", fields: [currentTripId], references: [id])
+  createdBy           User?                     @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedBy           User?                     @relation("OrderUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  deletedBy           User?                     @relation("OrderDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  items               OrderItem[]
+  trackingEvents      OrderTrackingEvent[]
+  tripStops           TripStop[]
+  payment             Payment?
+  emissionAllocations OrderEmissionAllocation[] // Phase 4: Phân bổ CO₂ cho từng đơn
+
+  @@index([trackingCode])
+  @@index([customerId])
+  @@index([status])
+  @@index([currentHubId])
+  @@index([currentTripId])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id       Int    @id @default(autoincrement())
+  orderId  Int
+  name     String
+  quantity Int    @default(1)
+  weight   Float // Khối lượng 1 item (kg)
+  length   Float? // Kích thước (cm)
+  width    Float?
+  height   Float?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// 4. MODULE: PAYMENT (Thanh toán)
+model Payment {
+  id      Int           @id @default(autoincrement())
+  orderId Int           @unique
+  amount  Decimal       @db.Decimal(18, 2)
+  method  PaymentMethod @default(STRIPE)
+  status  PaymentStatus @default(PENDING)
+
+  transactionId String?   @unique // Mã giao dịch từ Stripe Payment Intent ID (để đối soát)
+  paidAt        DateTime? // Thời điểm thanh toán thành công
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Audit trail
+  createdById Int?
+  createdBy   User? @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById Int?
+  updatedBy   User? @relation("PaymentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+// 5. MODULE: TRANSPORT MANAGEMENT (Điều phối chuyến xe & Lộ trình)
+model Trip {
+  id        Int        @id @default(autoincrement())
+  vehicleId Int
+  driverId  Int
+  status    TripStatus @default(PENDING)
+
+  startTime     DateTime?
+  endTime       DateTime?
+  totalDistance Float? // Khoảng cách thực tế di chuyển (km)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  vehicle       Vehicle           @relation(fields: [vehicleId], references: [id])
+  driver        User              @relation("DriverTrips", fields: [driverId], references: [id])
+  ordersOnBoard Order[]           @relation("OrdersOnTrip") // Các đơn hàng ĐANG được chở trên chuyến xe này
+  stops         TripStop[]
+  emissionLogs  TripEmissionLog[] // Phase 4: 1-N cho versioning (tính lại nhiều lần)
+
+  @@index([vehicleId])
+  @@index([driverId])
+  @@index([status])
+  @@index([startTime])
+  @@map("trips")
+}
+
+model TripStop {
+  id      Int  @id @default(autoincrement())
+  tripId  Int
+  orderId Int?
+  hubId   Int?
+
+  stopSequence Int // Thứ tự dừng (1, 2, 3...)
+  stopType     StopType
+
+  expectedArrivalTime DateTime? // ETA
+  actualArrivalTime   DateTime? // ATA (Cập nhật khi tài xế check-in)
+
+  // Relations
+  trip  Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  order Order? @relation(fields: [orderId], references: [id])
+  hub   Hub?   @relation(fields: [hubId], references: [id])
+
+  @@unique([tripId, stopSequence])
+  @@index([tripId])
+  @@index([orderId])
+  @@index([hubId])
+  @@index([stopType])
+  @@map("trip_stops")
+}
+
+// 6. MODULE: EVENT SOURCING & POD (Theo dõi lịch sử & Bằng chứng giao hàng)
+// Production-ready: GPS tracking, Event Type separation, Failed Delivery support, POD normalization
+model OrderTrackingEvent {
+  id      Int @id @default(autoincrement())
+  orderId Int
+
+  // ===== Core Event Data =====
+  eventType TrackingEventType // Phân biệt: STATUS_CHANGE, SCAN, NOTE, POD, EXCEPTION, ETA_UPDATE
+  status    OrderStatus? // Nullable: chỉ bắt buộc khi eventType = STATUS_CHANGE
+
+  // ===== Geo-Location (GPS) =====
+  latitude  Float? // Tọa độ GPS — hiển thị trên bản đồ, detect gian lận, tính khoảng cách
+  longitude Float? // Tọa độ GPS
+  location  String? // Địa chỉ text-friendly cho UI ("Kho Tân Bình", "123 Nguyễn Văn Cừ")
+
+  // ===== Context =====
+  description String? // Mô tả chi tiết sự kiện
+  source      EventSource // Event đến từ đâu: DRIVER_APP, HUB_SCANNER, SYSTEM, ADMIN_PORTAL
+
+  // ===== Failed Delivery Tracking =====
+  failureReasonCode FailureReasonCode? // Chuẩn hóa lý do giao thất bại (15-25% đơn ở VN)
+  attemptNumber     Int? // Lần giao thứ mấy (1, 2, 3... tối đa 3 lần trước hoàn hàng)
+
+  // ===== Timestamps (Event Sourcing chuẩn) =====
+  occurredAt DateTime @default(now()) // Khi sự kiện XẢY RA (có thể offline — driver mất mạng)
+  recordedAt DateTime @default(now()) // Khi ghi vào DB (server time — luôn chính xác)
+  // Không có updatedAt — Event Sourcing là append-only, immutable
+
+  createdById Int
+
+  // ===== Relations =====
+  order     Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdBy User             @relation("UserTrackingLogs", fields: [createdById], references: [id])
+  pod       ProofOfDelivery? // 1-1 optional — chỉ có khi giao thành công
+
+  @@index([orderId])
+  @@index([orderId, occurredAt]) // Composite index cho timeline query
+  @@index([createdById])
+  @@index([eventType])
+  @@index([source])
+  @@map("order_tracking_events")
+}
+
+// Bảng POD tách riêng — hỗ trợ multi-image, receiver info, package condition
+model ProofOfDelivery {
+  id               Int              @id @default(autoincrement())
+  trackingEventId  Int              @unique // 1-1 với event giao thành công
+  receiverName     String // Tên người nhận thực tế (có thể khác tên trên đơn)
+  receiverRelation String? // Quan hệ: "Chính chủ", "Người nhà", "Bảo vệ tòa nhà"
+  packageCondition PackageCondition @default(INTACT) // Tình trạng kiện hàng khi giao
+  deliveryNote     String? // Ghi chú: "Để trước cổng", "Bảo vệ ký nhận"
+
+  trackingEvent OrderTrackingEvent @relation(fields: [trackingEventId], references: [id], onDelete: Cascade)
+  images        ProofImage[] // Nhiều ảnh: ảnh kiện hàng, ảnh chữ ký, ảnh vị trí giao
+
+  @@map("proof_of_deliveries")
+}
+
+// Bảng ảnh POD — hỗ trợ nhiều ảnh cho 1 lần giao hàng
+model ProofImage {
+  id    Int            @id @default(autoincrement())
+  podId Int
+  url   String // URL ảnh (frontend upload lên cloud → gửi URL)
+  type  ProofImageType // PACKAGE, SIGNATURE, DELIVERY_LOCATION, DAMAGE_EVIDENCE, FAILED_ATTEMPT
+
+  pod ProofOfDelivery @relation(fields: [podId], references: [id], onDelete: Cascade)
+
+  @@index([podId])
+  @@map("proof_images")
+}
+
+// 7. MODULE: GREEN TECH METRICS (Báo cáo Môi trường)
+// Production-ready: Versioning, Emission Factor Snapshot, Decimal Precision, GHG Scope, Per-Order Allocation
+model TripEmissionLog {
+  id     Int @id @default(autoincrement())
+  tripId Int // Bỏ @unique → cho phép tính lại nhiều lần (audit trail)
+
+  // ===== Versioning (Cho phép tính lại khi dữ liệu cập nhật) =====
+  version  Int     @default(1) // Phiên bản tính toán (1, 2, 3...)
+  isLatest Boolean @default(true) // Flag đánh dấu bản tính mới nhất
+
+  // ===== Measured Data (Input — Decimal cho chính xác tuyệt đối) =====
+  actualDistance Decimal @db.Decimal(12, 4) // Khoảng cách thực tế (km)
+  payloadWeight  Decimal @db.Decimal(12, 4) // Tổng tải trọng thực tế (kg)
+
+  // ===== Calculated Results (Output) =====
+  co2Emitted Decimal @db.Decimal(18, 6) // Lượng CO₂ xả ra thực tế (kg)
+  co2Saved   Decimal @db.Decimal(18, 6) // Lượng CO₂ tiết kiệm so với baseline (kg)
+
+  // ===== Emission Factor Snapshot (ISO 14083 — ghi nhận thông số tại thời điểm tính) =====
+  emissionFactor    Float // g CO₂/km — snapshot từ Vehicle.emissionRatePerKm tại thời điểm tính
+  baselineRate      Float  @default(250) // g CO₂/km — hệ số DIESEL baseline dùng để so sánh
+  vehicleType       String // Snapshot VehicleType (VAN, TRUCK, ELECTRIC_VAN, MOTORCYCLE)
+  fuelType          String // Snapshot FuelType (ELECTRIC, DIESEL, GASOLINE)
+  calculationMethod String @default("HAVERSINE") // HAVERSINE, GPS_ACTUAL, MANUAL
+
+  // ===== GHG Protocol Classification =====
+  ghgScope Int @default(1) // 1 = Scope 1 (xe sở hữu), 3 = Scope 3 (xe thuê ngoài)
+
+  calculatedAt DateTime @default(now())
+
+  // ===== Relations =====
+  trip        Trip                      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  allocations OrderEmissionAllocation[] // Phân bổ CO₂ cho từng order trong trip
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  updatedById Int?
+  updatedBy   User?     @relation("TripEmissionLogUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdById Int?
+  createdBy   User?     @relation("TripEmissionLogCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("TripEmissionLogDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([tripId, version]) // Composite unique: 1 trip + 1 version = duy nhất
+  @@index([tripId, isLatest]) // Query nhanh bản tính mới nhất
+  @@index([deletedAt])
+  @@index([createdAt])
+  @@index([ghgScope])
+  @@map("trip_emission_logs")
+}
+
+// Phân bổ CO₂ cho từng đơn hàng (GLEC Framework — Weight Ratio Allocation)
+// Cho phép khách hàng xem carbon footprint CỦA ĐƠN HÀNG CỦA HỌ
+model OrderEmissionAllocation {
+  id            Int @id @default(autoincrement())
+  emissionLogId Int
+  orderId       Int
+
+  allocatedCo2      Decimal  @db.Decimal(18, 6) // CO₂ phân bổ cho order này (kg)
+  allocatedCo2Saved Decimal  @db.Decimal(18, 6) // CO₂ tiết kiệm phân bổ (kg)
+  allocationMethod  String   @default("WEIGHT_RATIO") // WEIGHT_RATIO, DISTANCE_RATIO
+  weightRatio       Decimal? @db.Decimal(8, 6) // Tỷ lệ trọng lượng: order.weight / trip.totalWeight
+
+  emissionLog TripEmissionLog @relation(fields: [emissionLogId], references: [id], onDelete: Cascade)
+  order       Order           @relation(fields: [orderId], references: [id])
+
+  @@unique([emissionLogId, orderId])
+  @@index([orderId])
+  @@map("order_emission_allocations")
+}
+
+// ================= ENUMS =================
+
+enum RoleName {
+  ADMIN
+  CUSTOMER
+  DRIVER
+  WAREHOUSE_STAFF
+}
+
+enum RoleRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  ROLE_REQUEST_SUBMITTED
+  ROLE_REQUEST_APPROVED
+  ROLE_REQUEST_REJECTED
+  ORDER_CREATED
+  ORDER_OUT_FOR_DELIVERY
+  ORDER_DELIVERED
+  ORDER_CANCELLED
+}
+
+enum OrderStatus {
+  PENDING // Vừa tạo, chờ xử lý
+  ASSIGNED // Đã gán vào chuyến xe
+  PICKED_UP // Tài xế đã lấy hàng
+  IN_TRANSIT // Đang di chuyển trên xe
+  ARRIVED_AT_HUB // Đang lưu kho tại trạm trung chuyển
+  OUT_FOR_DELIVERY // Đang giao đến khách (Last-mile)
+  DELIVERED // Giao thành công
+  CANCELLED // Đã hủy
+}
+
+enum VehicleType {
+  VAN
+  TRUCK
+  ELECTRIC_VAN // Yếu tố Green Tech
+  MOTORCYCLE
+}
+
+enum FuelType {
+  ELECTRIC
+  DIESEL
+  GASOLINE
+}
+
+enum ServiceType {
+  EXPRESS // Giao hỏa tốc
+  STANDARD // Tiêu chuẩn
+  ECO_GREEN // Giao hàng gom chuyến, tối ưu CO2
+}
+
+enum StopType {
+  PICKUP // Điểm lấy hàng từ khách
+  DROPOFF // Điểm giao hàng cho khách
+  HUB_TRANSFER // Điểm dừng tại kho trung chuyển
+}
+
+enum TripStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  STRIPE
+  COD // Thanh toán khi nhận hàng
+}
+
+enum HTTPMethod {
+  GET
+  POST
+  PUT
+  DELETE
+  PATCH
+}
+
+enum VerificationCodeType {
+  REGISTER
+  FORGOT_PASSWORD
+  LOGIN
+}
+
+// ===== PHASE 4: Tracking Event Sourcing Enums =====
+
+// Phân biệt loại sự kiện — không phải mọi event đều thay đổi status
+enum TrackingEventType {
+  STATUS_CHANGE // Chuyển trạng thái đơn hàng (PENDING → ASSIGNED...)
+  SCAN // Quét barcode/QR tại kho (không đổi status)
+  NOTE // Ghi chú thuần thông tin
+  POD // Upload bằng chứng giao hàng
+  EXCEPTION // Sự cố: giao thất bại, hư hỏng, mất hàng
+  ETA_UPDATE // Cập nhật thời gian dự kiến giao
+}
+
+// Nguồn gốc event — biết event đến từ đâu để audit và debug
+enum EventSource {
+  DRIVER_APP // Từ ứng dụng tài xế trên điện thoại
+  HUB_SCANNER // Từ máy quét barcode tại kho bãi
+  SYSTEM // Hệ thống tự động (Bin Packing, Auto-dispatch)
+  ADMIN_PORTAL // Admin can thiệp thủ công từ dashboard
+  CUSTOMER_APP // Khách hàng thao tác (hủy đơn, yêu cầu đổi địa chỉ)
+}
+
+// Lý do giao hàng thất bại — chuẩn hóa theo industry standard
+// 15-25% đơn hàng ở VN giao thất bại lần đầu
+enum FailureReasonCode {
+  CUSTOMER_NOT_AVAILABLE // Khách không có mặt
+  INCORRECT_ADDRESS // Sai địa chỉ
+  REFUSED_BY_CUSTOMER // Khách từ chối nhận hàng
+  BUSINESS_CLOSED // Cơ sở kinh doanh đóng cửa
+  INACCESSIBLE_LOCATION // Không thể tiếp cận (ngõ hẹp, tầng cao...)
+  PACKAGE_DAMAGED // Kiện hàng hư hỏng
+  WEATHER_DELAY // Thời tiết xấu
+  VEHICLE_BREAKDOWN // Xe hỏng
+  OTHER // Lý do khác
+}
+
+// Tình trạng kiện hàng khi giao cho Proof of Delivery
+enum PackageCondition {
+  INTACT // Nguyên vẹn
+  DAMAGED // Hư hỏng
+  PARTIAL // Giao thiếu (một phần)
+}
+
+// Loại ảnh trong Proof of Delivery — phân loại để hiển thị đúng UI
+enum ProofImageType {
+  PACKAGE // Ảnh kiện hàng
+  SIGNATURE // Ảnh chữ ký khách hàng
+  DELIVERY_LOCATION // Ảnh vị trí giao (trước cổng, bàn bảo vệ...)
+  DAMAGE_EVIDENCE // Ảnh minh chứng hư hỏng
+  FAILED_ATTEMPT // Ảnh minh chứng giao thất bại (cửa đóng, không có người...)
+}
+
+// -------------------------------------------------------------
+// MODULE: DRIVER WALLET & COD RECONCILIATION
+// -------------------------------------------------------------
+
+model Wallet {
+  id     Int  @id @default(autoincrement())
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  balance      Decimal      @default(0) @db.Decimal(18, 2) // Số dư ví (có thể nạp để trừ cọc COD, hoặc nhận hoa hồng)
+  codCollected Decimal      @default(0) @db.Decimal(18, 2) // Tổng tiền COD tài xế đang giữ chưa đối soát (tiền nợ công ty)
+  status       WalletStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@map("wallets")
+}
+
+model Transaction {
+  id       Int    @id @default(autoincrement())
+  walletId Int
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  amount      Decimal           @db.Decimal(18, 2) // Số tiền giao dịch (dương: cộng tiền, âm: trừ tiền)
+  type        TransactionType
+  status      TransactionStatus @default(COMPLETED)
+  referenceId String? // Reference ID (VD: Mã đơn hàng, PaymentIntent ID, Biên lai đối soát)
+  description String?           @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([walletId])
+  @@index([type])
+  @@index([status])
+  @@map("transactions")
+}
+
+enum WalletStatus {
+  ACTIVE
+  BLOCKED // Khóa ví nếu dư nợ COD quá lớn
+}
+
+enum TransactionType {
+  DEPOSIT // Nạp tiền vào ví
+  WITHDRAWAL // Rút tiền khỏi ví
+  COD_COLLECTION // Thu tiền COD (Làm tăng codCollected của tài xế)
+  COD_RECONCILIATION // Bàn giao tiền COD cho công ty (Làm giảm codCollected)
+  COMMISSION_FEE // Nhận hoa hồng / Phí giao hàng
+  PENALTY // Phí bồi thường/phạt
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// -------------------------------------------------------------
+// MODULE: GAMIFICATION & CO2 CONTRIBUTION (V1.5)
+// -------------------------------------------------------------
+
+model UserGreenProfile {
+  id     Int  @id @default(autoincrement())
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  totalCo2Saved Decimal   @default(0) @db.Decimal(18, 6) // Tổng số CO2 đã tiết kiệm được
+  greenPoints   Int       @default(0) // Điểm cống hiến (Gamification)
+  rank          GreenRank @default(SEED) // Hạng thành viên
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_green_profiles")
+}
+
+enum GreenRank {
+  SEED
+  LEAF
+  TREE
+  FOREST
+  EARTH_GUARDIAN
+}
