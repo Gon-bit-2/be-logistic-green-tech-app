@@ -26,20 +26,39 @@ describe('TripsService', () => {
       findAvailableVehicles: jest.fn(),
       findPendingOrders: jest.fn(),
       findAvailableDrivers: jest.fn(),
+      createTripWithStops: jest.fn(),
     }
 
     const prismaServiceMock = {
       hub: {
+        findFirst: jest.fn(),
         findMany: jest.fn(),
       },
       order: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
+      },
+      trip: {
+        count: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+      driverAssignmentRequest: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
       },
       user: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
       vehicle: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
       },
     }
 
@@ -50,6 +69,7 @@ describe('TripsService', () => {
 
     const eventEmitterMock = {
       emit: jest.fn(),
+      emitAsync: jest.fn().mockResolvedValue(undefined),
     }
 
     gamificationServiceMock = {
@@ -147,6 +167,71 @@ describe('TripsService', () => {
     })
   })
 
+  describe('getDispatchBoard', () => {
+    it('trả về dispatch board theo hub của warehouse staff', async () => {
+      prismaService.user.findFirst.mockResolvedValueOnce({ hubId: 5 })
+      tripRepo.findPendingOrders.mockResolvedValue([
+        {
+          id: 101,
+          receiverAddress: 'Q10',
+          receiverName: 'Lan',
+          senderAddress: 'Q7',
+          status: 'PENDING',
+          totalVolume: 1.2,
+          totalWeight: 12,
+          trackingCode: 'ORD-101',
+        },
+      ] as any)
+      prismaService.user.findMany.mockResolvedValue([
+        {
+          fullName: 'Nguyen Van A',
+          id: 11,
+          phone: '0900000001',
+          tripsDriven: [],
+        },
+      ])
+      prismaService.vehicle.findMany.mockResolvedValue([
+        {
+          capacityVolume: 6,
+          capacityWeight: 80,
+          id: 21,
+          licensePlate: '51A-88888',
+          trips: [],
+          type: 'TRUCK',
+        },
+      ])
+      prismaService.trip.findMany.mockResolvedValue([
+        {
+          driver: { fullName: 'Tran Van B', id: 12 },
+          id: 88,
+          status: 'PENDING',
+          stops: [],
+          vehicle: {
+            capacityVolume: 10,
+            capacityWeight: 120,
+            id: 21,
+            licensePlate: '51A-88888',
+          },
+        },
+      ])
+
+      const result = await service.getDispatchBoard(undefined, {
+        roleName: 'WAREHOUSE_STAFF',
+        userId: 9,
+      } as any)
+
+      expect(result.hubId).toBe(5)
+      expect(result.summary.dispatchableOrderCount).toBe(1)
+      expect(result.summary.pendingTripCount).toBe(1)
+      expect(result.drivers[0]).toMatchObject({
+        fullName: 'Nguyen Van A',
+        id: 11,
+        isAvailable: true,
+      })
+      expect(tripRepo.findPendingOrders).toHaveBeenCalledWith(5)
+    })
+  })
+
   describe('findById', () => {
     it('trả về order nếu tìm thấy', async () => {
       tripRepo.findById.mockResolvedValue({ id: 1 } as any)
@@ -234,6 +319,273 @@ describe('TripsService', () => {
         expect.objectContaining({ endTime: expect.any(Date) }),
       )
       expect(res).toEqual({ id: 1, status: 'COMPLETED' })
+    })
+  })
+
+  describe('createManualTrip', () => {
+    it('chặn tạo chuyến khi xe đang bận ở chuyến khác', async () => {
+      prismaService.vehicle.findFirst.mockResolvedValue({ hubId: 5, id: 21 })
+      prismaService.user.findFirst.mockResolvedValue({ hubId: 5, id: 12 })
+      prismaService.order.findMany.mockResolvedValue([{ currentHubId: 5, id: 1 }])
+      prismaService.trip.findFirst.mockResolvedValueOnce({ id: 77 })
+
+      await expect(
+        service.createManualTrip(
+          {
+            driverId: 12,
+            hubId: 5,
+            orderIds: [1],
+            vehicleId: 21,
+          } as any,
+          { roleName: 'ADMIN', userId: 1 } as any,
+        ),
+      ).rejects.toThrow('Xe #21 đang bận ở chuyến #77')
+    })
+  })
+
+  describe('driver assignment requests', () => {
+    it('tạo request nhận đơn hợp lệ cho driver cùng hub', async () => {
+      prismaService.user.findFirst
+        .mockResolvedValueOnce({ fullName: 'Tran Van B', hubId: 5, id: 12 })
+      prismaService.trip.findFirst.mockResolvedValue(null)
+      prismaService.order.findFirst.mockResolvedValue({
+        id: 101,
+        trackingCode: 'ORD-101',
+      })
+      prismaService.driverAssignmentRequest.findFirst.mockResolvedValue(null)
+      prismaService.driverAssignmentRequest.create.mockResolvedValue({
+        createdAt: new Date('2026-04-25T09:00:00.000Z'),
+        driver: { fullName: 'Tran Van B', id: 12 },
+        driverId: 12,
+        hubId: 5,
+        id: 501,
+        order: { currentTrip: null, id: 101, trackingCode: 'ORD-101' },
+        orderId: 101,
+        reviewNote: null,
+        reviewedAt: null,
+        reviewedById: null,
+        status: 'PENDING',
+      })
+      prismaService.user.findMany.mockResolvedValue([{ id: 21 }])
+
+      const result = await service.createDriverAssignmentRequest(
+        { orderId: 101 } as any,
+        { roleName: 'DRIVER', userId: 12 } as any,
+      )
+
+      expect(prismaService.driverAssignmentRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            driverId: 12,
+            hubId: 5,
+            orderId: 101,
+          },
+        }),
+      )
+      expect(result).toMatchObject({
+        driverId: 12,
+        id: 501,
+        orderId: 101,
+        orderTrackingCode: 'ORD-101',
+        status: 'PENDING',
+      })
+    })
+
+    it('chặn driver tạo request khi đang có chuyến IN_PROGRESS', async () => {
+      prismaService.user.findFirst.mockResolvedValueOnce({ fullName: 'Tran Van B', hubId: 5, id: 12 })
+      prismaService.trip.findFirst.mockResolvedValue({ id: 88 })
+
+      await expect(
+        service.createDriverAssignmentRequest(
+          { orderId: 101 } as any,
+          { roleName: 'DRIVER', userId: 12 } as any,
+        ),
+      ).rejects.toThrow('Tài xế #12 đang chạy chuyến #88')
+    })
+
+    it('duyệt request và thêm đơn vào chuyến PENDING duy nhất của tài xế', async () => {
+      prismaService.user.findFirst.mockResolvedValue({ hubId: 5 })
+      prismaService.driverAssignmentRequest.findUnique.mockResolvedValue({
+        createdAt: new Date('2026-04-25T09:00:00.000Z'),
+        driver: { fullName: 'Tran Van B', id: 12 },
+        driverId: 12,
+        hubId: 5,
+        id: 501,
+        order: {
+          currentHubId: 5,
+          currentTrip: null,
+          currentTripId: null,
+          id: 101,
+          receiverLat: 10.8,
+          receiverLng: 106.6,
+          senderLat: 10.7,
+          senderLng: 106.5,
+          status: 'PENDING',
+          totalWeight: 12,
+          trackingCode: 'ORD-101',
+        },
+        orderId: 101,
+        reviewNote: null,
+        reviewedAt: null,
+        reviewedById: null,
+        status: 'PENDING',
+      })
+      prismaService.trip.findMany.mockResolvedValue([
+        {
+          driverId: 12,
+          id: 88,
+          status: 'PENDING',
+          stops: [],
+          vehicle: { capacityWeight: 50, hubId: 5, id: 21, licensePlate: '51A-88888' },
+        },
+      ])
+      prismaService.order.findMany.mockResolvedValue([])
+      prismaService.$transaction = jest.fn().mockImplementation(async (callback) => {
+        const tx = {
+          driverAssignmentRequest: {
+            findUnique: jest.fn().mockResolvedValue({
+              createdAt: new Date('2026-04-25T09:00:00.000Z'),
+              driver: { fullName: 'Tran Van B', id: 12 },
+              driverId: 12,
+              hubId: 5,
+              id: 501,
+              order: {
+                currentTrip: {
+                  id: 88,
+                  status: 'PENDING',
+                  vehicle: { id: 21, licensePlate: '51A-88888' },
+                },
+                id: 101,
+                trackingCode: 'ORD-101',
+              },
+              orderId: 101,
+              reviewNote: null,
+              reviewedAt: new Date('2026-04-25T09:10:00.000Z'),
+              reviewedById: 9,
+              status: 'APPROVED',
+            }),
+            update: jest.fn().mockResolvedValue(undefined),
+            updateMany: jest.fn().mockResolvedValue(undefined),
+          },
+          order: {
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          },
+          tripStop: {
+            create: jest.fn().mockResolvedValue(undefined),
+          },
+        }
+        return callback(tx)
+      })
+
+      const result = await service.approveAssignmentRequest(
+        501,
+        {} as any,
+        { roleName: 'WAREHOUSE_STAFF', userId: 9 } as any,
+      )
+
+      expect(prismaService.$transaction).toHaveBeenCalled()
+      expect(result).toMatchObject({
+        id: 501,
+        orderTrackingCode: 'ORD-101',
+        status: 'APPROVED',
+        trip: {
+          id: 88,
+        },
+      })
+    })
+
+    it('từ chối request với review note', async () => {
+      prismaService.user.findFirst.mockResolvedValue({ hubId: 5 })
+      prismaService.driverAssignmentRequest.findUnique.mockResolvedValue({
+        createdAt: new Date('2026-04-25T09:00:00.000Z'),
+        driver: { fullName: 'Tran Van B', id: 12 },
+        driverId: 12,
+        hubId: 5,
+        id: 501,
+        order: { currentTrip: null, id: 101, trackingCode: 'ORD-101' },
+        orderId: 101,
+        reviewNote: null,
+        reviewedAt: null,
+        reviewedById: null,
+        status: 'PENDING',
+      })
+      prismaService.driverAssignmentRequest.update.mockResolvedValue({
+        createdAt: new Date('2026-04-25T09:00:00.000Z'),
+        driver: { fullName: 'Tran Van B', id: 12 },
+        driverId: 12,
+        hubId: 5,
+        id: 501,
+        order: { currentTrip: null, id: 101, trackingCode: 'ORD-101' },
+        orderId: 101,
+        reviewNote: 'Xe đang đầy tải',
+        reviewedAt: new Date('2026-04-25T09:20:00.000Z'),
+        reviewedById: 9,
+        status: 'REJECTED',
+      })
+
+      const result = await service.rejectAssignmentRequest(
+        501,
+        { reviewNote: 'Xe đang đầy tải' } as any,
+        { roleName: 'WAREHOUSE_STAFF', userId: 9 } as any,
+      )
+
+      expect(prismaService.driverAssignmentRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            reviewNote: 'Xe đang đầy tải',
+            status: 'REJECTED',
+          }),
+        }),
+      )
+      expect(result.reviewNote).toBe('Xe đang đầy tải')
+    })
+  })
+
+  describe('assignVehicleToTrip', () => {
+    it('cho phép đổi cả xe và tài xế cho chuyến PENDING', async () => {
+      tripRepo.findById.mockResolvedValue({
+        driverId: 12,
+        id: 88,
+        status: 'PENDING',
+        stops: [{ orderId: 101, order: { currentHubId: 5 } }],
+        vehicle: { hubId: 5 },
+      } as any)
+      prismaService.vehicle.findUnique.mockResolvedValue({
+        capacityWeight: 90,
+        hubId: 5,
+        id: 21,
+      })
+      prismaService.vehicle.findFirst.mockResolvedValue({ hubId: 5, id: 21 })
+      prismaService.user.findFirst.mockResolvedValue({ hubId: 5, id: 12 })
+      prismaService.order.findMany = jest
+        .fn()
+        .mockResolvedValueOnce([{ currentHubId: 5, id: 101 }])
+        .mockResolvedValueOnce([{ id: 101, totalWeight: 12 }])
+      prismaService.trip.findFirst.mockResolvedValue(null)
+      prismaService.trip.update = jest.fn().mockResolvedValue({
+        driverId: 12,
+        id: 88,
+        vehicleId: 21,
+      })
+
+      const result = await service.assignVehicleToTrip(
+        88,
+        {
+          driverId: 12,
+          vehicleId: 21,
+        } as any,
+      )
+
+      expect(prismaService.trip.update).toHaveBeenCalledWith({
+        data: { driverId: 12, vehicleId: 21 },
+        include: { stops: true },
+        where: { id: 88 },
+      })
+      expect(result).toEqual({
+        driverId: 12,
+        id: 88,
+        vehicleId: 21,
+      })
     })
   })
 

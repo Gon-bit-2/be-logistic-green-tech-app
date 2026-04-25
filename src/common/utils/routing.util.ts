@@ -7,6 +7,7 @@ export interface OptimizedRouteResult {
   waypoints: RouteCoordinate[]
   distance: number // in meters
   duration: number // in seconds
+  polyline?: string | null
 }
 
 /**
@@ -27,7 +28,7 @@ export async function optimizeRouteWithOSRM(
   // OSRM format: lng,lat;lng,lat
   const coordString = coordinates.map((c) => `${c.lng},${c.lat}`).join(';')
 
-  const url = `http://router.project-osrm.org/trip/v1/driving/${coordString}?roundtrip=${roundtrip}&source=first`
+  const url = `http://router.project-osrm.org/trip/v1/driving/${coordString}?roundtrip=${roundtrip}&source=first&geometries=polyline`
 
   try {
     const response = await fetch(url)
@@ -52,6 +53,7 @@ export async function optimizeRouteWithOSRM(
       waypoints: optimizedWaypoints,
       distance,
       duration,
+      polyline: data.trips?.[0]?.geometry ?? null,
     }
   } catch (error: any) {
     console.error('Error optimizing route with OSRM', error.message)
@@ -60,6 +62,7 @@ export async function optimizeRouteWithOSRM(
       waypoints: coordinates,
       distance: 0,
       duration: 0,
+      polyline: null,
     }
   }
 }

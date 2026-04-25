@@ -4,6 +4,8 @@ import {
   NotificationEventName,
 } from '../events/notification.event'
 import type {
+  DriverAssignmentRequestReviewedEvent,
+  DriverAssignmentRequestSubmittedEvent,
   OrderCreatedEvent,
   OrderStatusUpdatedEvent,
   RoleRequestReviewedEvent,
@@ -36,6 +38,30 @@ export class NotificationEventListener {
     } catch (error) {
       this.logger.error(
         `Failed to create reviewed role request notification for roleRequestId=${event.roleRequestId}`,
+        error instanceof Error ? error.stack : undefined,
+      )
+    }
+  }
+
+  @OnEvent(NotificationEventName.DRIVER_ASSIGNMENT_REQUEST_SUBMITTED, { async: true })
+  async handleDriverAssignmentRequestSubmitted(event: DriverAssignmentRequestSubmittedEvent) {
+    try {
+      await this.notificationService.createDriverAssignmentRequestSubmittedNotifications(event)
+    } catch (error) {
+      this.logger.error(
+        `Failed to create driver assignment submitted notifications for request=${event.assignmentRequestId}`,
+        error instanceof Error ? error.stack : undefined,
+      )
+    }
+  }
+
+  @OnEvent(NotificationEventName.DRIVER_ASSIGNMENT_REQUEST_REVIEWED, { async: true })
+  async handleDriverAssignmentRequestReviewed(event: DriverAssignmentRequestReviewedEvent) {
+    try {
+      await this.notificationService.createDriverAssignmentRequestReviewedNotification(event)
+    } catch (error) {
+      this.logger.error(
+        `Failed to create driver assignment reviewed notification for request=${event.assignmentRequestId}`,
         error instanceof Error ? error.stack : undefined,
       )
     }

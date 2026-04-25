@@ -1,12 +1,16 @@
 import { Controller, Get, Post, Body, Param, ParseIntPipe, Patch, Query } from '@nestjs/common'
 import {
   AddOrdersToTripDto,
+  ApproveDriverAssignmentRequestDto,
   AssignVehicleDto,
   AutoDispatchQueryDto,
+  CreateDriverAssignmentRequestDto,
   CreateManualTripDto,
   DispatchApproveDto,
+  DispatchBoardQueryDto,
   DispatchPreviewQueryDto,
   GetTripListDto,
+  RejectDriverAssignmentRequestDto,
   UpdateTripStatusDto,
 } from '../dto/trip.dto'
 import { TripsService } from '../service/trips.service'
@@ -30,6 +34,56 @@ export class TripsController {
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
   dispatchPreview(@Query() query: DispatchPreviewQueryDto, @ActiveUser() user: AccessTokenPayload) {
     return this.tripsService.previewDispatch(query.hubId, user)
+  }
+
+  @Get('dispatch-board')
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  dispatchBoard(@Query() query: DispatchBoardQueryDto, @ActiveUser() user: AccessTokenPayload) {
+    return this.tripsService.getDispatchBoard(query.hubId, user)
+  }
+
+  @Get('driver-dispatch-board')
+  @Roles(roleName.DRIVER)
+  driverDispatchBoard(@ActiveUser() user: AccessTokenPayload) {
+    return this.tripsService.getDriverDispatchBoard(user)
+  }
+
+  @Get('driver-assignment-requests')
+  @Roles(roleName.DRIVER)
+  driverAssignmentRequests(@ActiveUser() user: AccessTokenPayload) {
+    return this.tripsService.listDriverAssignmentRequests(user)
+  }
+
+  @Post('driver-assignment-requests')
+  @Roles(roleName.DRIVER)
+  createDriverAssignmentRequest(@Body() body: CreateDriverAssignmentRequestDto, @ActiveUser() user: AccessTokenPayload) {
+    return this.tripsService.createDriverAssignmentRequest(body, user)
+  }
+
+  @Get('assignment-requests')
+  @Roles(roleName.WAREHOUSE_STAFF)
+  assignmentRequests(@ActiveUser() user: AccessTokenPayload) {
+    return this.tripsService.listAssignmentRequests(user)
+  }
+
+  @Patch('assignment-requests/:id/approve')
+  @Roles(roleName.WAREHOUSE_STAFF)
+  approveAssignmentRequest(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: ApproveDriverAssignmentRequestDto,
+    @ActiveUser() user: AccessTokenPayload,
+  ) {
+    return this.tripsService.approveAssignmentRequest(id, body, user)
+  }
+
+  @Patch('assignment-requests/:id/reject')
+  @Roles(roleName.WAREHOUSE_STAFF)
+  rejectAssignmentRequest(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: RejectDriverAssignmentRequestDto,
+    @ActiveUser() user: AccessTokenPayload,
+  ) {
+    return this.tripsService.rejectAssignmentRequest(id, body, user)
   }
 
   @Post('dispatch-approve')

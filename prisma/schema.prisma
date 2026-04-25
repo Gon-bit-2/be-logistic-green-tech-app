@@ -62,6 +62,8 @@ model User {
   notifications           Notification[]       @relation("UserNotifications")
   requestedRoleChanges    RoleRequest[]        @relation("RoleRequestRequester")
   reviewedRoleChanges     RoleRequest[]        @relation("RoleRequestReviewedBy")
+  driverAssignmentRequests DriverAssignmentRequest[] @relation("DriverAssignmentRequestDriver")
+  reviewedDriverAssignmentRequests DriverAssignmentRequest[] @relation("DriverAssignmentRequestReviewedBy")
   createdRoles            Role[]               @relation("RoleCreatedBy")
   updatedRoles            Role[]               @relation("RoleUpdatedBy")
   deletedRoles            Role[]               @relation("RoleDeletedBy")
@@ -293,6 +295,32 @@ model Notification {
   @@map("notifications")
 }
 
+model DriverAssignmentRequest {
+  id           Int                           @id @default(autoincrement())
+  orderId      Int
+  order        Order                         @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  driverId     Int
+  driver       User                          @relation("DriverAssignmentRequestDriver", fields: [driverId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  hubId        Int
+  hub          Hub                           @relation(fields: [hubId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  status       DriverAssignmentRequestStatus @default(PENDING)
+  reviewedById Int?
+  reviewedBy   User?                         @relation("DriverAssignmentRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  reviewNote   String?                       @db.VarChar(1000)
+  reviewedAt   DateTime?
+  createdAt    DateTime                      @default(now())
+  updatedAt    DateTime                      @updatedAt
+
+  @@index([orderId])
+  @@index([driverId])
+  @@index([hubId])
+  @@index([status])
+  @@index([driverId, status])
+  @@index([hubId, status])
+  @@index([orderId, driverId, status])
+  @@map("driver_assignment_requests")
+}
+
 // 2. MODULE: FLEET & GREEN TECH (Quản lý xe và thông số môi trường)
 model Vehicle {
   id                Int         @id @default(autoincrement())
@@ -341,6 +369,7 @@ model Hub {
   ordersCurrentlyHere Order[]    @relation("OrdersAtHub") // Hàng đang tồn kho tại đây
   vehicles            Vehicle[]  @relation("HubVehicles") // Xe biên chế tại kho
   assignedRoleRequests RoleRequest[] @relation("RoleRequestAssignedHub")
+  driverAssignmentRequests DriverAssignmentRequest[]
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
   deletedAt           DateTime?
@@ -413,6 +442,7 @@ model Order {
   tripStops           TripStop[]
   payment             Payment?
   emissionAllocations OrderEmissionAllocation[] // Phase 4: Phân bổ CO₂ cho từng đơn
+  driverAssignmentRequests DriverAssignmentRequest[]
 
   @@index([trackingCode])
   @@index([customerId])
@@ -677,10 +707,20 @@ enum RoleRequestStatus {
   REJECTED
 }
 
+enum DriverAssignmentRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 enum NotificationType {
   ROLE_REQUEST_SUBMITTED
   ROLE_REQUEST_APPROVED
   ROLE_REQUEST_REJECTED
+  DRIVER_ASSIGNMENT_REQUEST_SUBMITTED
+  DRIVER_ASSIGNMENT_REQUEST_APPROVED
+  DRIVER_ASSIGNMENT_REQUEST_REJECTED
   ORDER_CREATED
   ORDER_OUT_FOR_DELIVERY
   ORDER_DELIVERED
