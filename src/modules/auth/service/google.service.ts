@@ -8,7 +8,7 @@ import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
 import { HashingService } from 'src/common/services/hashing.service'
 import { v4 as uuidv4 } from 'uuid'
 import { AuthService } from 'src/modules/auth/service/auth.service'
-import { SharedRoleRepository } from 'src/common/repositories/shared-role.repo'
+import { RoleRepository } from 'src/modules/role/repository/role.repo'
 
 @Injectable()
 export class GoogleService {
@@ -18,7 +18,7 @@ export class GoogleService {
 
   constructor(
     private readonly authRepository: AuthRepository,
-    private readonly sharedRoleRepository: SharedRoleRepository,
+    private readonly roleRepository: RoleRepository,
     private readonly hashService: HashingService,
     private readonly authService: AuthService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
@@ -101,7 +101,7 @@ export class GoogleService {
         email: data.email,
       })
       if (!user) {
-        const clientRoleId = await this.sharedRoleRepository.getClientRoleId()
+        const clientRoleId = await this.roleRepository.getClientRoleId()
         const randomPassword = uuidv4()
         const hashPassword = await this.hashService.hash(randomPassword)
         user = await this.authRepository.createUserIncludeRole({

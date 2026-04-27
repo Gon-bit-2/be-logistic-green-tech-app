@@ -73,14 +73,14 @@ export class OrdersController {
   }
 
   @Patch(':id/cancel')
-  @Roles(roleName.CUSTOMER)
+  @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
   @ResourceAccess({
     model: 'order',
     paramName: 'id',
     ownerField: 'customerId',
   })
   cancel(@Param('id', ParseIntPipe) id: number, @ActiveUser() user: AccessTokenPayload) {
-    return this.ordersService.cancelByCustomer(id, user)
+    return this.ordersService.cancel(id, user)
   }
 
   @Delete(':id')

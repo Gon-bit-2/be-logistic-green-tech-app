@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { OnEvent } from '@nestjs/event-emitter'
-import {
-  NotificationEventName,
-} from '../events/notification.event'
+import { NotificationEventName } from '../events/notification.event'
 import type {
   DriverAssignmentRequestReviewedEvent,
   DriverAssignmentRequestSubmittedEvent,

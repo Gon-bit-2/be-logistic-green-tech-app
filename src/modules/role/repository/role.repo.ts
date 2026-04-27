@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import { Prisma, RoleRequestStatus } from 'generated/prisma'
+import roleName from 'src/common/constants/role.constant'
 import { PrismaService } from 'src/database/prisma.service'
-import { GetRoleRequestsQueryType } from '../model/role.model'
+import { GetRoleRequestsQueryType, RoleType } from '../model/role.model'
 
 type PrismaExecutor = PrismaService | Prisma.TransactionClient
 
@@ -38,10 +39,51 @@ const roleRequestDetailInclude = {
 
 @Injectable()
 export class RoleRepository {
+  private readonly roleIdCache = new Map<string, number>()
+
   constructor(private readonly prisma: PrismaService) {}
 
   private getClient(client?: PrismaExecutor) {
     return client ?? this.prisma
+  }
+
+  private async getRole(name: string) {
+    const role: RoleType = await this.prisma.$queryRaw<
+      RoleType[]
+    >`SELECT * FROM "roles" WHERE name=${name} AND "deletedAt" IS NULL LIMIT 1`.then((res) => {
+      if (res.length === 0) {
+        throw new Error('Role not found')
+      }
+      return res[0]
+    })
+    return role
+  }
+
+  async getRoleIdByName(name: string) {
+    const cachedRoleId = this.roleIdCache.get(name)
+    if (cachedRoleId) {
+      return cachedRoleId
+    }
+
+    const role = await this.getRole(name)
+    this.roleIdCache.set(name, role.id)
+    return role.id
+  }
+
+  async getClientRoleId() {
+    return this.getRoleIdByName(roleName.CUSTOMER)
+  }
+
+  async getAdminRoleId() {
+    return this.getRoleIdByName(roleName.ADMIN)
+  }
+
+  async getDriverRoleId() {
+    return this.getRoleIdByName(roleName.DRIVER)
+  }
+
+  async getWarehouseStaffRoleId() {
+    return this.getRoleIdByName(roleName.WAREHOUSE_STAFF)
   }
 
   async findPendingByRequesterId(requesterId: number) {

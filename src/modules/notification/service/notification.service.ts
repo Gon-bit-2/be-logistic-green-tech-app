@@ -88,11 +88,7 @@ export class NotificationService {
     })
   }
 
-  async createOrderCreatedNotification(input: {
-    userId: number
-    orderId: number
-    trackingCode: string
-  }) {
+  async createOrderCreatedNotification(input: { userId: number; orderId: number; trackingCode: string }) {
     await this.notificationRepository.createManyForUsers([input.userId], {
       type: NotificationType.ORDER_CREATED,
       title: 'Tạo đơn hàng thành công',

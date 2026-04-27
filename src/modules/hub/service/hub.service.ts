@@ -6,14 +6,14 @@ import {
   UpdateHubBodyType,
 } from 'src/modules/hub/model/hub.model'
 import { HubRepository } from 'src/modules/hub/repository/hub.repo'
-import { ShareUserRepository } from 'src/common/repositories/shared-user.repo'
+import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
 import roleName from 'src/common/constants/role.constant'
 
 @Injectable()
 export class HubService {
   constructor(
     private readonly hubRepo: HubRepository,
-    private readonly shareUserRepo: ShareUserRepository,
+    private readonly authRepository: AuthRepository,
   ) {}
 
   async create(data: CreateHubBodyType) {
@@ -57,7 +57,7 @@ export class HubService {
   async assignStaff(hubId: number, userId: number) {
     await this.findById(hubId)
 
-    const user = await this.shareUserRepo.findUniqueIncludeRolePermissions({ id: userId })
+    const user = await this.authRepository.findUniqueIncludeRolePermissions({ id: userId })
     if (!user) {
       throw new NotFoundException('Không tìm thấy người dùng')
     }
@@ -72,7 +72,7 @@ export class HubService {
   async removeStaff(hubId: number, userId: number) {
     await this.findById(hubId)
 
-    const user = await this.shareUserRepo.findUniqueIncludeRolePermissions({ id: userId })
+    const user = await this.authRepository.findUniqueIncludeRolePermissions({ id: userId })
     if (!user) {
       throw new NotFoundException('Không tìm thấy người dùng')
     }
@@ -91,7 +91,7 @@ export class HubService {
   async assignDriver(hubId: number, userId: number) {
     await this.findById(hubId)
 
-    const user = await this.shareUserRepo.findUniqueIncludeRolePermissions({ id: userId })
+    const user = await this.authRepository.findUniqueIncludeRolePermissions({ id: userId })
     if (!user) {
       throw new NotFoundException('Không tìm thấy người dùng')
     }
@@ -106,7 +106,7 @@ export class HubService {
   async removeDriver(hubId: number, userId: number) {
     await this.findById(hubId)
 
-    const user = await this.shareUserRepo.findUniqueIncludeRolePermissions({ id: userId })
+    const user = await this.authRepository.findUniqueIncludeRolePermissions({ id: userId })
     if (!user) {
       throw new NotFoundException('Không tìm thấy người dùng')
     }

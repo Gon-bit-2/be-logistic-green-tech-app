@@ -1,4 +1,10 @@
 import { createZodDto } from 'nestjs-zod'
-import { MessageResSchema } from 'src/common/model/response.model'
+import z from 'zod'
+
+export const MessageResSchema = z.object({
+  message: z.string(),
+})
+
+export type MessageResType = z.infer<typeof MessageResSchema>
 
 export class MessageResDTO extends createZodDto(MessageResSchema) {}

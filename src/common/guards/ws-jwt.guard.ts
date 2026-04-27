@@ -36,26 +36,21 @@ export class WsJwtGuard implements CanActivate {
     const token = this.extractTokenFromHandshake(client)
 
     if (!token) {
-      this.logger.warn(
-        `🚫 WebSocket rejected: No auth token provided | client=${client.id}`,
-      )
+      this.logger.warn(`🚫 WebSocket rejected: No auth token provided | client=${client.id}`)
       return false
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync<AccessTokenPayload>(
-        token,
-        { secret: envConfig.ACCESS_TOKEN_SECRET },
-      )
+      const payload = await this.jwtService.verifyAsync<AccessTokenPayload>(token, {
+        secret: envConfig.ACCESS_TOKEN_SECRET,
+      })
 
       // Gán user payload vào socket.data để các handler sử dụng sau này
       client.data.user = payload
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      this.logger.warn(
-        `🚫 WebSocket rejected: Invalid token | client=${client.id} | error=${message}`,
-      )
+      this.logger.warn(`🚫 WebSocket rejected: Invalid token | client=${client.id} | error=${message}`)
       return false
     }
   }

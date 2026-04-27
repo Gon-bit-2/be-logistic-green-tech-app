@@ -1,7 +1,48 @@
 import z from 'zod'
 import roleName from 'src/common/constants/role.constant'
-import { PaginationQuerySchema } from 'src/common/model/request.model'
+import { HTTPMethod } from 'src/common/constants/role.constant'
+import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
+
+export const PermissionSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  description: z.string(),
+  module: z.string().max(500),
+  path: z.string().max(1000),
+  method: z.enum([
+    HTTPMethod.GET,
+    HTTPMethod.POST,
+    HTTPMethod.PUT,
+    HTTPMethod.DELETE,
+    HTTPMethod.PATCH,
+    HTTPMethod.OPTIONS,
+    HTTPMethod.HEAD,
+  ]),
+  createdById: z.number().nullable(),
+  createdAt: z.date(),
+  updatedById: z.number().nullable(),
+  updatedAt: z.date(),
+  deletedById: z.number().nullable(),
+  deletedAt: z.date().nullable(),
+})
+
+export const RoleSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  description: z.string().nullable(),
+  isActive: z.boolean().default(true),
+  createdById: z.number().nullable(),
+  updatedById: z.number().nullable(),
+  deletedById: z.number().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  deletedAt: z.date().nullable(),
+})
+
+export const RolePermissionSchema = RoleSchema.extend({
+  permissions: z.array(PermissionSchema),
+})
 
 export const RoleRequestTargetRoleSchema = z.enum([roleName.DRIVER, roleName.WAREHOUSE_STAFF])
 
@@ -80,6 +121,9 @@ export const GetRoleRequestsResSchema = z.object({
   totalItems: z.number().int().nonnegative(),
 })
 
+export type PermissionType = z.infer<typeof PermissionSchema>
+export type RoleType = z.infer<typeof RoleSchema>
+export type RolePermissionType = z.infer<typeof RolePermissionSchema>
 export type CreateRoleRequestBodyType = z.infer<typeof CreateRoleRequestBodySchema>
 export type ApproveRoleRequestBodyType = z.infer<typeof ApproveRoleRequestBodySchema>
 export type RejectRoleRequestBodyType = z.infer<typeof RejectRoleRequestBodySchema>

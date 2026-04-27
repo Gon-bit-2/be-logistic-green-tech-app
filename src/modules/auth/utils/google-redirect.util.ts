@@ -1,7 +1,4 @@
-export const buildGoogleRedirectUrl = (
-  baseUrl: string,
-  params: Record<string, string | null | undefined>,
-) => {
+export const buildGoogleRedirectUrl = (baseUrl: string, params: Record<string, string | null | undefined>) => {
   const redirectUrl = new URL(baseUrl)
 
   for (const [key, value] of Object.entries(params)) {

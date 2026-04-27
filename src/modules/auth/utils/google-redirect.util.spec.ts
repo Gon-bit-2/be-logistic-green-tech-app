@@ -7,9 +7,7 @@ describe('buildGoogleRedirectUrl', () => {
       refreshToken: 'refresh.token.value',
     })
 
-    expect(redirectUrl).toBe(
-      'appecomerce://callback?accessToken=access.token.value&refreshToken=refresh.token.value',
-    )
+    expect(redirectUrl).toBe('appecomerce://callback?accessToken=access.token.value&refreshToken=refresh.token.value')
   })
 
   it('preserves existing query and hash while encoding error messages', () => {

@@ -8,6 +8,7 @@
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "backfill:order-dimensions": "ts-node inittalScript/backfill-order-dimensions.ts",
     "p": "ts-node inittalScript/create-permission.ts",
     "start": "nest start",
     "start:dev": "nest start --watch",

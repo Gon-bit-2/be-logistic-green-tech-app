@@ -434,6 +434,23 @@ export class TripsService {
               status: {
                 in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
               },
+              OR: [
+                {
+                  payment: {
+                    is: {
+                      method: 'COD',
+                    },
+                  },
+                },
+                {
+                  payment: {
+                    is: {
+                      method: 'STRIPE',
+                      status: 'COMPLETED',
+                    },
+                  },
+                },
+              ],
             },
             orderBy: [{ preferredDeliveryTimeEnd: 'asc' }, { createdAt: 'asc' }],
             select: {
@@ -491,8 +508,9 @@ export class TripsService {
         assignableOrderCount: assignableOrders.length,
         completedTripCount,
         inProgressTripCount: activeTrips.filter((trip) => trip.status === TRIP_STATUS.IN_PROGRESS).length,
-        pendingRequestCount: mappedRequests.filter((request) => request.status === DriverAssignmentRequestStatus.PENDING)
-          .length,
+        pendingRequestCount: mappedRequests.filter(
+          (request) => request.status === DriverAssignmentRequestStatus.PENDING,
+        ).length,
       },
     }
   }
@@ -519,11 +537,11 @@ export class TripsService {
     actor: AccessTokenPayload,
   ): Promise<DriverAssignmentRequestResType> {
     const driver = await this.getDriverScopeUser(actor)
-    
+
     if (!driver.hubId) {
       throw new ForbiddenException('Bạn chưa được phân bổ vào trạm nào nên không thể nhận đơn.')
     }
-    
+
     await this.assertDriverCanRequestOrder(actor.userId)
 
     const [order, existingRequest] = await Promise.all([
@@ -536,6 +554,23 @@ export class TripsService {
           status: {
             in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
           },
+          OR: [
+            {
+              payment: {
+                is: {
+                  method: 'COD',
+                },
+              },
+            },
+            {
+              payment: {
+                is: {
+                  method: 'STRIPE',
+                  status: 'COMPLETED',
+                },
+              },
+            },
+          ],
         },
         select: {
           id: true,
@@ -676,8 +711,7 @@ export class TripsService {
     }
 
     const isAssignableOrderStatus =
-      request.order.status === ORDER_STATUS.PENDING ||
-      request.order.status === ORDER_STATUS.ARRIVED_AT_HUB
+      request.order.status === ORDER_STATUS.PENDING || request.order.status === ORDER_STATUS.ARRIVED_AT_HUB
 
     if (request.order.currentTripId || !isAssignableOrderStatus) {
       await this.prismaService.driverAssignmentRequest.update({
@@ -690,6 +724,8 @@ export class TripsService {
       })
       throw new BadRequestException('Đơn hàng không còn khả dụng để duyệt yêu cầu này.')
     }
+
+    this.assertOrderPaymentReadyForDispatch(request.order)
 
     const pendingTrips = await this.prismaService.trip.findMany({
       where: {
@@ -887,6 +923,23 @@ export class TripsService {
       where: {
         id: { in: orderIds },
         status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
+        OR: [
+          {
+            payment: {
+              is: {
+                method: 'COD',
+              },
+            },
+          },
+          {
+            payment: {
+              is: {
+                method: 'STRIPE',
+                status: 'COMPLETED',
+              },
+            },
+          },
+        ],
       },
     })
 
@@ -1005,6 +1058,23 @@ export class TripsService {
       where: {
         id: { in: dto.orderIds },
         status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
+        OR: [
+          {
+            payment: {
+              is: {
+                method: 'COD',
+              },
+            },
+          },
+          {
+            payment: {
+              is: {
+                method: 'STRIPE',
+                status: 'COMPLETED',
+              },
+            },
+          },
+        ],
       },
     })
 
@@ -1048,7 +1118,26 @@ export class TripsService {
       await tx.tripStop.createMany({ data: newStops })
 
       await tx.order.updateMany({
-        where: { id: { in: ordersToAdd.map((o) => o.id) } },
+        where: {
+          id: { in: ordersToAdd.map((o) => o.id) },
+          OR: [
+            {
+              payment: {
+                is: {
+                  method: 'COD',
+                },
+              },
+            },
+            {
+              payment: {
+                is: {
+                  method: 'STRIPE',
+                  status: 'COMPLETED',
+                },
+              },
+            },
+          ],
+        },
         data: { status: ORDER_STATUS.ASSIGNED, currentTripId: tripId },
       })
 
@@ -1091,6 +1180,12 @@ export class TripsService {
       order: {
         select: {
           currentHubId: true,
+          payment: {
+            select: {
+              method: true,
+              status: true,
+            },
+          },
           currentTrip: {
             include: {
               vehicle: {
@@ -1197,12 +1292,50 @@ export class TripsService {
     await this.assertDriverHasNoInProgressTrip(driverId)
   }
 
+  private isOrderPaymentReadyForDispatch(order: {
+    payment?: { method?: string | null; status?: string | null } | null
+  }) {
+    if (order.payment?.method === 'COD') {
+      return true
+    }
+
+    return order.payment?.method === 'STRIPE' && order.payment.status === 'COMPLETED'
+  }
+
+  private getOrderDispatchBlockMessage(order: {
+    id?: number | null
+    trackingCode?: string | null
+    payment?: { method?: string | null; status?: string | null } | null
+  }) {
+    const orderLabel = order.trackingCode ?? `#${order.id ?? 'N/A'}`
+
+    if (order.payment?.method === 'STRIPE' && order.payment.status !== 'COMPLETED') {
+      return `Đơn ${orderLabel} dùng Stripe và chưa thanh toán thành công nên chưa thể vận chuyển.`
+    }
+
+    return `Đơn ${orderLabel} chưa đủ điều kiện thanh toán để đưa vào vận chuyển.`
+  }
+
+  private assertOrderPaymentReadyForDispatch(order: {
+    id?: number | null
+    trackingCode?: string | null
+    payment?: { method?: string | null; status?: string | null } | null
+  }) {
+    if (!this.isOrderPaymentReadyForDispatch(order)) {
+      throw new BadRequestException(this.getOrderDispatchBlockMessage(order))
+    }
+  }
+
   private async addOrderToApprovedAssignmentRequest(trip: any, request: any, reviewedById: number) {
     if (trip.status !== TRIP_STATUS.PENDING) {
       throw new BadRequestException('Chỉ có thể thêm đơn vào chuyến đang chờ khởi hành.')
     }
 
-    const currentOrderIds = trip.stops.map((stop: { orderId?: number | null }) => stop.orderId).filter((id: number | null) => id != null)
+    this.assertOrderPaymentReadyForDispatch(request.order)
+
+    const currentOrderIds = trip.stops
+      .map((stop: { orderId?: number | null }) => stop.orderId)
+      .filter((id: number | null) => id != null)
     const currentOrders = currentOrderIds.length
       ? await this.prismaService.order.findMany({
           where: {
@@ -1224,7 +1357,8 @@ export class TripsService {
     }
 
     const nextSequence =
-      (trip.stops.length > 0 ? Math.max(...trip.stops.map((stop: { stopSequence: number }) => stop.stopSequence)) : 0) + 1
+      (trip.stops.length > 0 ? Math.max(...trip.stops.map((stop: { stopSequence: number }) => stop.stopSequence)) : 0) +
+      1
     const nextStopType =
       calculateHaversineDistance(
         request.order.senderLat,
@@ -1243,6 +1377,23 @@ export class TripsService {
           status: {
             in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
           },
+          OR: [
+            {
+              payment: {
+                is: {
+                  method: 'COD',
+                },
+              },
+            },
+            {
+              payment: {
+                is: {
+                  method: 'STRIPE',
+                  status: 'COMPLETED',
+                },
+              },
+            },
+          ],
         },
         data: {
           currentTripId: trip.id,
@@ -1398,6 +1549,23 @@ export class TripsService {
         deletedAt: null,
         status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
         currentTripId: null,
+        OR: [
+          {
+            payment: {
+              is: {
+                method: 'COD',
+              },
+            },
+          },
+          {
+            payment: {
+              is: {
+                method: 'STRIPE',
+                status: 'COMPLETED',
+              },
+            },
+          },
+        ],
       },
       select: { id: true, currentHubId: true },
     })
@@ -1490,6 +1658,7 @@ export class TripsService {
     const orderMap = new Map<number, any>()
     for (const stop of trip.stops) {
       if (stop.orderId && stop.order) {
+        this.assertOrderPaymentReadyForDispatch(stop.order)
         orderMap.set(stop.orderId, stop.order)
       }
     }
@@ -1668,7 +1837,8 @@ export class TripsService {
     const createdById = actor?.userId ?? trip.driverId
     const source = this.getTrackingSource(actor)
     const terminalStops = trip.stops.filter(
-      (stop) => stop.orderId && stop.order && [STOP_TYPE.DROPOFF, STOP_TYPE.HUB_TRANSFER].includes(stop.stopType as any),
+      (stop) =>
+        stop.orderId && stop.order && [STOP_TYPE.DROPOFF, STOP_TYPE.HUB_TRANSFER].includes(stop.stopType as any),
     )
 
     for (const stop of terminalStops) {

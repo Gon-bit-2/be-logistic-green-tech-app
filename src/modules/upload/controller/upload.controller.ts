@@ -1,4 +1,12 @@
-import { Controller, Post, UseInterceptors, UploadedFile, BadRequestException, UploadedFiles, Query } from '@nestjs/common'
+import {
+  Controller,
+  Post,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  UploadedFiles,
+  Query,
+} from '@nestjs/common'
 import { UploadService } from '../service/upload.service'
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express'
 import { type Express } from 'express'
@@ -15,10 +23,7 @@ export class UploadController {
    */
   @Post('image')
   @UseInterceptors(FileInterceptor('file', uploadMulterOptions))
-  async uploadImage(
-    @UploadedFile() file: Express.Multer.File,
-    @Query('folder') folder?: string,
-  ) {
+  async uploadImage(@UploadedFile() file: Express.Multer.File, @Query('folder') folder?: string) {
     if (!file) {
       throw new BadRequestException('Vui lòng cung cấp file ảnh.')
     }

@@ -5,11 +5,9 @@ import { AuthController } from 'src/modules/auth/controller/auth.controller'
 import { GoogleService } from 'src/modules/auth/service/google.service'
 
 import { VerificationCodeRepository } from 'src/modules/auth/repository/verificationCode.repo'
-import { SharedRoleRepository } from 'src/common/repositories/shared-role.repo'
 import { EmailService } from 'src/common/services/email.service'
 import { TokenService } from 'src/common/services/token.service'
 import { HashingService } from 'src/common/services/hashing.service'
-import { ShareUserRepository } from 'src/common/repositories/shared-user.repo'
 import { JwtModule } from '@nestjs/jwt'
 import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
 import { PrismaService } from 'src/database/prisma.service'
@@ -20,6 +18,7 @@ import { AuthenticationGuard } from 'src/common/guards/authentication.guard'
 import { AppAccessGuard } from 'src/common/guards/app-access.guard'
 import { RolesGuard } from 'src/common/guards/roles.guard'
 import { ResourceAccessGuard } from 'src/common/guards/resource-access.guard'
+import { RoleRepository } from 'src/modules/role/repository/role.repo'
 
 @Module({
   imports: [JwtModule.register({})],
@@ -31,9 +30,8 @@ import { ResourceAccessGuard } from 'src/common/guards/resource-access.guard'
     TokenService,
     HashingService,
     AuthRepository,
+    RoleRepository,
     VerificationCodeRepository,
-    SharedRoleRepository,
-    ShareUserRepository,
     PrismaService,
     AccessTokenGuard,
     ApiKeyGuard,

@@ -1,6 +1,6 @@
 import z from 'zod'
 import { FuelType, VehicleType } from 'src/common/constants/vehicle.constant'
-import { PaginationQuerySchema } from 'src/common/model/request.model'
+import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
 
 export const VehicleSchema = z.object({
   id: z.number(),
@@ -29,9 +29,11 @@ export const CreateVehicleBodySchema = VehicleSchema.pick({
   capacityVolume: true,
   emissionRatePerKm: true,
   hubId: true,
-}).extend({
-  imageUrl: z.string().url().optional(), // Ảnh không bắt buộc khi tạo xe
-}).strict()
+})
+  .extend({
+    imageUrl: z.string().url().optional(), // Ảnh không bắt buộc khi tạo xe
+  })
+  .strict()
 
 export const UpdateVehicleBodySchema = CreateVehicleBodySchema.extend({
   isActive: z.boolean().optional(),

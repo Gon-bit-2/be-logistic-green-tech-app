@@ -1,6 +1,6 @@
-import { Controller, Get } from '@nestjs/common';
-import { AppService } from './app.service';
-import { isPublic } from './common/decorators/auth.decorator';
+import { Controller, Get } from '@nestjs/common'
+import { AppService } from './app.service'
+import { isPublic } from './common/decorators/auth.decorator'
 
 @Controller()
 export class AppController {
@@ -9,7 +9,7 @@ export class AppController {
   @Get()
   @isPublic()
   getHello(): string {
-    return this.appService.getHello();
+    return this.appService.getHello()
   }
 
   /**
@@ -21,7 +21,7 @@ export class AppController {
   @Get('health')
   @isPublic()
   healthCheck() {
-    const memoryUsage = process.memoryUsage();
+    const memoryUsage = process.memoryUsage()
 
     return {
       status: 'ok',
@@ -32,6 +32,6 @@ export class AppController {
         heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`,
         heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)} MB`,
       },
-    };
+    }
   }
 }
