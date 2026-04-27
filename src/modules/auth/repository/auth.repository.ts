@@ -1,12 +1,27 @@
 import { Injectable } from '@nestjs/common'
 import { Prisma } from 'generated/prisma'
+import roleName from 'src/common/constants/role.constant'
 import { TypeOfVerificationCodeType } from 'src/common/constants/auth.constant'
-import { RoleType } from 'src/common/model/share-role.model'
-import { WhereUniqueUserType } from 'src/common/repositories/shared-user.repo'
 import { PrismaService } from 'src/database/prisma.service'
-import { CreateAddressBookBodyType, DeviceType, UserType } from 'src/modules/auth/model/auth.model'
+import {
+  AddressBookResType,
+  CreateAddressBookBodyType,
+  DeviceType,
+  RefreshTokenType,
+  UserType,
+} from 'src/modules/auth/model/auth.model'
+import { PermissionType, RoleType } from 'src/modules/role/model/role.model'
 
 type PrismaExecutor = PrismaService | Prisma.TransactionClient
+export type WhereUniqueUserType = { id: number } | { email: string }
+export type UserIncludeRolePermissionType = UserType & {
+  role: RoleType & {
+    permissions: PermissionType[]
+  }
+}
+export type UserIncludeRoleType = UserType & {
+  role: RoleType
+}
 
 @Injectable()
 export class AuthRepository {
@@ -14,6 +29,35 @@ export class AuthRepository {
 
   private getClient(client?: PrismaExecutor) {
     return client ?? this.prismaService
+  }
+
+  async findUnique(uniqueObject: WhereUniqueUserType): Promise<UserType | null> {
+    return await this.prismaService.user.findFirst({
+      where: {
+        ...uniqueObject,
+        deletedAt: null,
+      },
+    })
+  }
+
+  async findUniqueIncludeRolePermissions(where: WhereUniqueUserType): Promise<UserIncludeRolePermissionType | null> {
+    return await this.prismaService.user.findFirst({
+      where: {
+        ...where,
+        deletedAt: null,
+      },
+      include: {
+        role: {
+          include: {
+            permissions: {
+              where: {
+                deletedAt: null,
+              },
+            },
+          },
+        },
+      },
+    })
   }
 
   async createUser(
@@ -52,7 +96,50 @@ export class AuthRepository {
     })
     return user
   }
-  async createRefreshToken(data: { tokenHash: string; userId: number; expiresAt: Date; deviceId: number }) {
+
+  async update(where: { id: number }, data: Partial<UserType>) {
+    const existingUser = await this.prismaService.user.findFirst({
+      where: {
+        id: where.id,
+        deletedAt: null,
+      },
+      select: { id: true },
+    })
+
+    if (!existingUser) {
+      throw new Error('User not found or has been deleted')
+    }
+
+    return await this.prismaService.user.update({
+      where: {
+        id: where.id,
+      },
+      data,
+    })
+  }
+
+  async findActiveAdmins() {
+    return await this.prismaService.user.findMany({
+      where: {
+        deletedAt: null,
+        isDeleted: false,
+        role: {
+          name: roleName.ADMIN,
+          deletedAt: null,
+          isActive: true,
+        },
+      },
+      select: {
+        id: true,
+      },
+    })
+  }
+  async createRefreshToken(data: {
+    tokenHash: string
+    userId: number
+    expiresAt: Date
+    deviceId: number
+  }): Promise<RefreshTokenType> {
     return await this.prismaService.refreshToken.create({
       data: {
         token: data.tokenHash,
@@ -92,7 +179,7 @@ export class AuthRepository {
       },
     })
   }
-  async findFirstRefreshTokenByTokens(tokens: string[]) {
+  async findFirstRefreshTokenByTokens(tokens: string[]): Promise<RefreshTokenType | null> {
     return await this.prismaService.refreshToken.findFirst({
       where: {
         token: {
@@ -103,7 +190,7 @@ export class AuthRepository {
   }
   async createDevice(
     data: Pick<DeviceType, 'userId' | 'userAgent' | 'ip'> & Partial<Pick<DeviceType, 'isActive' | 'lastActive'>>,
-  ) {
+  ): Promise<DeviceType> {
     return await this.prismaService.device.create({
       data,
     })
@@ -116,7 +203,7 @@ export class AuthRepository {
       data,
     })
   }
-  async deleteRefreshToken(uniqueObject: { tokenHash: string }) {
+  async deleteRefreshToken(uniqueObject: { tokenHash: string }): Promise<RefreshTokenType> {
     return await this.prismaService.refreshToken.delete({
       where: {
         token: uniqueObject.tokenHash,
@@ -138,7 +225,7 @@ export class AuthRepository {
     return null
   }
 
-  async findAddressBooksByUserId(userId: number) {
+  async findAddressBooksByUserId(userId: number): Promise<AddressBookResType[]> {
     return await this.prismaService.addressBook.findMany({
       where: {
         userId,
@@ -157,7 +244,11 @@ export class AuthRepository {
     })
   }
 
-  async findAddressBookByIdForUser(id: number, userId: number, client?: PrismaExecutor) {
+  async findAddressBookByIdForUser(
+    id: number,
+    userId: number,
+    client?: PrismaExecutor,
+  ): Promise<AddressBookResType | null> {
     return await this.getClient(client).addressBook.findFirst({
       where: {
         id,
@@ -167,7 +258,10 @@ export class AuthRepository {
     })
   }
 
-  async findFirstActiveAddressBookByUserId(userId: number, client?: PrismaExecutor) {
+  async findFirstActiveAddressBookByUserId(
+    userId: number,
+    client?: PrismaExecutor,
+  ): Promise<AddressBookResType | null> {
     return await this.getClient(client).addressBook.findFirst({
       where: {
         userId,
@@ -190,7 +284,10 @@ export class AuthRepository {
     })
   }
 
-  async createAddressBook(data: CreateAddressBookBodyType & { userId: number; isDefault: boolean }, client?: PrismaExecutor) {
+  async createAddressBook(
+    data: CreateAddressBookBodyType & { userId: number; isDefault: boolean },
+    client?: PrismaExecutor,
+  ): Promise<AddressBookResType> {
     return await this.getClient(client).addressBook.create({
       data: {
         ...data,
@@ -205,7 +302,7 @@ export class AuthRepository {
     id: number,
     data: Prisma.AddressBookUpdateInput | Prisma.AddressBookUncheckedUpdateInput,
     client?: PrismaExecutor,
-  ) {
+  ): Promise<AddressBookResType> {
     return await this.getClient(client).addressBook.update({
       where: {
         id,

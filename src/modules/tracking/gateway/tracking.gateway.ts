@@ -31,10 +31,7 @@ export interface AuthenticatedSocket extends Socket {
 // Authentication: JWT token bắt buộc khi connect qua handshake auth
 @WebSocketGateway({
   cors: {
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:8386',
-    ],
+    origin: ['http://localhost:3000', 'http://localhost:8386'],
     credentials: true,
   },
   namespace: 'tracking',

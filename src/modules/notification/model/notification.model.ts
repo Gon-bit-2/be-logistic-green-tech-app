@@ -2,7 +2,7 @@ import z from 'zod'
 import roleName from 'src/common/constants/role.constant'
 import { NotificationType } from 'src/common/constants/notification.constant'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
-import { PaginationQuerySchema } from 'src/common/model/request.model'
+import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { DriverAssignmentRequestStatus } from 'src/common/constants/driver-assignment-request.constant'
 

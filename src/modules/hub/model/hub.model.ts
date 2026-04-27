@@ -1,5 +1,5 @@
 import z from 'zod'
-import { PaginationQuerySchema } from 'src/common/model/request.model'
+import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
 import roleName from 'src/common/constants/role.constant'
 
 export const HubSchema = z.object({

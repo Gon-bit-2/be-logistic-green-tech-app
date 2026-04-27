@@ -25,15 +25,14 @@ import ms, { StringValue } from 'ms'
 import { TokenService } from 'src/common/services/token.service'
 import { HashingService } from 'src/common/services/hashing.service'
 import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
-import { ShareUserRepository } from 'src/common/repositories/shared-user.repo'
 import { PrismaService } from 'src/database/prisma.service'
 import { VerificationCodeRepository } from 'src/modules/auth/repository/verificationCode.repo'
-import { SharedRoleRepository } from 'src/common/repositories/shared-role.repo'
 import { TypeOfVerificationCode, TypeOfVerificationCodeType } from 'src/common/constants/auth.constant'
 import { generateOTP } from 'src/common/utils/helpers'
 import envConfig from 'src/config/config'
 import { EmailService } from 'src/common/services/email.service'
 import { IAccessTokenPayload } from 'src/common/types/jwt.type'
+import { RoleRepository } from 'src/modules/role/repository/role.repo'
 @Injectable()
 export class AuthService {
   private static readonly DUMMY_PASSWORD_HASH = '$2b$10$7EqJtq98hPqEX7fNZaFWoOeFKb1YI7DiIP9N6byN1Nsx3Rp3XIanG'
@@ -41,12 +40,11 @@ export class AuthService {
   private static readonly INVALID_FORGOT_PASSWORD_MESSAGE = 'Thông tin đặt lại mật khẩu không hợp lệ'
 
   constructor(
-    private readonly sharedRoleRepository: SharedRoleRepository,
+    private readonly roleRepository: RoleRepository,
     private readonly emailService: EmailService,
     private readonly tokenService: TokenService,
     private readonly hashingService: HashingService,
     private readonly authRepository: AuthRepository,
-    private readonly shareUserRepository: ShareUserRepository,
     private readonly verificationCodeRepository: VerificationCodeRepository,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly prismaService: PrismaService,
@@ -78,8 +76,12 @@ export class AuthService {
     ])
   }
 
+  private hasErrorCode(error: unknown): error is { code: string } {
+    return typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+  }
+
   async getProfile(userId: number) {
-    const user = await this.shareUserRepository.findUnique({ id: userId })
+    const user = await this.authRepository.findUnique({ id: userId })
     if (!user) {
       throw new UnauthorizedException('User not found')
     }
@@ -89,12 +91,12 @@ export class AuthService {
   }
 
   async updateProfile(userId: number, body: UpdateProfileBodyType) {
-    const user = await this.shareUserRepository.findUnique({ id: userId })
+    const user = await this.authRepository.findUnique({ id: userId })
     if (!user) {
       throw new UnauthorizedException('User not found')
     }
 
-    const updatedUser = await this.shareUserRepository.update(
+    const updatedUser = await this.authRepository.update(
       { id: userId },
       {
         ...body,
@@ -198,7 +200,7 @@ export class AuthService {
         code: body.code,
         type: TypeOfVerificationCode.REGISTER,
       })
-      const clientRoleId = await this.sharedRoleRepository.getClientRoleId()
+      const clientRoleId = await this.roleRepository.getClientRoleId()
       const hashedPassword = await this.hashingService.hash(body.password)
       const [user] = await this.prismaService.$transaction([
         this.prismaService.user.create({
@@ -225,7 +227,7 @@ export class AuthService {
       if (error instanceof UnprocessableEntityException) {
         throw error
       }
-      if (error && typeof error === 'object' && 'code' in error && String(error.code) === 'P2002') {
+      if (this.hasErrorCode(error) && error.code === 'P2002') {
         throw new BadRequestException('Người Dùng Đã Tồn Tại')
       }
       throw error
@@ -234,7 +236,7 @@ export class AuthService {
 
   async sendOTP(body: SendOTPBodyType) {
     //1:check email exists
-    const user = await this.shareUserRepository.findUnique({ email: body.email })
+    const user = await this.authRepository.findUnique({ email: body.email })
     if (body.type === TypeOfVerificationCode.REGISTER && user) {
       throw new UnprocessableEntityException([
         {
@@ -352,13 +354,17 @@ export class AuthService {
       deviceId: device.id,
       roleId: user.roleId,
       roleName: user.role.name,
+      hubId: user.hubId ?? null,
     })
     return tokens
   }
 
-  async generateTokens({ userId, deviceId, roleId, roleName }: IAccessTokenPayload) {
+  async generateTokens({ userId, deviceId, roleId, roleName, hubId }: IAccessTokenPayload) {
+    const resolvedHubId =
+      hubId !== undefined ? hubId : ((await this.authRepository.findUnique({ id: userId }))?.hubId ?? null)
+
     const [accessToken, refreshToken] = await Promise.all([
-      this.tokenService.signAccessToken({ userId, deviceId, roleId, roleName }),
+      this.tokenService.signAccessToken({ userId, deviceId, roleId, roleName, hubId: resolvedHubId }),
       this.tokenService.signRefreshToken({ userId }),
     ])
     //
@@ -384,6 +390,7 @@ export class AuthService {
     const {
       deviceId,
       user: {
+        hubId,
         roleId,
         role: { name: roleName },
       },
@@ -391,7 +398,7 @@ export class AuthService {
     } = tokenInDB
     // 3. Chuẩn bị token mới (chỉ xử lý logic JWT, không ghi CSDL)
     const [newAccessToken, newRefreshTokenStr] = await Promise.all([
-      this.tokenService.signAccessToken({ userId, deviceId, roleId, roleName }),
+      this.tokenService.signAccessToken({ userId, deviceId, roleId, roleName, hubId: hubId ?? null }),
       this.tokenService.signRefreshToken({ userId }),
     ])
     const decodedRefreshToken = await this.tokenService.verifyRefreshToken(newRefreshTokenStr)
@@ -454,7 +461,7 @@ export class AuthService {
   }
   async forgotPassword(body: ForgotPasswordBodyType) {
     const { email, code, newPassword } = body
-    const user = await this.shareUserRepository.findUnique({ email })
+    const user = await this.authRepository.findUnique({ email })
 
     try {
       await this.validateVerificationCode({

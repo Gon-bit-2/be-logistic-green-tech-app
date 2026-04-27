@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import {
   CreateOrderBodyType,
@@ -252,16 +252,46 @@ export class OrdersService {
     return updatedOrder
   }
 
-  async cancelByCustomer(id: number, actor: AccessTokenPayload) {
+  async cancel(id: number, actor: AccessTokenPayload) {
     const order = await this.orderRepo.findById(id)
 
     if (!order) {
       throw new NotFoundException(`Đơn hàng #${id} không tồn tại`)
     }
 
+    if (actor.roleName === roleName.WAREHOUSE_STAFF) {
+      const warehouseUser = await this.prismaService.user.findFirst({
+        where: {
+          id: actor.userId,
+          deletedAt: null,
+          isDeleted: false,
+        },
+        select: {
+          hubId: true,
+        },
+      })
+
+      if (!warehouseUser?.hubId || order.currentHubId !== warehouseUser.hubId) {
+        throw new ForbiddenException('Nhân viên kho chỉ được hủy đơn thuộc kho của mình.')
+      }
+    }
+
     if (!CUSTOMER_CANCELLABLE_STATUSES.has(order.status)) {
       throw new BadRequestException('Đơn hàng chỉ có thể hủy khi đang chờ xử lý hoặc đã phân công.')
     }
+
+    const eventSource =
+      actor.roleName === roleName.WAREHOUSE_STAFF
+        ? EVENT_SOURCE.HUB_SCANNER
+        : actor.roleName === roleName.ADMIN
+          ? EVENT_SOURCE.ADMIN_PORTAL
+          : EVENT_SOURCE.CUSTOMER_APP
+    const description =
+      actor.roleName === roleName.WAREHOUSE_STAFF
+        ? 'Nhân viên kho đã hủy đơn hàng.'
+        : actor.roleName === roleName.ADMIN
+          ? 'Quản trị viên đã hủy đơn hàng.'
+          : 'Khách hàng đã hủy đơn hàng.'
 
     await this.trackingRepo.createEventWithStatusUpdate(
       actor.userId,
@@ -269,8 +299,8 @@ export class OrdersService {
         orderId: id,
         eventType: TRACKING_EVENT_TYPE.STATUS_CHANGE,
         status: ORDER_STATUS.CANCELLED,
-        source: EVENT_SOURCE.CUSTOMER_APP,
-        description: 'Khách hàng đã hủy đơn hàng.',
+        source: eventSource,
+        description,
       },
       true,
     )

@@ -21,6 +21,23 @@ export class TripRepository {
         status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
         deletedAt: null,
         currentTripId: null, // Chỉ lấy đơn chưa nằm trên xe nào
+        OR: [
+          {
+            payment: {
+              is: {
+                method: 'COD',
+              },
+            },
+          },
+          {
+            payment: {
+              is: {
+                method: 'STRIPE',
+                status: 'COMPLETED',
+              },
+            },
+          },
+        ],
         ...(hubId ? { currentHubId: hubId } : {}),
       },
       orderBy: {
@@ -107,6 +124,23 @@ export class TripRepository {
           id: { in: orderIds },
           status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
           currentTripId: null,
+          OR: [
+            {
+              payment: {
+                is: {
+                  method: 'COD',
+                },
+              },
+            },
+            {
+              payment: {
+                is: {
+                  method: 'STRIPE',
+                  status: 'COMPLETED',
+                },
+              },
+            },
+          ],
         },
         select: { id: true },
       })
@@ -157,9 +191,7 @@ export class TripRepository {
         where: {
           orderId: { in: validOrderIds },
           status: 'PENDING',
-          ...(options?.assignmentRequestToApproveId
-            ? { id: { not: options.assignmentRequestToApproveId } }
-            : {}),
+          ...(options?.assignmentRequestToApproveId ? { id: { not: options.assignmentRequestToApproveId } } : {}),
         },
         data: {
           status: 'CANCELLED',

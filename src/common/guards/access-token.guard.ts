@@ -11,7 +11,7 @@ import { Request } from 'express'
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager'
 import { HTTPMethod } from '../constants/role.constant'
 import { REQUEST_ROLE_PERMISSIONS, REQUEST_USER_KEY } from '../constants/auth.constant'
-import { RolePermissionType } from '../model/share-role.model'
+import { RolePermissionType } from 'src/modules/role/model/role.model'
 import { keyBy } from 'lodash'
 import { TokenService } from 'src/common/services/token.service'
 import { PrismaService } from 'src/database/prisma.service'
@@ -72,7 +72,6 @@ export class AccessTokenGuard implements CanActivate {
     }
   }
   private extractTokenFromHeader(request: any): string {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     const accessToken = request.headers.authorization?.split(' ')[1]
     if (!accessToken) {
       throw new UnauthorizedException('Error.MissingAccessToken')

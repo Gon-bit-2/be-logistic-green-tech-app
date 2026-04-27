@@ -1,5 +1,5 @@
 import { STOP_TYPE, TRIP_STATUS } from 'src/common/constants/strip.constant'
-import { PaginationQuerySchema } from 'src/common/model/request.model'
+import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
 import { ProofOfDeliveryInputSchema } from 'src/modules/tracking/model/tracking.model'
 import { DriverAssignmentRequestStatus } from 'src/common/constants/driver-assignment-request.constant'
 import z from 'zod'

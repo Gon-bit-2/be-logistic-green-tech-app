@@ -3,6 +3,7 @@ export interface IAccessTokenPayload {
   deviceId: number
   roleId: number
   roleName: string
+  hubId?: number | null
 }
 export interface AccessTokenPayload extends IAccessTokenPayload {
   exp: number

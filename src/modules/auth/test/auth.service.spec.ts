@@ -1,12 +1,10 @@
 // @ts-nocheck
 import { Test, TestingModule } from '@nestjs/testing'
 import { AuthService } from '../service/auth.service'
-import { SharedRoleRepository } from 'src/common/repositories/shared-role.repo'
 import { EmailService } from 'src/common/services/email.service'
 import { TokenService } from 'src/common/services/token.service'
 import { HashingService } from 'src/common/services/hashing.service'
 import { AuthRepository } from '../repository/auth.repository'
-import { ShareUserRepository } from 'src/common/repositories/shared-user.repo'
 import { VerificationCodeRepository } from '../repository/verificationCode.repo'
 import { PrismaService } from 'src/database/prisma.service'
 import { CACHE_MANAGER } from '@nestjs/cache-manager'
@@ -14,21 +12,21 @@ import { BadRequestException, UnauthorizedException, UnprocessableEntityExceptio
 import { TypeOfVerificationCode } from 'src/common/constants/auth.constant'
 import { RegisterResSchema } from '../model/auth.model'
 import { addMilliseconds } from 'date-fns'
+import { RoleRepository } from 'src/modules/role/repository/role.repo'
 
 describe('AuthService', () => {
   let service: AuthService
-  let sharedRoleRepo: jest.Mocked<SharedRoleRepository>
+  let roleRepo: jest.Mocked<RoleRepository>
   let emailService: jest.Mocked<EmailService>
   let tokenService: jest.Mocked<TokenService>
   let hashingService: jest.Mocked<HashingService>
   let authRepo: jest.Mocked<AuthRepository>
-  let shareUserRepo: jest.Mocked<ShareUserRepository>
   let verificationCodeRepo: jest.Mocked<VerificationCodeRepository>
   let prismaService: any
   let cacheManager: any
 
   beforeEach(async () => {
-    const sharedRoleRepoMock = { getClientRoleId: jest.fn() }
+    const roleRepoMock = { getClientRoleId: jest.fn() }
     const emailServiceMock = { sendOTPToEMAIL: jest.fn() }
     const tokenServiceMock = {
       signAccessToken: jest.fn(),
@@ -46,6 +44,8 @@ describe('AuthService', () => {
       findFirstRefreshTokenByTokens: jest.fn(),
       deleteRefreshToken: jest.fn(),
       updateDevice: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
       findAddressBooksByUserId: jest.fn(),
       countActiveAddressBooksByUserId: jest.fn(),
       clearDefaultAddressBooks: jest.fn(),
@@ -54,7 +54,6 @@ describe('AuthService', () => {
       findFirstActiveAddressBookByUserId: jest.fn(),
       updateAddressBook: jest.fn(),
     }
-    const shareUserRepoMock = { findUnique: jest.fn(), update: jest.fn() }
     const verificationCodeRepoMock = {
       findUniqueVerificationCode: jest.fn(),
       createVerificationCode: jest.fn(),
@@ -71,12 +70,11 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: SharedRoleRepository, useValue: sharedRoleRepoMock },
+        { provide: RoleRepository, useValue: roleRepoMock },
         { provide: EmailService, useValue: emailServiceMock },
         { provide: TokenService, useValue: tokenServiceMock },
         { provide: HashingService, useValue: hashingServiceMock },
         { provide: AuthRepository, useValue: authRepoMock },
-        { provide: ShareUserRepository, useValue: shareUserRepoMock },
         { provide: VerificationCodeRepository, useValue: verificationCodeRepoMock },
         { provide: PrismaService, useValue: prismaServiceMock },
         { provide: CACHE_MANAGER, useValue: cacheManagerMock },
@@ -84,12 +82,11 @@ describe('AuthService', () => {
     }).compile()
 
     service = module.get<AuthService>(AuthService)
-    sharedRoleRepo = module.get(SharedRoleRepository)
+    roleRepo = module.get(RoleRepository)
     emailService = module.get(EmailService)
     tokenService = module.get(TokenService)
     hashingService = module.get(HashingService)
     authRepo = module.get(AuthRepository)
-    shareUserRepo = module.get(ShareUserRepository)
     verificationCodeRepo = module.get(VerificationCodeRepository)
     prismaService = module.get(PrismaService)
     cacheManager = module.get(CACHE_MANAGER)
@@ -101,8 +98,8 @@ describe('AuthService', () => {
 
   describe('updateProfile', () => {
     it('cập nhật profile thành công', async () => {
-      shareUserRepo.findUnique.mockResolvedValue({ id: 1 } as any)
-      shareUserRepo.update.mockResolvedValue({
+      authRepo.findUnique.mockResolvedValue({ id: 1 } as any)
+      authRepo.update.mockResolvedValue({
         id: 1,
         email: 'test@mail.com',
         fullName: 'Updated User',
@@ -117,7 +114,7 @@ describe('AuthService', () => {
         phone: '0987654321',
       })
 
-      expect(shareUserRepo.update).toHaveBeenCalledWith(
+      expect(authRepo.update).toHaveBeenCalledWith(
         { id: 1 },
         {
           fullName: 'Updated User',
@@ -134,7 +131,7 @@ describe('AuthService', () => {
     })
 
     it('văng Unauthorized khi user không tồn tại', async () => {
-      shareUserRepo.findUnique.mockResolvedValue(null)
+      authRepo.findUnique.mockResolvedValue(null)
 
       await expect(service.updateProfile(999, { fullName: 'Missing User' })).rejects.toThrow(UnauthorizedException)
     })
@@ -236,7 +233,7 @@ describe('AuthService', () => {
         expiresAt: addMilliseconds(new Date(), 100000), // Vẫn còn hạn
       } as any)
 
-      sharedRoleRepo.getClientRoleId.mockResolvedValue(2)
+      roleRepo.getClientRoleId.mockResolvedValue(2)
       hashingService.hash.mockResolvedValue('hashed_password')
       prismaService.$transaction.mockResolvedValue([
         {
@@ -318,7 +315,7 @@ describe('AuthService', () => {
 
     it('văng BadRequestException khi prisma transaction throw error (user existed)', async () => {
       authRepo.findUniqueVerificationCode.mockResolvedValue({ expiresAt: addMilliseconds(new Date(), 100000) } as any)
-      sharedRoleRepo.getClientRoleId.mockResolvedValue(2)
+      roleRepo.getClientRoleId.mockResolvedValue(2)
       prismaService.$transaction.mockRejectedValue({ code: 'P2002' })
 
       await expect(
@@ -336,7 +333,7 @@ describe('AuthService', () => {
 
   describe('sendOTP', () => {
     it('gửi OTP đăng ký thành công (Email ko tồn tại mới cho chạy)', async () => {
-      shareUserRepo.findUnique.mockResolvedValue(null) // ko tồn tại hợp lý để REGISTER
+      authRepo.findUnique.mockResolvedValue(null) // ko tồn tại hợp lý để REGISTER
       verificationCodeRepo.createVerificationCode.mockResolvedValue({} as any)
       emailService.sendOTPToEMAIL.mockResolvedValue({ error: null } as any)
 
@@ -345,14 +342,14 @@ describe('AuthService', () => {
     })
 
     it('văng lỗi nếu user đăng ký trùng Email', async () => {
-      shareUserRepo.findUnique.mockResolvedValue({ id: 1 } as any)
+      authRepo.findUnique.mockResolvedValue({ id: 1 } as any)
       await expect(service.sendOTP({ email: 't@t.c', type: TypeOfVerificationCode.REGISTER })).rejects.toThrow(
         UnprocessableEntityException,
       )
     })
 
     it('văng lỗi nếu gửi mã FORGOT cho email ko tồn tại', async () => {
-      shareUserRepo.findUnique.mockResolvedValue(null) // Ko tồn tại
+      authRepo.findUnique.mockResolvedValue(null) // Ko tồn tại
       await expect(service.sendOTP({ email: 't@t.c', type: TypeOfVerificationCode.FORGOT_PASSWORD })).resolves.toEqual({
         message: 'Nếu email tồn tại, mã OTP đã được gửi',
       })
@@ -361,7 +358,7 @@ describe('AuthService', () => {
     })
 
     it('văng lỗi nếu Gửi Mail Fail qua provider', async () => {
-      shareUserRepo.findUnique.mockResolvedValue(null)
+      authRepo.findUnique.mockResolvedValue(null)
       emailService.sendOTPToEMAIL.mockResolvedValue({ error: new Error('SendGrid Error') } as any)
 
       await expect(service.sendOTP({ email: 't@t.c', type: TypeOfVerificationCode.REGISTER })).rejects.toThrow(
@@ -376,6 +373,7 @@ describe('AuthService', () => {
         id: 1,
         email: 't@t.c',
         password: 'hashed',
+        hubId: 8,
         roleId: 2,
         role: { name: 'CUSTOMER' },
         totpSecret: null,
@@ -388,6 +386,13 @@ describe('AuthService', () => {
 
       const res = await service.login({ email: 't@t.c', password: 'password', ip: '1.2.3.4', userAgent: 'Chrome' })
       expect(res).toEqual({ accessToken: 'AT', refreshToken: 'RT' })
+      expect(tokenService.signAccessToken).toHaveBeenCalledWith({
+        userId: 1,
+        deviceId: 10,
+        roleId: 2,
+        roleName: 'CUSTOMER',
+        hubId: 8,
+      })
     })
 
     it('Báo lỗi sai email', async () => {
@@ -424,7 +429,7 @@ describe('AuthService', () => {
       authRepo.findFirstRefreshTokenIncludeUserRoleByTokens.mockResolvedValue({
         deviceId: 10,
         token: 'stored-refresh-token',
-        user: { roleId: 2, role: { name: 'CUST' } },
+        user: { roleId: 2, hubId: 6, role: { name: 'CUST' } },
       } as any)
       tokenService.signAccessToken.mockResolvedValue('newAT')
       tokenService.signRefreshToken.mockResolvedValue('newRT')
@@ -432,6 +437,13 @@ describe('AuthService', () => {
       const res = await service.refreshToken({ refreshToken: 'oldRT', userAgent: 'X', ip: '127' })
       expect(res).toEqual({ accessToken: 'newAT', refreshToken: 'newRT' })
       expect(authRepo.findFirstRefreshTokenIncludeUserRoleByTokens).toHaveBeenCalledWith(expect.any(Array))
+      expect(tokenService.signAccessToken).toHaveBeenCalledWith({
+        userId: 1,
+        deviceId: 10,
+        roleId: 2,
+        roleName: 'CUST',
+        hubId: 6,
+      })
       expect(prismaService.$transaction).toHaveBeenCalled() // Ensure the database rotated the code
     })
 
@@ -441,6 +453,32 @@ describe('AuthService', () => {
       await expect(service.refreshToken({ refreshToken: 'RT', ip: '1', userAgent: '1' })).rejects.toThrow(
         UnauthorizedException,
       )
+    })
+  })
+
+  describe('generateTokens', () => {
+    it('fallback query user để đưa hubId vào access token khi caller chưa truyền', async () => {
+      authRepo.findUnique.mockResolvedValue({ id: 4, hubId: 12 } as any)
+      tokenService.signAccessToken.mockResolvedValue('AT')
+      tokenService.signRefreshToken.mockResolvedValue('RT')
+      tokenService.verifyRefreshToken.mockResolvedValue({ exp: Math.floor(Date.now() / 1000) + 1000 } as any)
+
+      const res = await service.generateTokens({
+        userId: 4,
+        deviceId: 9,
+        roleId: 4,
+        roleName: 'WAREHOUSE_STAFF',
+      })
+
+      expect(res).toEqual({ accessToken: 'AT', refreshToken: 'RT' })
+      expect(authRepo.findUnique).toHaveBeenCalledWith({ id: 4 })
+      expect(tokenService.signAccessToken).toHaveBeenCalledWith({
+        userId: 4,
+        deviceId: 9,
+        roleId: 4,
+        roleName: 'WAREHOUSE_STAFF',
+        hubId: 12,
+      })
     })
   })
 
@@ -463,7 +501,7 @@ describe('AuthService', () => {
 
   describe('forgotPassword', () => {
     it('đổi mật khẩu thành công', async () => {
-      shareUserRepo.findUnique.mockResolvedValue({ id: 1, email: 't@t.c' } as any)
+      authRepo.findUnique.mockResolvedValue({ id: 1, email: 't@t.c' } as any)
       authRepo.findUniqueVerificationCode.mockResolvedValue({ expiresAt: addMilliseconds(new Date(), 100000) } as any)
       hashingService.hash.mockResolvedValue('newHash')
       prismaService.$transaction.mockResolvedValue([{}, {}])
@@ -479,14 +517,14 @@ describe('AuthService', () => {
     })
 
     it('thất bại do email k tồn tại', async () => {
-      shareUserRepo.findUnique.mockResolvedValue(null)
+      authRepo.findUnique.mockResolvedValue(null)
       await expect(
         service.forgotPassword({ email: 'nope', code: '', newPassword: '', confirmNewPassword: '' }),
       ).rejects.toThrow(UnprocessableEntityException)
     })
 
     it('thất bại do mã OTP không hợp lệ nhưng không lộ chi tiết', async () => {
-      shareUserRepo.findUnique.mockResolvedValue({ id: 1, email: 't@t.c' } as any)
+      authRepo.findUnique.mockResolvedValue({ id: 1, email: 't@t.c' } as any)
       authRepo.findUniqueVerificationCode.mockResolvedValue(null)
 
       await expect(

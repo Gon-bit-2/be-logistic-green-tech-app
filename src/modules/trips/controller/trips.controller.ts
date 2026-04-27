@@ -56,7 +56,10 @@ export class TripsController {
 
   @Post('driver-assignment-requests')
   @Roles(roleName.DRIVER)
-  createDriverAssignmentRequest(@Body() body: CreateDriverAssignmentRequestDto, @ActiveUser() user: AccessTokenPayload) {
+  createDriverAssignmentRequest(
+    @Body() body: CreateDriverAssignmentRequestDto,
+    @ActiveUser() user: AccessTokenPayload,
+  ) {
     return this.tripsService.createDriverAssignmentRequest(body, user)
   }
 

@@ -1,5 +1,6 @@
 import { TypeOfVerificationCode } from 'src/common/constants/auth.constant'
 import z from 'zod'
+import { PermissionSchema, RoleSchema } from 'src/modules/role/model/role.model'
 
 export const UserSchema = z.object({
   id: z.number(),
@@ -118,17 +119,25 @@ export const DeviceSchema = z.object({
   isActive: z.boolean().optional(),
 })
 export type DeviceType = z.infer<typeof DeviceSchema>
-//role
-export const RoleSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  description: z.string(),
-  isActive: z.boolean(),
-  createdById: z.number().nullable(),
-  updatedById: z.number().nullable(),
-  deletedAt: z.date().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+export const GetUsserProfileResSchema = UserSchema.omit({
+  password: true,
+  totpSecret: true,
+}).extend({
+  isTwoFactorEnabled: z.boolean(),
+  role: RoleSchema.pick({
+    id: true,
+    name: true,
+  }).extend({
+    permissions: z.array(
+      PermissionSchema.pick({
+        id: true,
+        name: true,
+        module: true,
+        path: true,
+        method: true,
+      }),
+    ),
+  }),
 })
 //logout
 export const LogoutBodySchema = RefreshTokenBodySchema

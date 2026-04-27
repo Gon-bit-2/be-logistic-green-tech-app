@@ -12,9 +12,7 @@ export const NotificationEventName = {
   ORDER_STATUS_UPDATED: 'notification.order.status-updated',
 } as const
 
-export type RoleRequestTargetRoleName =
-  | typeof roleName.DRIVER
-  | typeof roleName.WAREHOUSE_STAFF
+export type RoleRequestTargetRoleName = typeof roleName.DRIVER | typeof roleName.WAREHOUSE_STAFF
 
 export type RoleRequestSubmittedEvent = {
   recipientUserIds: number[]
@@ -56,9 +54,7 @@ export type DriverAssignmentRequestReviewedEvent = {
   orderTrackingCode: string
   reviewedById: number
   reviewNote?: string | null
-  status:
-    | typeof DriverAssignmentRequestStatus.APPROVED
-    | typeof DriverAssignmentRequestStatus.REJECTED
+  status: typeof DriverAssignmentRequestStatus.APPROVED | typeof DriverAssignmentRequestStatus.REJECTED
 }
 
 export type OrderNotifiableStatus =

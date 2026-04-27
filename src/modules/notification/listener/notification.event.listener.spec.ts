@@ -19,10 +19,7 @@ describe('NotificationEventListener', () => {
     }
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        NotificationEventListener,
-        { provide: NotificationService, useValue: notificationServiceMock },
-      ],
+      providers: [NotificationEventListener, { provide: NotificationService, useValue: notificationServiceMock }],
     }).compile()
 
     listener = module.get(NotificationEventListener)

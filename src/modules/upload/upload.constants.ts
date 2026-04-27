@@ -27,9 +27,16 @@ export const uploadMulterOptions = {
   limits: {
     fileSize: MAX_UPLOAD_FILE_SIZE,
   },
-  fileFilter: (_req: unknown, file: Express.Multer.File, callback: (error: Error | null, acceptFile: boolean) => void) => {
+  fileFilter: (
+    _req: unknown,
+    file: Express.Multer.File,
+    callback: (error: Error | null, acceptFile: boolean) => void,
+  ) => {
     if (!ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype)) {
-      callback(new BadRequestException('Định dạng file không hỗ trợ, vui lòng tải lên ảnh (jpg, png, webp, gif).'), false)
+      callback(
+        new BadRequestException('Định dạng file không hỗ trợ, vui lòng tải lên ảnh (jpg, png, webp, gif).'),
+        false,
+      )
       return
     }
 

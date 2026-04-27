@@ -7,5 +7,6 @@ export const PaginationQuerySchema = z
     limit: z.coerce.number().int().positive().max(100).default(10),
   })
   .strict()
+
 export type PaginationQueryType = z.infer<typeof PaginationQuerySchema>
 export type EmptyBodyType = z.infer<typeof EmptyBodySchema>

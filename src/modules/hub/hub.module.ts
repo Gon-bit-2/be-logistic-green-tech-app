@@ -3,11 +3,11 @@ import { HubController } from 'src/modules/hub/controller/hub.controller'
 import { HubService } from 'src/modules/hub/service/hub.service'
 import { HubRepository } from 'src/modules/hub/repository/hub.repo'
 import { PrismaService } from 'src/database/prisma.service'
-import { ShareUserRepository } from 'src/common/repositories/shared-user.repo'
+import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
 
 @Module({
   controllers: [HubController],
-  providers: [HubService, HubRepository, PrismaService, ShareUserRepository],
+  providers: [HubService, HubRepository, AuthRepository, PrismaService],
   exports: [HubService],
 })
 export class HubModule {}

@@ -2,8 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import roleName from 'src/common/constants/role.constant'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
-import { ShareUserRepository } from 'src/common/repositories/shared-user.repo'
-import { SharedRoleRepository } from 'src/common/repositories/shared-role.repo'
+import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
 import { PrismaService } from 'src/database/prisma.service'
 import {
   ApproveRoleRequestBodyType,
@@ -24,14 +23,13 @@ export class RoleService {
 
   constructor(
     private readonly roleRepository: RoleRepository,
-    private readonly shareUserRepository: ShareUserRepository,
-    private readonly sharedRoleRepository: SharedRoleRepository,
+    private readonly authRepository: AuthRepository,
     private readonly eventEmitter: EventEmitter2,
     private readonly prismaService: PrismaService,
   ) {}
 
   async create(userId: number, body: CreateRoleRequestBodyType) {
-    const user = await this.shareUserRepository.findUniqueIncludeRole({ id: userId })
+    const user = await this.authRepository.findUniqueIncludeRole({ id: userId })
     if (!user) {
       throw new NotFoundException('Không tìm thấy người dùng')
     }
@@ -54,7 +52,7 @@ export class RoleService {
       throw new NotFoundException('Không tìm thấy hub hợp lệ để đăng ký vai trò')
     }
 
-    const targetRoleId = await this.sharedRoleRepository.getRoleIdByName(body.targetRoleName)
+    const targetRoleId = await this.roleRepository.getRoleIdByName(body.targetRoleName)
     const createdRoleRequest = await this.roleRepository.createRoleRequest({
       requesterId: userId,
       currentRoleId: user.roleId,
@@ -63,7 +61,7 @@ export class RoleService {
       assignedHubId: requestedHub.id,
     })
 
-    const admins = await this.shareUserRepository.findActiveAdmins()
+    const admins = await this.authRepository.findActiveAdmins()
     await this.emitNotificationEvent(NotificationEventName.ROLE_REQUEST_SUBMITTED, {
       recipientUserIds: admins.map((admin) => admin.id),
       requesterName: user.fullName,

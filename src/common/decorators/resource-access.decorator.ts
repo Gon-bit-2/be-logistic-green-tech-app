@@ -8,5 +8,4 @@ export interface ResourceAccessOptions {
 }
 
 export const RESOURCE_ACCESS_KEY = 'resource_access'
-export const ResourceAccess = (options: ResourceAccessOptions) =>
-  SetMetadata(RESOURCE_ACCESS_KEY, options)
+export const ResourceAccess = (options: ResourceAccessOptions) => SetMetadata(RESOURCE_ACCESS_KEY, options)

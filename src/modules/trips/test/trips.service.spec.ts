@@ -268,7 +268,16 @@ describe('TripsService', () => {
         id: 1,
         driverId: 9,
         status: 'PENDING',
-        stops: [{ orderId: 4, order: { id: 4, status: 'ASSIGNED' } }],
+        stops: [
+          {
+            orderId: 4,
+            order: {
+              id: 4,
+              payment: { method: 'COD', status: 'PENDING' },
+              status: 'ASSIGNED',
+            },
+          },
+        ],
       } as any)
       tripRepo.updateTripStatus.mockResolvedValue({ id: 1, status: 'IN_PROGRESS' } as any)
 
@@ -280,6 +289,30 @@ describe('TripsService', () => {
         'IN_PROGRESS',
         expect.objectContaining({ startTime: expect.any(Date) }),
       )
+    })
+
+    it('chặn bắt đầu trip nếu đơn Stripe chưa thanh toán thành công', async () => {
+      tripRepo.findById.mockResolvedValue({
+        id: 1,
+        driverId: 9,
+        status: 'PENDING',
+        stops: [
+          {
+            orderId: 4,
+            order: {
+              id: 4,
+              trackingCode: 'ORD-STRIPE-4',
+              payment: { method: 'STRIPE', status: 'PENDING' },
+              status: 'ASSIGNED',
+            },
+          },
+        ],
+      } as any)
+
+      await expect(service.updateStatus(1, 'IN_PROGRESS' as any)).rejects.toThrow(
+        'Đơn ORD-STRIPE-4 dùng Stripe và chưa thanh toán thành công nên chưa thể vận chuyển.',
+      )
+      expect(tripRepo.updateTripStatus).not.toHaveBeenCalled()
     })
 
     it('hoàn tất trip tạo tracking event giao hàng và cập nhật COMPLETED', async () => {
@@ -345,8 +378,7 @@ describe('TripsService', () => {
 
   describe('driver assignment requests', () => {
     it('tạo request nhận đơn hợp lệ cho driver cùng hub', async () => {
-      prismaService.user.findFirst
-        .mockResolvedValueOnce({ fullName: 'Tran Van B', hubId: 5, id: 12 })
+      prismaService.user.findFirst.mockResolvedValueOnce({ fullName: 'Tran Van B', hubId: 5, id: 12 })
       prismaService.trip.findFirst.mockResolvedValue(null)
       prismaService.order.findFirst.mockResolvedValue({
         id: 101,
@@ -396,10 +428,7 @@ describe('TripsService', () => {
       prismaService.trip.findFirst.mockResolvedValue({ id: 88 })
 
       await expect(
-        service.createDriverAssignmentRequest(
-          { orderId: 101 } as any,
-          { roleName: 'DRIVER', userId: 12 } as any,
-        ),
+        service.createDriverAssignmentRequest({ orderId: 101 } as any, { roleName: 'DRIVER', userId: 12 } as any),
       ).rejects.toThrow('Tài xế #12 đang chạy chuyến #88')
     })
 
@@ -416,6 +445,7 @@ describe('TripsService', () => {
           currentTrip: null,
           currentTripId: null,
           id: 101,
+          payment: { method: 'COD', status: 'PENDING' },
           receiverLat: 10.8,
           receiverLng: 106.6,
           senderLat: 10.7,
@@ -568,13 +598,10 @@ describe('TripsService', () => {
         vehicleId: 21,
       })
 
-      const result = await service.assignVehicleToTrip(
-        88,
-        {
-          driverId: 12,
-          vehicleId: 21,
-        } as any,
-      )
+      const result = await service.assignVehicleToTrip(88, {
+        driverId: 12,
+        vehicleId: 21,
+      } as any)
 
       expect(prismaService.trip.update).toHaveBeenCalledWith({
         data: { driverId: 12, vehicleId: 21 },

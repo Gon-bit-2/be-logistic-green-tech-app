@@ -60,7 +60,7 @@ export async function createHttpTestApp({
   await app.init()
 
   return {
-    app: app as INestApplication,
+    app: app,
     moduleRef,
     authGuard,
     rolesGuard,

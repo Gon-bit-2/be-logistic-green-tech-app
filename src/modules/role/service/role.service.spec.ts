@@ -4,18 +4,16 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import roleName from 'src/common/constants/role.constant'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
-import { ShareUserRepository } from 'src/common/repositories/shared-user.repo'
-import { SharedRoleRepository } from 'src/common/repositories/shared-role.repo'
 import { PrismaService } from 'src/database/prisma.service'
 import { RoleRepository } from '../repository/role.repo'
 import { RoleService } from './role.service'
 import { NotificationEventName } from 'src/modules/notification/events/notification.event'
+import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
 
 describe('RoleService', () => {
   let service: RoleService
   let roleRepo: jest.Mocked<RoleRepository>
-  let userRepo: jest.Mocked<ShareUserRepository>
-  let sharedRoleRepo: jest.Mocked<SharedRoleRepository>
+  let authRepo: jest.Mocked<AuthRepository>
   let eventEmitter: jest.Mocked<EventEmitter2>
   let prismaService: jest.Mocked<PrismaService>
 
@@ -29,15 +27,12 @@ describe('RoleService', () => {
       updateRoleRequest: jest.fn(),
       updateUserRole: jest.fn(),
       findActiveHubById: jest.fn(),
+      getRoleIdByName: jest.fn(),
     }
 
-    const userRepoMock = {
+    const authRepoMock = {
       findUniqueIncludeRole: jest.fn(),
       findActiveAdmins: jest.fn(),
-    }
-
-    const sharedRoleRepoMock = {
-      getRoleIdByName: jest.fn(),
     }
 
     const eventEmitterMock = {
@@ -52,8 +47,7 @@ describe('RoleService', () => {
       providers: [
         RoleService,
         { provide: RoleRepository, useValue: roleRepoMock },
-        { provide: ShareUserRepository, useValue: userRepoMock },
-        { provide: SharedRoleRepository, useValue: sharedRoleRepoMock },
+        { provide: AuthRepository, useValue: authRepoMock },
         { provide: EventEmitter2, useValue: eventEmitterMock },
         { provide: PrismaService, useValue: prismaServiceMock },
       ],
@@ -61,8 +55,7 @@ describe('RoleService', () => {
 
     service = module.get<RoleService>(RoleService)
     roleRepo = module.get(RoleRepository)
-    userRepo = module.get(ShareUserRepository)
-    sharedRoleRepo = module.get(SharedRoleRepository)
+    authRepo = module.get(AuthRepository)
     eventEmitter = module.get(EventEmitter2)
     prismaService = module.get(PrismaService)
   })
@@ -76,7 +69,7 @@ describe('RoleService', () => {
   })
 
   it('tạo request thành công cho DRIVER', async () => {
-    userRepo.findUniqueIncludeRole.mockResolvedValue({
+    authRepo.findUniqueIncludeRole.mockResolvedValue({
       id: 7,
       fullName: 'Alice',
       roleId: 2,
@@ -84,9 +77,9 @@ describe('RoleService', () => {
     } as any)
     roleRepo.findPendingByRequesterId.mockResolvedValue(null)
     roleRepo.findActiveHubById.mockResolvedValue({ id: 5 } as any)
-    sharedRoleRepo.getRoleIdByName.mockResolvedValue(3)
+    roleRepo.getRoleIdByName.mockResolvedValue(3)
     roleRepo.createRoleRequest.mockResolvedValue({ id: 11 } as any)
-    userRepo.findActiveAdmins.mockResolvedValue([{ id: 1 }, { id: 2 }] as any)
+    authRepo.findActiveAdmins.mockResolvedValue([{ id: 1 }, { id: 2 }] as any)
 
     const result = await service.create(7, {
       targetRoleName: roleName.DRIVER,
@@ -114,7 +107,7 @@ describe('RoleService', () => {
   })
 
   it('chặn target role trùng role hiện tại', async () => {
-    userRepo.findUniqueIncludeRole.mockResolvedValue({
+    authRepo.findUniqueIncludeRole.mockResolvedValue({
       id: 7,
       role: { name: roleName.DRIVER },
       roleId: 3,
@@ -129,7 +122,7 @@ describe('RoleService', () => {
   })
 
   it('chặn admin tạo role request', async () => {
-    userRepo.findUniqueIncludeRole.mockResolvedValue({
+    authRepo.findUniqueIncludeRole.mockResolvedValue({
       id: 1,
       role: { name: roleName.ADMIN },
       roleId: 1,
@@ -144,7 +137,7 @@ describe('RoleService', () => {
   })
 
   it('chặn khi đã có request PENDING', async () => {
-    userRepo.findUniqueIncludeRole.mockResolvedValue({
+    authRepo.findUniqueIncludeRole.mockResolvedValue({
       id: 7,
       fullName: 'Alice',
       role: { name: roleName.CUSTOMER },

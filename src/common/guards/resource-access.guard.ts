@@ -7,7 +7,10 @@ import roleName from '../constants/role.constant'
 
 @Injectable()
 export class ResourceAccessGuard implements CanActivate {
-  constructor(private reflector: Reflector, private prisma: PrismaService) {}
+  constructor(
+    private reflector: Reflector,
+    private prisma: PrismaService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const options = this.reflector.getAllAndOverride<ResourceAccessOptions>(RESOURCE_ACCESS_KEY, [
@@ -63,7 +66,7 @@ export class ResourceAccessGuard implements CanActivate {
     // Rule cho WAREHOUSE_STAFF: Chặn thao tác trên HUB khác
     if (user.roleName === roleName.WAREHOUSE_STAFF && hubField) {
       if (!user.hubId || resource[hubField] !== user.hubId) {
-         throw new ForbiddenException('Error.PermissionDenied.NotYourHub')
+        throw new ForbiddenException('Error.PermissionDenied.NotYourHub')
       }
     }
 

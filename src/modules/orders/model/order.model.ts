@@ -1,5 +1,5 @@
 import { ORDER_STATUS, SERVICE_TYPE } from 'src/common/constants/order.constant'
-import { PaginationQuerySchema } from 'src/common/model/request.model'
+import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
 import z from 'zod'
 
 export const OrderStatusSchema = z.enum([

@@ -60,9 +60,7 @@ describe('AuthController', () => {
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
     })
-    expect(googleService.redeemGoogleSession).toHaveBeenCalledWith(
-      '7d4a08ca-283e-4bf7-bb93-9b19b593c396',
-    )
+    expect(googleService.redeemGoogleSession).toHaveBeenCalledWith('7d4a08ca-283e-4bf7-bb93-9b19b593c396')
   })
 
   it('redirects to client callback with a readable message when Google returns no code', async () => {
