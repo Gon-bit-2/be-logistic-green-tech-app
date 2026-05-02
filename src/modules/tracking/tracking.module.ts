@@ -3,7 +3,6 @@ import { JwtModule } from '@nestjs/jwt'
 import { TrackingService } from './service/tracking.service'
 import { TrackingController } from './controller/tracking.controller'
 import { TrackingRepository } from './repository/tracking.repo'
-import { PrismaService } from '../../database/prisma.service'
 import { TrackingGateway } from './gateway/tracking.gateway'
 import { BullModule } from '@nestjs/bullmq'
 import { GREEN_TECH_QUEUE_NAME } from '../../common/constants/queue.constant'
@@ -23,7 +22,7 @@ import { WsJwtGuard } from '../../common/guards/ws-jwt.guard'
     }),
   ],
   controllers: [TrackingController],
-  providers: [TrackingService, TrackingRepository, PrismaService, TrackingGateway, WsJwtGuard],
+  providers: [TrackingService, TrackingRepository, TrackingGateway, WsJwtGuard],
   exports: [TrackingService, TrackingGateway],
 })
 export class TrackingModule {}

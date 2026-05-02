@@ -14,6 +14,8 @@ import { OnEvent } from '@nestjs/event-emitter'
 import { Auth } from 'src/common/decorators/auth.decorator'
 import { AuthType } from 'src/common/constants/auth.constant'
 import { WsJwtGuard } from 'src/common/guards/ws-jwt.guard'
+import envConfig from 'src/config/config'
+import { parseCorsOrigins } from 'src/common/utils/cors.util'
 
 export interface AuthenticatedSocket extends Socket {
   /** User payload đã được WsJwtGuard giải mã từ JWT token */
@@ -31,7 +33,7 @@ export interface AuthenticatedSocket extends Socket {
 // Authentication: JWT token bắt buộc khi connect qua handshake auth
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:8386'],
+    origin: parseCorsOrigins(envConfig.CORS_ORIGINS) ?? ['http://localhost:3000'],
     credentials: true,
   },
   namespace: 'tracking',

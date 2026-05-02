@@ -2,10 +2,13 @@ import z from 'zod'
 import fs from 'fs'
 import path from 'path'
 import 'dotenv/config'
+import { Logger } from '@nestjs/common'
+
+const logger = new Logger('Config')
 //check exists file env
 
 if (!fs.existsSync(path.resolve('.env'))) {
-  console.log('Không tìm thấy file .env')
+  logger.error('Không tìm thấy file .env')
   process.exit(1)
 }
 const ConfigSchema = z.object({
@@ -37,12 +40,16 @@ const ConfigSchema = z.object({
   CLOUDINARY_API_SECRET: z.string(),
   GOONG_MAPS_API_KEY: z.string(),
   GOONG_BASE_URL: z.string(),
+  NODE_ENV: z.string().optional(),
+  PORT: z.coerce.number().optional(),
+  CORS_ORIGINS: z.string().optional(),
+  REDIS_URL: z.string().optional(),
 })
 
 const configServer = ConfigSchema.safeParse(process.env)
 if (!configServer.success) {
-  console.log('Các giá trị env không hợp lệ')
-  console.error(configServer.error)
+  logger.error('Các giá trị env không hợp lệ')
+  logger.error(configServer.error.message)
   process.exit(1)
 }
 const envConfig = configServer.data

@@ -4,6 +4,7 @@ import { GetTripListQueryType, TripStopType } from 'src/modules/trips/model/trip
 import { TRIP_STATUS } from 'src/common/constants/strip.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { Prisma } from 'generated/prisma'
+import { DISPATCHABLE_PAYMENT_FILTER } from 'src/common/constants/order-query.constant'
 
 @Injectable()
 export class TripRepository {
@@ -21,23 +22,7 @@ export class TripRepository {
         status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
         deletedAt: null,
         currentTripId: null, // Chỉ lấy đơn chưa nằm trên xe nào
-        OR: [
-          {
-            payment: {
-              is: {
-                method: 'COD',
-              },
-            },
-          },
-          {
-            payment: {
-              is: {
-                method: 'STRIPE',
-                status: 'COMPLETED',
-              },
-            },
-          },
-        ],
+        ...DISPATCHABLE_PAYMENT_FILTER,
         ...(hubId ? { currentHubId: hubId } : {}),
       },
       orderBy: {
@@ -124,23 +109,7 @@ export class TripRepository {
           id: { in: orderIds },
           status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
           currentTripId: null,
-          OR: [
-            {
-              payment: {
-                is: {
-                  method: 'COD',
-                },
-              },
-            },
-            {
-              payment: {
-                is: {
-                  method: 'STRIPE',
-                  status: 'COMPLETED',
-                },
-              },
-            },
-          ],
+          ...DISPATCHABLE_PAYMENT_FILTER,
         },
         select: { id: true },
       })
@@ -396,7 +365,16 @@ export class TripRepository {
    *                              + Tìm Hub đích gần nhất với receiverLat/Lng → gán currentHubId mới
    *                              → Đơn sẽ tự động xuất hiện trong lượt dispatch tiếp của Hub đích
    */
-  async completeTrip(tripId: number, allHubs: { id: number; latitude: number; longitude: number }[]) {
+  async completeTrip(
+    tripId: number,
+    allHubs: {
+      id: number
+      latitude: number
+      longitude: number
+      capacityVolume: number
+      ordersCurrentlyHere: { totalVolume: number }[]
+    }[],
+  ) {
     return this.prismaService.$transaction(async (tx) => {
       // 1. Cập nhật Trip status = COMPLETED
       const trip = await tx.trip.update({
@@ -453,7 +431,7 @@ export class TripRepository {
         let minDist = Infinity
         let backupHubId: number | null = null // Fallback nếu tất cả Hub đều đầy
 
-        for (const hub of allHubs as any[]) {
+        for (const hub of allHubs) {
           const dist =
             Math.pow(hub.latitude - htOrder.receiverLat, 2) + Math.pow(hub.longitude - htOrder.receiverLng, 2)
 
@@ -463,7 +441,7 @@ export class TripRepository {
           }
 
           // Kiểm tra Capacity Hub (chặn ở mức 90% để chừa khoảng trống vận hành thực tế)
-          const currentOccupiedVolume = hub.ordersCurrentlyHere.reduce((sum: number, o: any) => sum + o.totalVolume, 0)
+          const currentOccupiedVolume = hub.ordersCurrentlyHere.reduce((sum, order) => sum + order.totalVolume, 0)
 
           if (currentOccupiedVolume + htOrder.totalVolume > hub.capacityVolume * 0.9) {
             continue // Hub này đã đầy -> Pass qua xét Hub phụ cận xa hơn 1 chút

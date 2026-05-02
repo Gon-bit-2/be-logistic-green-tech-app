@@ -1,4 +1,13 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common'
+import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import {
   CreateOrderBodyType,
@@ -22,6 +31,9 @@ import { EVENT_SOURCE, TRACKING_EVENT_TYPE } from 'src/common/constants/tracking
 import { AccessTokenPayload } from 'src/common/types/jwt.type'
 
 const CUSTOMER_CANCELLABLE_STATUSES = new Set<string>([ORDER_STATUS.PENDING, ORDER_STATUS.ASSIGNED])
+const ACTIVE_HUBS_GEO_CACHE_KEY = 'orders:active-hubs:geo'
+const HUBS_CACHE_TTL_MS = 5 * 60 * 1000
+type ActiveHubGeo = { id: number; latitude: number; longitude: number; name: string }
 
 @Injectable()
 export class OrdersService {
@@ -38,6 +50,7 @@ export class OrdersService {
     private readonly eventEmitter: EventEmitter2,
     private readonly mapsService: MapsService,
     private readonly trackingRepo: TrackingRepository,
+    @Optional() @Inject(CACHE_MANAGER) private readonly cacheManager?: Cache,
   ) {}
 
   /**
@@ -105,29 +118,23 @@ export class OrdersService {
   }
 
   // ====== #10: HUB GEOSPATIAL CACHE ======
-  // Thay vì query `SELECT * FROM hubs` mỗi lần tạo đơn, cache list Hub trên RAM Node.js
-  // Node.js v8 engine thừa sức tính Haversine cho 10,000 phần tử mảng trong <2ms (cực chuẩn cho Enterprise).
-  private cachedActiveHubs: { id: number; latitude: number; longitude: number; name: string }[] | null = null
-  private lastHubsCacheTime = 0
-  private readonly HUBS_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
-
+  // Cache list Hub qua CacheModule/Redis để các instance dùng chung cùng một dữ liệu.
   /**
    * Tìm Hub gần nhất với tọa độ người gửi (Geo-Fencing Assignment).
    * Sử dụng Haversine Distance để so sánh khoảng cách chim bay từ sender tới toàn bộ Hub.
    * Giải quyết bài toán "Đơn mồ côi" - đơn hàng mới tạo không thuộc Hub nào.
    */
   private async findNearestHubId(senderLat: number, senderLng: number): Promise<number | null> {
-    const now = Date.now()
-    if (!this.cachedActiveHubs || now - this.lastHubsCacheTime > this.HUBS_CACHE_TTL_MS) {
-      this.cachedActiveHubs = await this.prismaService.hub.findMany({
+    let activeHubs = (await this.cacheManager?.get<ActiveHubGeo[]>(ACTIVE_HUBS_GEO_CACHE_KEY)) ?? null
+
+    if (!activeHubs) {
+      activeHubs = await this.prismaService.hub.findMany({
         where: { isActive: true, deletedAt: null },
         select: { id: true, latitude: true, longitude: true, name: true },
       })
-      this.lastHubsCacheTime = now
-      this.logger.debug(`[CACHE] Refreshed Hubs Geo-Cache (${this.cachedActiveHubs.length} hubs)`)
+      await this.cacheManager?.set(ACTIVE_HUBS_GEO_CACHE_KEY, activeHubs, HUBS_CACHE_TTL_MS)
+      this.logger.debug(`[CACHE] Refreshed Hubs Geo-Cache (${activeHubs.length} hubs)`)
     }
-
-    const activeHubs = this.cachedActiveHubs
 
     if (!activeHubs.length) {
       this.logger.warn('[ORDER] Không có Hub nào đang hoạt động. Đơn hàng sẽ không được gán Hub.')

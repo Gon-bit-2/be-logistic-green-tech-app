@@ -1,5 +1,5 @@
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager'
-import { BadRequestException, Inject, Injectable, UnauthorizedException } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common'
 import { OAuth2Client } from 'google-auth-library'
 import { google } from 'googleapis'
 import envConfig from 'src/config/config'
@@ -12,6 +12,7 @@ import { RoleRepository } from 'src/modules/role/repository/role.repo'
 
 @Injectable()
 export class GoogleService {
+  private readonly logger = new Logger(GoogleService.name)
   private oauth2Client: OAuth2Client
   private readonly stateCacheTtlMs = 10 * 60 * 1000
   private readonly sessionCacheTtlMs = 60 * 1000
@@ -131,7 +132,10 @@ export class GoogleService {
 
       return { sessionToken }
     } catch (error) {
-      console.log(error)
+      this.logger.error(
+        `Google OAuth callback failed: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      )
       throw error
     }
   }

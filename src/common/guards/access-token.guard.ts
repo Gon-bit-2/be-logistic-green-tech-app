@@ -23,6 +23,10 @@ type CachedRole = RolePermissionType & {
     [key: string]: permission
   }
 }
+type AuthenticatedRequest = Request & {
+  [REQUEST_USER_KEY]?: AccessTokenPayload
+  [REQUEST_ROLE_PERMISSIONS]?: RolePermissionType
+}
 
 function normalizeRouteSegment(value?: string) {
   if (!value) {
@@ -53,14 +57,14 @@ export class AccessTokenGuard implements CanActivate {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<Request & { user?: AccessTokenPayload }>()
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>()
     //extract and validate token
     const decodedAccessToken = await this.extractAndValidateToken(request)
     //check user permission
     await this.validateUserPermission(decodedAccessToken, request)
     return true
   }
-  private async extractAndValidateToken(request: any): Promise<AccessTokenPayload> {
+  private async extractAndValidateToken(request: AuthenticatedRequest): Promise<AccessTokenPayload> {
     const accessToken = this.extractTokenFromHeader(request)
     try {
       const decodedAccessToken = await this.tokenService.verifyAccessToken(accessToken)
@@ -71,14 +75,14 @@ export class AccessTokenGuard implements CanActivate {
       throw new UnauthorizedException('Error.InvalidAccessToken')
     }
   }
-  private extractTokenFromHeader(request: any): string {
+  private extractTokenFromHeader(request: AuthenticatedRequest): string {
     const accessToken = request.headers.authorization?.split(' ')[1]
     if (!accessToken) {
       throw new UnauthorizedException('Error.MissingAccessToken')
     }
     return accessToken
   }
-  private async validateUserPermission(decodedAccessToken: AccessTokenPayload, request: any) {
+  private async validateUserPermission(decodedAccessToken: AccessTokenPayload, request: AuthenticatedRequest) {
     const roleId = decodedAccessToken.roleId
 
     const path = getPermissionPath(request)

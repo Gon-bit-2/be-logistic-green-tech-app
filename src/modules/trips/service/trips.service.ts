@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
 import { TripRepository } from '../repository/trip.repository'
@@ -34,9 +34,12 @@ import { EVENT_SOURCE, TRACKING_EVENT_TYPE } from 'src/common/constants/tracking
 import type { ProofOfDeliveryInputType } from 'src/modules/tracking/model/tracking.model'
 import { DriverAssignmentRequestStatus } from 'src/common/constants/driver-assignment-request.constant'
 import { NotificationEventName } from 'src/modules/notification/events/notification.event'
+import { DISPATCHABLE_PAYMENT_FILTER } from 'src/common/constants/order-query.constant'
 
 @Injectable()
 export class TripsService {
+  private readonly logger = new Logger(TripsService.name)
+
   constructor(
     @InjectQueue(AUTO_DISPATCH_QUEUE_NAME)
     private readonly autoDispatchQueue: Queue,
@@ -434,23 +437,7 @@ export class TripsService {
               status: {
                 in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
               },
-              OR: [
-                {
-                  payment: {
-                    is: {
-                      method: 'COD',
-                    },
-                  },
-                },
-                {
-                  payment: {
-                    is: {
-                      method: 'STRIPE',
-                      status: 'COMPLETED',
-                    },
-                  },
-                },
-              ],
+              ...DISPATCHABLE_PAYMENT_FILTER,
             },
             orderBy: [{ preferredDeliveryTimeEnd: 'asc' }, { createdAt: 'asc' }],
             select: {
@@ -554,23 +541,7 @@ export class TripsService {
           status: {
             in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
           },
-          OR: [
-            {
-              payment: {
-                is: {
-                  method: 'COD',
-                },
-              },
-            },
-            {
-              payment: {
-                is: {
-                  method: 'STRIPE',
-                  status: 'COMPLETED',
-                },
-              },
-            },
-          ],
+          ...DISPATCHABLE_PAYMENT_FILTER,
         },
         select: {
           id: true,
@@ -923,23 +894,7 @@ export class TripsService {
       where: {
         id: { in: orderIds },
         status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
-        OR: [
-          {
-            payment: {
-              is: {
-                method: 'COD',
-              },
-            },
-          },
-          {
-            payment: {
-              is: {
-                method: 'STRIPE',
-                status: 'COMPLETED',
-              },
-            },
-          },
-        ],
+        ...DISPATCHABLE_PAYMENT_FILTER,
       },
     })
 
@@ -1058,23 +1013,7 @@ export class TripsService {
       where: {
         id: { in: dto.orderIds },
         status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
-        OR: [
-          {
-            payment: {
-              is: {
-                method: 'COD',
-              },
-            },
-          },
-          {
-            payment: {
-              is: {
-                method: 'STRIPE',
-                status: 'COMPLETED',
-              },
-            },
-          },
-        ],
+        ...DISPATCHABLE_PAYMENT_FILTER,
       },
     })
 
@@ -1120,23 +1059,7 @@ export class TripsService {
       await tx.order.updateMany({
         where: {
           id: { in: ordersToAdd.map((o) => o.id) },
-          OR: [
-            {
-              payment: {
-                is: {
-                  method: 'COD',
-                },
-              },
-            },
-            {
-              payment: {
-                is: {
-                  method: 'STRIPE',
-                  status: 'COMPLETED',
-                },
-              },
-            },
-          ],
+          ...DISPATCHABLE_PAYMENT_FILTER,
         },
         data: { status: ORDER_STATUS.ASSIGNED, currentTripId: tripId },
       })
@@ -1377,23 +1300,7 @@ export class TripsService {
           status: {
             in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
           },
-          OR: [
-            {
-              payment: {
-                is: {
-                  method: 'COD',
-                },
-              },
-            },
-            {
-              payment: {
-                is: {
-                  method: 'STRIPE',
-                  status: 'COMPLETED',
-                },
-              },
-            },
-          ],
+          ...DISPATCHABLE_PAYMENT_FILTER,
         },
         data: {
           currentTripId: trip.id,
@@ -1453,7 +1360,7 @@ export class TripsService {
     try {
       await this.eventEmitter.emitAsync(eventName, payload)
     } catch (error) {
-      console.warn(
+      this.logger.warn(
         `Notification event failed for ${eventName}: ${error instanceof Error ? error.message : String(error)}`,
       )
     }
@@ -1549,23 +1456,7 @@ export class TripsService {
         deletedAt: null,
         status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
         currentTripId: null,
-        OR: [
-          {
-            payment: {
-              is: {
-                method: 'COD',
-              },
-            },
-          },
-          {
-            payment: {
-              is: {
-                method: 'STRIPE',
-                status: 'COMPLETED',
-              },
-            },
-          },
-        ],
+        ...DISPATCHABLE_PAYMENT_FILTER,
       },
       select: { id: true, currentHubId: true },
     })
@@ -1926,7 +1817,10 @@ export class TripsService {
 
     // Kích hoạt logic tính toán Gamification CO2 sau khi hoàn thành chuyến (Non-blocking)
     this.gamificationService.processTripEmission(tripId).catch((err) => {
-      console.error(`[Gamification Error] Lỗi xử lý điểm cống hiến chuyến xe ${tripId}:`, err)
+      this.logger.error(
+        `[Gamification Error] Lỗi xử lý điểm cống hiến chuyến xe ${tripId}: ${err instanceof Error ? err.message : String(err)}`,
+        err instanceof Error ? err.stack : undefined,
+      )
     })
 
     return result
