@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common'
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
 import { AuthModule } from 'src/modules/auth/auth.module'
@@ -26,9 +26,26 @@ import { NotificationModule } from './modules/notification/notification.module'
 import { RoleModule } from './modules/role/role.module'
 import { MapsModule } from './modules/maps/maps.module'
 import { EventEmitterModule } from '@nestjs/event-emitter'
+import { DatabaseModule } from './database/database.module'
+import { LoggingMiddleware } from './common/middlewares/logging.middleware'
+import { RequestIdMiddleware } from './common/middlewares/request-id.middleware'
+
+function buildRedisUrl() {
+  if (envConfig.REDIS_URL) {
+    return envConfig.REDIS_URL
+  }
+
+  const auth =
+    envConfig.REDIS_USERNAME || envConfig.REDIS_PASSWORD
+      ? `${encodeURIComponent(envConfig.REDIS_USERNAME)}:${encodeURIComponent(envConfig.REDIS_PASSWORD)}@`
+      : ''
+
+  return `redis://${auth}${envConfig.REDIS_HOST}:${envConfig.REDIS_PORT}`
+}
 
 @Module({
   imports: [
+    DatabaseModule,
     AuthModule,
     VehicleModule,
     HubModule,
@@ -65,10 +82,9 @@ import { EventEmitterModule } from '@nestjs/event-emitter'
       isGlobal: true,
       useFactory: () => {
         return {
+          ttl: 60_000,
           stores: [
-            createKeyv(
-              `redis://${envConfig.REDIS_USERNAME}:${envConfig.REDIS_PASSWORD}@redis-12766.crce194.ap-seast-1-1.ec2.cloud.redislabs.com:${envConfig.REDIS_PORT}`,
-            ),
+            createKeyv(buildRedisUrl()),
           ],
         }
       },
@@ -91,4 +107,8 @@ import { EventEmitterModule } from '@nestjs/event-emitter'
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestIdMiddleware, LoggingMiddleware).forRoutes('*')
+  }
+}

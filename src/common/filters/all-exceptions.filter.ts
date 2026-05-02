@@ -1,6 +1,13 @@
 import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import { ZodError } from 'zod'
+import { RequestWithId } from 'src/common/middlewares/request-id.middleware'
+
+type ExceptionResponseBody = {
+  message?: string | { message?: string }[]
+  error?: unknown
+  errors?: unknown
+}
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -18,12 +25,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const ctx = host.switchToHttp()
 
     const { httpStatus, message, errors } = this.resolveException(exception)
-    const request = ctx.getRequest()
+    const request = ctx.getRequest<RequestWithId>()
 
     const responseBody = {
       statusCode: httpStatus,
       message,
-      ...(errors && { errors }),
+      ...(errors != null ? { errors } : {}),
+      ...(request.id && { requestId: request.id }),
       path: httpAdapter.getRequestUrl(request),
       timestamp: new Date().toISOString(),
     }
@@ -48,7 +56,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const responseBody = {
       statusCode: httpStatus,
       message,
-      ...(errors && { errors }),
+      ...(errors != null ? { errors } : {}),
       timestamp: new Date().toISOString(),
     }
 
@@ -67,29 +75,30 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private resolveException(exception: unknown) {
     let httpStatus = HttpStatus.INTERNAL_SERVER_ERROR
     let message = 'Internal server error'
-    let errors: any = null
+    let errors: unknown = null
 
     if (exception instanceof HttpException) {
       httpStatus = exception.getStatus()
       const response = exception.getResponse()
 
-      let rawMessage = (response as any).message
+      const responseObject: ExceptionResponseBody =
+        typeof response === 'object' && response !== null ? (response as ExceptionResponseBody) : {}
+      let rawMessage = responseObject.message
       if (typeof response === 'string') {
         rawMessage = response
       }
 
       if (Array.isArray(rawMessage)) {
-        message = rawMessage.map((item: any) => item?.message ?? String(item)).join(', ')
+        message = rawMessage.map((item) => item?.message ?? String(item)).join(', ')
       } else if (typeof rawMessage === 'string') {
         message = rawMessage
       }
 
-      const resObj = typeof response === 'object' && response !== null ? response : {}
-      errors = (resObj as any).errors || (resObj as any).error || null
+      errors = responseObject.errors || responseObject.error || null
     } else if (exception instanceof ZodError) {
       httpStatus = HttpStatus.BAD_REQUEST
-      message = (exception as any).errors.map((err) => err.message).join(', ')
-      errors = (exception as any).errors
+      message = exception.issues.map((err) => err.message).join(', ')
+      errors = exception.issues
     } else if (exception instanceof Error) {
       message = exception.message
     }

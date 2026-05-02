@@ -5,7 +5,6 @@ import { TripRepository } from './repository/trip.repository'
 import { BullModule } from '@nestjs/bullmq'
 import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
 import { TripsProcessor } from './processor/trips.processor'
-import { PrismaService } from 'src/database/prisma.service'
 import { GreenTechModule } from '../green-tech/green-tech.module'
 import { TrackingRepository } from 'src/modules/tracking/repository/tracking.repo'
 
@@ -32,7 +31,7 @@ import { TrackingRepository } from 'src/modules/tracking/repository/tracking.rep
     }),
   ],
   controllers: [TripsController],
-  providers: [TripsService, TripRepository, TripsProcessor, PrismaService, TrackingRepository],
+  providers: [TripsService, TripRepository, TripsProcessor, TrackingRepository],
   exports: [TripsService],
 })
 export class TripsModule {}

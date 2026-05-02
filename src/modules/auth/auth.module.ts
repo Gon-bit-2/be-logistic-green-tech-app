@@ -10,7 +10,6 @@ import { TokenService } from 'src/common/services/token.service'
 import { HashingService } from 'src/common/services/hashing.service'
 import { JwtModule } from '@nestjs/jwt'
 import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
-import { PrismaService } from 'src/database/prisma.service'
 import { AccessTokenGuard } from 'src/common/guards/access-token.guard'
 import { ApiKeyGuard } from 'src/common/guards/api-key.guard'
 import { PaymentApiKeyGuard } from 'src/common/guards/payment-api-key.guard'
@@ -32,7 +31,6 @@ import { RoleRepository } from 'src/modules/role/repository/role.repo'
     AuthRepository,
     RoleRepository,
     VerificationCodeRepository,
-    PrismaService,
     AccessTokenGuard,
     ApiKeyGuard,
     PaymentApiKeyGuard,

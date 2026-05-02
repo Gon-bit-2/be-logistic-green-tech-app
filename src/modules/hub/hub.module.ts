@@ -2,12 +2,11 @@ import { Module } from '@nestjs/common'
 import { HubController } from 'src/modules/hub/controller/hub.controller'
 import { HubService } from 'src/modules/hub/service/hub.service'
 import { HubRepository } from 'src/modules/hub/repository/hub.repo'
-import { PrismaService } from 'src/database/prisma.service'
 import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
 
 @Module({
   controllers: [HubController],
-  providers: [HubService, HubRepository, AuthRepository, PrismaService],
+  providers: [HubService, HubRepository, AuthRepository],
   exports: [HubService],
 })
 export class HubModule {}

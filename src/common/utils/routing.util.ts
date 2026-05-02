@@ -1,3 +1,7 @@
+import { Logger } from '@nestjs/common'
+
+const logger = new Logger('RoutingUtil')
+
 export interface RouteCoordinate {
   lat: number
   lng: number
@@ -8,6 +12,19 @@ export interface OptimizedRouteResult {
   distance: number // in meters
   duration: number // in seconds
   polyline?: string | null
+}
+
+type OsrmTripResponse = {
+  code: string
+  waypoints: {
+    waypoint_index: number
+    location: [number, number]
+  }[]
+  trips: {
+    distance: number
+    duration: number
+    geometry?: string
+  }[]
 }
 
 /**
@@ -32,7 +49,7 @@ export async function optimizeRouteWithOSRM(
 
   try {
     const response = await fetch(url)
-    const data = await response.json()
+    const data = (await response.json()) as OsrmTripResponse
 
     if (data.code !== 'Ok') {
       throw new Error('OSRM API returned error: ' + data.code)
@@ -40,8 +57,8 @@ export async function optimizeRouteWithOSRM(
 
     // data.waypoints has the optimized sequence
     const optimizedWaypoints = data.waypoints
-      .sort((a: any, b: any) => a.waypoint_index - b.waypoint_index)
-      .map((wp: any) => ({
+      .sort((a, b) => a.waypoint_index - b.waypoint_index)
+      .map((wp) => ({
         lng: wp.location[0],
         lat: wp.location[1],
       }))
@@ -55,8 +72,11 @@ export async function optimizeRouteWithOSRM(
       duration,
       polyline: data.trips?.[0]?.geometry ?? null,
     }
-  } catch (error: any) {
-    console.error('Error optimizing route with OSRM', error.message)
+  } catch (error: unknown) {
+    logger.error(
+      `Error optimizing route with OSRM: ${error instanceof Error ? error.message : String(error)}`,
+      error instanceof Error ? error.stack : undefined,
+    )
     // Fallback to original
     return {
       waypoints: coordinates,
