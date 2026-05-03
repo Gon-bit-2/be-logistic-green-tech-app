@@ -12,3 +12,14 @@ export const NotificationType = {
 } as const
 
 export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType]
+
+/**
+ * Danh sách trạng thái đơn hàng cần phát notification cho Customer.
+ * Được extract ra constant chung để tránh duplicate ở OrdersService và TrackingService.
+ */
+export const NOTIFIABLE_ORDER_STATUSES = new Set(['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'] as const)
+
+/** Kiểm tra một status có nằm trong danh sách cần notify hay không */
+export function isNotifiableOrderStatus(status: string): boolean {
+  return NOTIFIABLE_ORDER_STATUSES.has(status as any)
+}

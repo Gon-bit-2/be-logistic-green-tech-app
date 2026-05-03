@@ -8,7 +8,8 @@ import {
   Optional,
 } from '@nestjs/common'
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager'
-import { EventEmitter2 } from '@nestjs/event-emitter'
+import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
+import { isNotifiableOrderStatus } from 'src/common/constants/notification.constant'
 import {
   CreateOrderBodyType,
   GetOrderListQueryType,
@@ -38,16 +39,11 @@ type ActiveHubGeo = { id: number; latitude: number; longitude: number; name: str
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name)
-  private readonly notifiableOrderStatuses: OrderStatusUpdatedEvent['status'][] = [
-    ORDER_STATUS.OUT_FOR_DELIVERY,
-    ORDER_STATUS.DELIVERED,
-    ORDER_STATUS.CANCELLED,
-  ]
 
   constructor(
     private readonly orderRepo: OrderRepository,
     private readonly prismaService: PrismaService,
-    private readonly eventEmitter: EventEmitter2,
+    private readonly notificationEmitter: NotificationEmitterService,
     private readonly mapsService: MapsService,
     private readonly trackingRepo: TrackingRepository,
     @Optional() @Inject(CACHE_MANAGER) private readonly cacheManager?: Cache,
@@ -183,7 +179,7 @@ export class OrdersService {
       paymentMethod: payload.paymentMethod ?? 'STRIPE',
     })
 
-    await this.emitNotificationEvent(NotificationEventName.ORDER_CREATED, {
+    await this.notificationEmitter.emitSafe(NotificationEventName.ORDER_CREATED, {
       userId: createdOrder.customerId,
       orderId: createdOrder.id,
       trackingCode: createdOrder.trackingCode,
@@ -247,12 +243,12 @@ export class OrdersService {
   async update(id: number, payload: UpdateOrderStatusType) {
     const updatedOrder = await this.orderRepo.update(id, payload)
 
-    if (this.shouldNotifyOrderStatus(updatedOrder.status)) {
-      await this.emitNotificationEvent(NotificationEventName.ORDER_STATUS_UPDATED, {
+    if (isNotifiableOrderStatus(updatedOrder.status)) {
+      await this.notificationEmitter.emitSafe(NotificationEventName.ORDER_STATUS_UPDATED, {
         userId: updatedOrder.customerId,
         orderId: updatedOrder.id,
         trackingCode: updatedOrder.trackingCode,
-        status: updatedOrder.status,
+        status: updatedOrder.status as OrderStatusUpdatedEvent['status'],
       })
     }
 
@@ -318,7 +314,7 @@ export class OrdersService {
       throw new NotFoundException(`Đơn hàng #${id} không tồn tại sau khi hủy`)
     }
 
-    await this.emitNotificationEvent(NotificationEventName.ORDER_STATUS_UPDATED, {
+    await this.notificationEmitter.emitSafe(NotificationEventName.ORDER_STATUS_UPDATED, {
       userId: cancelledOrder.customerId,
       orderId: cancelledOrder.id,
       trackingCode: cancelledOrder.trackingCode,
@@ -332,28 +328,5 @@ export class OrdersService {
     return this.orderRepo.delete({ id, deletedById })
   }
 
-  private shouldNotifyOrderStatus(status: string): status is OrderStatusUpdatedEvent['status'] {
-    return this.notifiableOrderStatuses.some((item) => item === status)
-  }
 
-  private async emitNotificationEvent(
-    eventName: typeof NotificationEventName.ORDER_CREATED,
-    payload: OrderCreatedEvent,
-  ): Promise<void>
-  private async emitNotificationEvent(
-    eventName: typeof NotificationEventName.ORDER_STATUS_UPDATED,
-    payload: OrderStatusUpdatedEvent,
-  ): Promise<void>
-  private async emitNotificationEvent(
-    eventName: typeof NotificationEventName.ORDER_CREATED | typeof NotificationEventName.ORDER_STATUS_UPDATED,
-    payload: OrderCreatedEvent | OrderStatusUpdatedEvent,
-  ) {
-    try {
-      await this.eventEmitter.emitAsync(eventName, payload)
-    } catch (error) {
-      this.logger.warn(
-        `Notification event failed for ${eventName}: ${error instanceof Error ? error.message : String(error)}`,
-      )
-    }
-  }
 }

@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common'
-import { EventEmitter2 } from '@nestjs/event-emitter'
+import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
 import roleName from 'src/common/constants/role.constant'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
 import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
@@ -24,7 +24,7 @@ export class RoleService {
   constructor(
     private readonly roleRepository: RoleRepository,
     private readonly authRepository: AuthRepository,
-    private readonly eventEmitter: EventEmitter2,
+    private readonly notificationEmitter: NotificationEmitterService,
     private readonly prismaService: PrismaService,
   ) {}
 
@@ -62,7 +62,7 @@ export class RoleService {
     })
 
     const admins = await this.authRepository.findActiveAdmins()
-    await this.emitNotificationEvent(NotificationEventName.ROLE_REQUEST_SUBMITTED, {
+    await this.notificationEmitter.emitSafe(NotificationEventName.ROLE_REQUEST_SUBMITTED, {
       recipientUserIds: admins.map((admin) => admin.id),
       requesterName: user.fullName,
       targetRoleName: body.targetRoleName,
@@ -127,7 +127,7 @@ export class RoleService {
       )
     })
 
-    await this.emitNotificationEvent(NotificationEventName.ROLE_REQUEST_REVIEWED, {
+    await this.notificationEmitter.emitSafe(NotificationEventName.ROLE_REQUEST_REVIEWED, {
       userId: updatedRoleRequest.requesterId,
       targetRoleName: updatedRoleRequest.targetRole.name as typeof roleName.DRIVER | typeof roleName.WAREHOUSE_STAFF,
       roleRequestId: updatedRoleRequest.id,
@@ -162,7 +162,7 @@ export class RoleService {
       )
     })
 
-    await this.emitNotificationEvent(NotificationEventName.ROLE_REQUEST_REVIEWED, {
+    await this.notificationEmitter.emitSafe(NotificationEventName.ROLE_REQUEST_REVIEWED, {
       userId: updatedRoleRequest.requesterId,
       targetRoleName: updatedRoleRequest.targetRole.name as typeof roleName.DRIVER | typeof roleName.WAREHOUSE_STAFF,
       roleRequestId: updatedRoleRequest.id,
@@ -173,24 +173,5 @@ export class RoleService {
     return updatedRoleRequest
   }
 
-  private async emitNotificationEvent(
-    eventName: typeof NotificationEventName.ROLE_REQUEST_SUBMITTED,
-    payload: RoleRequestSubmittedEvent,
-  ): Promise<void>
-  private async emitNotificationEvent(
-    eventName: typeof NotificationEventName.ROLE_REQUEST_REVIEWED,
-    payload: RoleRequestReviewedEvent,
-  ): Promise<void>
-  private async emitNotificationEvent(
-    eventName: (typeof NotificationEventName)[keyof typeof NotificationEventName],
-    payload: RoleRequestSubmittedEvent | RoleRequestReviewedEvent,
-  ) {
-    try {
-      await this.eventEmitter.emitAsync(eventName, payload)
-    } catch (error) {
-      this.logger.warn(
-        `Notification event failed for ${eventName}: ${error instanceof Error ? error.message : String(error)}`,
-      )
-    }
-  }
+
 }

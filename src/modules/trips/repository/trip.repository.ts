@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from 'src/database/prisma.service'
 import { GetTripListQueryType, TripStopType } from 'src/modules/trips/model/trip.model'
-import { TRIP_STATUS } from 'src/common/constants/strip.constant'
+import { TRIP_STATUS } from 'src/common/constants/trip.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { Prisma } from 'generated/prisma'
 import { DISPATCHABLE_PAYMENT_FILTER } from 'src/common/constants/order-query.constant'
@@ -49,6 +49,17 @@ export class TripRepository {
           },
         },
       },
+      // Select chỉ các field cần thiết cho dispatch, tránh trả toàn bộ columns
+      select: {
+        id: true,
+        licensePlate: true,
+        type: true,
+        capacityWeight: true,
+        capacityVolume: true,
+        hubId: true,
+        fuelType: true,
+        emissionRatePerKm: true,
+      },
       orderBy: [
         { type: 'asc' }, // Giả định: mảng Enum có ELECTRIC_VAN là thứ tự cao hoặc mình tự sort lại ở Code.
         { capacityWeight: 'desc' }, // Xe to được lấy trước để chở nhiều
@@ -79,6 +90,14 @@ export class TripRepository {
             },
           },
         },
+      },
+      // KHÔNG BAO GIỜ trả về password, totpSecret ra ngoài auth flow
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        avatar: true,
+        hubId: true,
       },
     })
   }

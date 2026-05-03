@@ -29,6 +29,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter'
 import { DatabaseModule } from './database/database.module'
 import { LoggingMiddleware } from './common/middlewares/logging.middleware'
 import { RequestIdMiddleware } from './common/middlewares/request-id.middleware'
+import { SharedServicesModule } from './common/services/shared-services.module'
 
 function buildRedisUrl() {
   if (envConfig.REDIS_URL) {
@@ -46,6 +47,7 @@ function buildRedisUrl() {
 @Module({
   imports: [
     DatabaseModule,
+    SharedServicesModule,
     AuthModule,
     VehicleModule,
     HubModule,

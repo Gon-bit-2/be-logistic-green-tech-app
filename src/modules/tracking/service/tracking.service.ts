@@ -4,7 +4,8 @@ import { CreateTrackingEventType } from '../model/tracking.model'
 import { PrismaService } from 'src/database/prisma.service'
 import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
-import { EventEmitter2 } from '@nestjs/event-emitter'
+import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
+import { isNotifiableOrderStatus } from 'src/common/constants/notification.constant'
 import {
   TRACKING_EVENT_TYPE,
   VALID_STATUS_TRANSITIONS,
@@ -19,17 +20,12 @@ import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 @Injectable()
 export class TrackingService {
   private readonly logger = new Logger(TrackingService.name)
-  private readonly notifiableOrderStatuses: OrderStatusUpdatedEvent['status'][] = [
-    ORDER_STATUS.OUT_FOR_DELIVERY,
-    ORDER_STATUS.DELIVERED,
-    ORDER_STATUS.CANCELLED,
-  ]
 
   constructor(
     private readonly trackingRepo: TrackingRepository,
     private readonly prismaService: PrismaService,
     @InjectQueue(GREEN_TECH_QUEUE_NAME) private readonly greenTechQueue: Queue,
-    private readonly eventEmitter: EventEmitter2,
+    private readonly notificationEmitter: NotificationEmitterService,
   ) {}
 
   /**
@@ -129,12 +125,12 @@ export class TrackingService {
         : undefined,
     })
 
-    if (shouldUpdateOrderStatus && payload.status && this.shouldNotifyOrderStatus(payload.status)) {
-      await this.emitNotificationEvent(NotificationEventName.ORDER_STATUS_UPDATED, {
+    if (shouldUpdateOrderStatus && payload.status && isNotifiableOrderStatus(payload.status)) {
+      await this.notificationEmitter.emitSafe(NotificationEventName.ORDER_STATUS_UPDATED, {
         userId: order.customerId,
         orderId: order.id,
         trackingCode: order.trackingCode,
-        status: payload.status,
+        status: payload.status as OrderStatusUpdatedEvent['status'],
       })
     }
 
@@ -270,20 +266,5 @@ export class TrackingService {
     }
   }
 
-  private shouldNotifyOrderStatus(status: string): status is OrderStatusUpdatedEvent['status'] {
-    return this.notifiableOrderStatuses.some((item) => item === status)
-  }
 
-  private async emitNotificationEvent(
-    eventName: typeof NotificationEventName.ORDER_STATUS_UPDATED,
-    payload: OrderStatusUpdatedEvent,
-  ) {
-    try {
-      await this.eventEmitter.emitAsync(eventName, payload)
-    } catch (error) {
-      this.logger.warn(
-        `Notification event failed for ${eventName}: ${error instanceof Error ? error.message : String(error)}`,
-      )
-    }
-  }
 }

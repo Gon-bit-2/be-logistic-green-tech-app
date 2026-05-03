@@ -1,4 +1,4 @@
-import { STOP_TYPE, TRIP_STATUS } from 'src/common/constants/strip.constant'
+import { STOP_TYPE, TRIP_STATUS } from 'src/common/constants/trip.constant'
 import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
 import { ProofOfDeliveryInputSchema } from 'src/modules/tracking/model/tracking.model'
 import { DriverAssignmentRequestStatus } from 'src/common/constants/driver-assignment-request.constant'
@@ -318,3 +318,10 @@ export type AssignmentRequestInboxResType = z.infer<typeof AssignmentRequestInbo
 export type CreateDriverAssignmentRequestType = z.infer<typeof CreateDriverAssignmentRequestSchema>
 export type ApproveDriverAssignmentRequestType = z.infer<typeof ApproveDriverAssignmentRequestSchema>
 export type RejectDriverAssignmentRequestType = z.infer<typeof RejectDriverAssignmentRequestSchema>
+
+// Aliases cho sub-services (backward-compatible)
+export type ManualCreateTripType = CreateManualTripType
+export type GetTripsQueryType = GetTripListQueryType
+export type ReassignTripVehicleType = AssignVehicleType
+export type CancelTripBodyType = { reason?: string }
+
