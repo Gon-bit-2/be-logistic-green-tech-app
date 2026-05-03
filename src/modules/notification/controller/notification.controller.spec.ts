@@ -1,7 +1,7 @@
 // @ts-nocheck
 import request from 'supertest'
 import { NotificationController } from './notification.controller'
-import { NotificationService } from './notification.service'
+import { NotificationService } from '../service/notification.service'
 import { createHttpTestApp } from '../../../../test/helpers/create-http-test-app'
 
 describe('NotificationController', () => {

@@ -39,7 +39,7 @@ export class AuthenticationGuard implements CanActivate {
     return authTypeValue
   }
   private async handleOrCondition(guards: CanActivate[], context: ExecutionContext) {
-    let lastError: any = null
+    let lastError: unknown = null
     //duyệt qua các guard nếu 1 guard pass thì return true
     for (const instance of guards) {
       if (!instance) {

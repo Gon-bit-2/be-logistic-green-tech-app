@@ -1,5 +1,58 @@
 import { Injectable } from '@nestjs/common'
+import { Prisma } from 'generated/prisma'
 import { DriverAssignmentRequestResType } from '../model/trip.model'
+
+const driverAssignmentRequestInclude = {
+  driver: {
+    select: {
+      fullName: true,
+      id: true,
+    },
+  },
+  order: {
+    select: {
+      currentHubId: true,
+      payment: {
+        select: {
+          method: true,
+          status: true,
+        },
+      },
+      currentTrip: {
+        include: {
+          vehicle: {
+            select: {
+              id: true,
+              licensePlate: true,
+            },
+          },
+        },
+      },
+      currentTripId: true,
+      id: true,
+      preferredDeliveryTimeEnd: true,
+      preferredDeliveryTimeStart: true,
+      receiverAddress: true,
+      receiverLat: true,
+      receiverLng: true,
+      receiverName: true,
+      receiverPhone: true,
+      senderAddress: true,
+      senderLat: true,
+      senderLng: true,
+      status: true,
+      totalVolume: true,
+      totalWeight: true,
+      trackingCode: true,
+    },
+  },
+} as const satisfies Prisma.DriverAssignmentRequestInclude
+
+export type DriverAssignmentRequestWithDetails = Prisma.DriverAssignmentRequestGetPayload<{
+  include: typeof driverAssignmentRequestInclude
+}>
+
+type DriverAssignmentTripSummary = NonNullable<DriverAssignmentRequestWithDetails['order']['currentTrip']>
 
 /**
  * Helper chứa các hàm mapping và include config
@@ -9,55 +62,11 @@ import { DriverAssignmentRequestResType } from '../model/trip.model'
 export class DriverAssignmentHelper {
   /** Prisma include config cho DriverAssignmentRequest queries */
   getDriverAssignmentRequestInclude() {
-    return {
-      driver: {
-        select: {
-          fullName: true,
-          id: true,
-        },
-      },
-      order: {
-        select: {
-          currentHubId: true,
-          payment: {
-            select: {
-              method: true,
-              status: true,
-            },
-          },
-          currentTrip: {
-            include: {
-              vehicle: {
-                select: {
-                  id: true,
-                  licensePlate: true,
-                },
-              },
-            },
-          },
-          currentTripId: true,
-          id: true,
-          preferredDeliveryTimeEnd: true,
-          preferredDeliveryTimeStart: true,
-          receiverAddress: true,
-          receiverLat: true,
-          receiverLng: true,
-          receiverName: true,
-          receiverPhone: true,
-          senderAddress: true,
-          senderLat: true,
-          senderLng: true,
-          status: true,
-          totalVolume: true,
-          totalWeight: true,
-          trackingCode: true,
-        },
-      },
-    } as const
+    return driverAssignmentRequestInclude
   }
 
   /** Map raw Prisma DriverAssignmentRequest sang response DTO */
-  mapDriverAssignmentRequest(request: any): DriverAssignmentRequestResType {
+  mapDriverAssignmentRequest(request: DriverAssignmentRequestWithDetails): DriverAssignmentRequestResType {
     return {
       createdAt: request.createdAt,
       driverId: request.driverId,
@@ -75,7 +84,7 @@ export class DriverAssignmentHelper {
   }
 
   /** Map raw Trip sang summary nhỏ (dùng trong assignment request response) */
-  mapTripSummary(trip: any) {
+  mapTripSummary(trip: DriverAssignmentTripSummary | null) {
     if (!trip?.vehicle) {
       return null
     }

@@ -20,12 +20,14 @@ import { PrismaService } from 'src/database/prisma.service'
 import roleName from 'src/common/constants/role.constant'
 import z from 'zod'
 
+type AuthenticatedSocketData = {
+  user?: AccessTokenPayload
+  disconnectReason?: string
+}
+
 export interface AuthenticatedSocket extends Socket {
   /** User payload đã được WsJwtGuard giải mã từ JWT token */
-  data: Socket['data'] & {
-    user?: AccessTokenPayload
-    disconnectReason?: string
-  }
+  data: AuthenticatedSocketData
 }
 
 // ===== ZOD SCHEMAS CHO WS MESSAGE VALIDATION =====

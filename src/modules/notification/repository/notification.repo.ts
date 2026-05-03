@@ -31,7 +31,7 @@ export class NotificationRepository {
     return await this.getClient(client).notification.createMany({
       data: userIds.map((userId) => ({
         userId,
-        type: input.type as any,
+        type: input.type,
         title: input.title,
         message: input.message,
         payload: input.payload ? (input.payload as Prisma.InputJsonValue) : Prisma.JsonNull,

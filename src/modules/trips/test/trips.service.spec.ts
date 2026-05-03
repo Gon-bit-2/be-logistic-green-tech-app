@@ -10,6 +10,13 @@ import { NotFoundException } from '@nestjs/common'
 import { Queue } from 'bullmq'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { TrackingRepository } from 'src/modules/tracking/repository/tracking.repo'
+import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
+import { DispatchService } from '../service/dispatch.service'
+import { DispatchBoardService } from '../service/dispatch-board.service'
+import { DriverAssignmentService } from '../service/driver-assignment.service'
+import { TripExecutionService } from '../service/trip-execution.service'
+import { TripHubHelper } from '../service/trip-hub.helper'
+import { DriverAssignmentHelper } from '../service/driver-assignment.helper'
 
 describe('TripsService', () => {
   let service: TripsService
@@ -71,6 +78,9 @@ describe('TripsService', () => {
       emit: jest.fn(),
       emitAsync: jest.fn().mockResolvedValue(undefined),
     }
+    const notificationEmitterMock = {
+      emitSafe: jest.fn().mockResolvedValue(undefined),
+    }
 
     gamificationServiceMock = {
       processTripEmission: jest.fn().mockResolvedValue(undefined),
@@ -82,6 +92,12 @@ describe('TripsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TripsService,
+        DispatchService,
+        DispatchBoardService,
+        DriverAssignmentService,
+        TripExecutionService,
+        TripHubHelper,
+        DriverAssignmentHelper,
         {
           provide: TripRepository,
           useValue: stripRepoMock,
@@ -101,6 +117,10 @@ describe('TripsService', () => {
         {
           provide: EventEmitter2,
           useValue: eventEmitterMock,
+        },
+        {
+          provide: NotificationEmitterService,
+          useValue: notificationEmitterMock,
         },
         {
           provide: TrackingRepository,

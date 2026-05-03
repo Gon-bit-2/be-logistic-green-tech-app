@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { PaymentStatus, Prisma } from 'generated/prisma'
 import { PrismaService } from 'src/database/prisma.service'
 
 @Injectable()
@@ -9,7 +10,11 @@ export class PaymentRepository {
     return this.prisma.payment.findUnique({ where: { orderId } })
   }
 
-  async upsertPayment(orderId: number, data: any, updateData: any) {
+  async upsertPayment(
+    orderId: number,
+    data: Prisma.PaymentUncheckedCreateInput,
+    updateData: Prisma.PaymentUncheckedUpdateInput,
+  ) {
     return this.prisma.payment.upsert({
       where: { orderId },
       create: data,
@@ -17,10 +22,10 @@ export class PaymentRepository {
     })
   }
 
-  async updateByTransactionId(transactionId: string, status: string, paidAt?: Date) {
+  async updateByTransactionId(transactionId: string, status: PaymentStatus, paidAt?: Date) {
     return this.prisma.payment.update({
       where: { transactionId },
-      data: { status: status as any, paidAt },
+      data: { status, paidAt },
     })
   }
 
