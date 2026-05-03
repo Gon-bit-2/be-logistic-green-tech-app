@@ -49,7 +49,7 @@ export const DirectionResSchema = z.object({
   distanceMeters: z.number(),
   durationSeconds: z.number(),
   polyline: z.string(),
-  bounds: z.any().optional(),
+  bounds: z.unknown().optional(),
 })
 
 export type AutocompleteQueryType = z.infer<typeof AutocompleteQuerySchema>

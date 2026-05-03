@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { Test, TestingModule } from '@nestjs/testing'
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common'
-import { EventEmitter2 } from '@nestjs/event-emitter'
+import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
 import roleName from 'src/common/constants/role.constant'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
 import { PrismaService } from 'src/database/prisma.service'
@@ -14,7 +14,7 @@ describe('RoleService', () => {
   let service: RoleService
   let roleRepo: jest.Mocked<RoleRepository>
   let authRepo: jest.Mocked<AuthRepository>
-  let eventEmitter: jest.Mocked<EventEmitter2>
+  let notificationEmitter: jest.Mocked<NotificationEmitterService>
   let prismaService: jest.Mocked<PrismaService>
 
   beforeEach(async () => {
@@ -35,8 +35,8 @@ describe('RoleService', () => {
       findActiveAdmins: jest.fn(),
     }
 
-    const eventEmitterMock = {
-      emitAsync: jest.fn().mockResolvedValue([]),
+    const notificationEmitterMock = {
+      emitSafe: jest.fn().mockResolvedValue(undefined),
     }
 
     const prismaServiceMock = {
@@ -48,7 +48,7 @@ describe('RoleService', () => {
         RoleService,
         { provide: RoleRepository, useValue: roleRepoMock },
         { provide: AuthRepository, useValue: authRepoMock },
-        { provide: EventEmitter2, useValue: eventEmitterMock },
+        { provide: NotificationEmitterService, useValue: notificationEmitterMock },
         { provide: PrismaService, useValue: prismaServiceMock },
       ],
     }).compile()
@@ -56,7 +56,7 @@ describe('RoleService', () => {
     service = module.get<RoleService>(RoleService)
     roleRepo = module.get(RoleRepository)
     authRepo = module.get(AuthRepository)
-    eventEmitter = module.get(EventEmitter2)
+    notificationEmitter = module.get(NotificationEmitterService)
     prismaService = module.get(PrismaService)
   })
 
@@ -95,7 +95,7 @@ describe('RoleService', () => {
       reason: 'Muon lam tai xe',
       assignedHubId: 5,
     })
-    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+    expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(
       NotificationEventName.ROLE_REQUEST_SUBMITTED,
       expect.objectContaining({
         recipientUserIds: [1, 2],
@@ -187,7 +187,7 @@ describe('RoleService', () => {
       },
       expect.anything(),
     )
-    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+    expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(
       NotificationEventName.ROLE_REQUEST_REVIEWED,
       expect.objectContaining({
         userId: 7,
@@ -237,7 +237,7 @@ describe('RoleService', () => {
       requesterId: 7,
       targetRole: { name: roleName.WAREHOUSE_STAFF },
     })
-    expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
+    expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(
       NotificationEventName.ROLE_REQUEST_REVIEWED,
       expect.objectContaining({
         userId: 7,

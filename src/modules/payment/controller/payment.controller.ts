@@ -58,14 +58,14 @@ export class PaymentController {
   /**
    * Webhook: Nhận callback từ Stripe khi thanh toán thành công
    * Chú ý: Cần raw body buffer để verify signature. NestJS body-parser thường map JSON object.
-   * Để nhận RawBody trong Nest, ta cần dùng (req: any) có req.rawBody hoặc Buffer xử lý qua Middleware.
+   * Để nhận RawBody trong Nest, ta cần dùng req.rawBody hoặc Buffer xử lý qua Middleware.
    */
   @Post('webhook')
   @isPublic() // Webhook được public nhưng bị protect bởi HMAC Signature từ Stripe
   async handleWebhook(
     @Headers('stripe-signature') signature: string,
     @Req() req: RawBodyRequest<Request>,
-    @Body() body: any, // Fallback cho unit test hoặc môi trường không attach rawBody
+    @Body() body: unknown, // Fallback cho unit test hoặc môi trường không attach rawBody
   ) {
     if (!signature) {
       throw new BadRequestException('Missing stripe-signature header')

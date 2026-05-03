@@ -21,5 +21,5 @@ export const NOTIFIABLE_ORDER_STATUSES = new Set(['OUT_FOR_DELIVERY', 'DELIVERED
 
 /** Kiểm tra một status có nằm trong danh sách cần notify hay không */
 export function isNotifiableOrderStatus(status: string): boolean {
-  return NOTIFIABLE_ORDER_STATUSES.has(status as any)
+  return NOTIFIABLE_ORDER_STATUSES.has(status as typeof NOTIFIABLE_ORDER_STATUSES extends Set<infer T> ? T : never)
 }

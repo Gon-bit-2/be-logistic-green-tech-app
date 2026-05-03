@@ -12,16 +12,12 @@ import { PaymentRepository } from '../repository/payment.repo'
 import { PrismaService } from 'src/database/prisma.service'
 import roleName from 'src/common/constants/role.constant'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
-/**
- * Interface biểu diễn cấu trúc Event gửi qua Webhook từ Stripe
- * Sử dụng interface cục bộ để tránh lỗi TypeScript Namespace collision với SDK Stripe.
- */
-interface StripeWebhookEvent {
+
+type StripePaymentIntentEvent = {
   type: string
   data: {
     object: {
-      id: string // PaymentIntent ID
-      [key: string]: any
+      id: string
     }
   }
 }
@@ -45,7 +41,7 @@ export class PaymentService {
     private readonly prisma: PrismaService,
   ) {
     // Khởi tạo Stripe client — sử dụng apiVersion mặc định của SDK
-    // (tránh hardcode version cũ + ép 'as any' bypass type safety)
+    // (tránh hardcode version cũ + ép kiểu rộng bypass type safety)
     this.stripe = new Stripe(envConfig.STRIPE_SECRET_KEY, {
       typescript: true,
     })
@@ -217,7 +213,7 @@ export class PaymentService {
    * Cập nhật trạng thái tự động thành COMPLETED khi khách quẹt thẻ thành công
    */
   async handleStripeWebhook(signature: string, payload: Buffer) {
-    let event: StripeWebhookEvent
+    let event: StripePaymentIntentEvent
     const secret = envConfig.STRIPE_WEBHOOK_SECRET
 
     if (!secret) {
@@ -226,7 +222,7 @@ export class PaymentService {
     }
 
     try {
-      event = this.stripe.webhooks.constructEvent(payload, signature, secret) as unknown as StripeWebhookEvent
+      event = this.stripe.webhooks.constructEvent(payload, signature, secret) as unknown as StripePaymentIntentEvent
     } catch (err: unknown) {
       this.logger.error(`Webhook signature verification failed: ${(err as Error).message}`)
       throw new BadRequestException(`Webhook Error: ${(err as Error).message}`)

@@ -4,6 +4,9 @@ import { RESOURCE_ACCESS_KEY, ResourceAccessOptions } from '../decorators/resour
 import { PrismaService } from 'src/database/prisma.service'
 import { REQUEST_USER_KEY } from '../constants/auth.constant'
 import roleName from '../constants/role.constant'
+import type { AccessTokenPayload } from '../types/jwt.type'
+
+type ResourceRecord = Record<string, unknown>
 
 @Injectable()
 export class ResourceAccessGuard implements CanActivate {
@@ -22,7 +25,10 @@ export class ResourceAccessGuard implements CanActivate {
       return true
     }
 
-    const request = context.switchToHttp().getRequest()
+    const request = context.switchToHttp().getRequest<{
+      params: Record<string, string | undefined>
+      [REQUEST_USER_KEY]?: AccessTokenPayload
+    }>()
     const user = request[REQUEST_USER_KEY]
     if (!user) {
       return false
@@ -34,22 +40,13 @@ export class ResourceAccessGuard implements CanActivate {
     }
 
     const { model, paramName = 'id', ownerField, hubField } = options
-    const resourceId = parseInt(request.params[paramName], 10)
+    const resourceId = parseInt(request.params[paramName] ?? '', 10)
 
     if (isNaN(resourceId)) {
       return true // Bỏ qua nếu ko có ID hợp lệ (xử lý create/list)
     }
 
-    // Lấy đối tượng table từ prisma dynamic
-    // HACK: bypass typescript safety in library to dynamic call findUnique
-    const dbDelegate = (this.prisma as any)[model]
-    if (!dbDelegate || typeof dbDelegate.findUnique !== 'function') {
-      throw new Error(`Invalid Prisma model: ${model}`)
-    }
-
-    const resource = await dbDelegate.findUnique({
-      where: { id: resourceId },
-    })
+    const resource = await this.findResource(model, resourceId)
 
     if (!resource) {
       throw new NotFoundException(`Resource not found`)
@@ -71,5 +68,23 @@ export class ResourceAccessGuard implements CanActivate {
     }
 
     return true
+  }
+
+  private async findResource(model: ResourceAccessOptions['model'], id: number): Promise<ResourceRecord | null> {
+    const loaders: Record<ResourceAccessOptions['model'], (id: number) => Promise<ResourceRecord | null>> = {
+      hub: async (resourceId) => this.toResourceRecord(await this.prisma.hub.findUnique({ where: { id: resourceId } })),
+      order: async (resourceId) =>
+        this.toResourceRecord(await this.prisma.order.findUnique({ where: { id: resourceId } })),
+      trip: async (resourceId) => this.toResourceRecord(await this.prisma.trip.findUnique({ where: { id: resourceId } })),
+      user: async (resourceId) => this.toResourceRecord(await this.prisma.user.findUnique({ where: { id: resourceId } })),
+      vehicle: async (resourceId) =>
+        this.toResourceRecord(await this.prisma.vehicle.findUnique({ where: { id: resourceId } })),
+    }
+
+    return loaders[model](id)
+  }
+
+  private toResourceRecord(resource: object | null): ResourceRecord | null {
+    return resource ? { ...resource } : null
   }
 }

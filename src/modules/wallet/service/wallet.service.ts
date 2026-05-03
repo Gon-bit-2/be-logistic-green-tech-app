@@ -67,8 +67,9 @@ export class WalletService {
       }
 
       return result
-    } catch (error: any) {
-      throw new BadRequestException(error.message || 'Lỗi đối soát COD')
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Lỗi đối soát COD'
+      throw new BadRequestException(message)
     }
   }
 }

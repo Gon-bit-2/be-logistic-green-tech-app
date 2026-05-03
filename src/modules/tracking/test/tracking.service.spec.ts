@@ -9,7 +9,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common'
 import { TRACKING_EVENT_TYPE } from 'src/common/constants/tracking.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { Queue } from 'bullmq'
-import { EventEmitter2 } from '@nestjs/event-emitter'
+import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
 import { NotificationEventName } from 'src/modules/notification/events/notification.event'
 import { ForbiddenException } from '@nestjs/common'
 
@@ -18,7 +18,7 @@ describe('TrackingService', () => {
   let trackingRepo: jest.Mocked<TrackingRepository>
   let prismaService: any
   let greenTechQueue: jest.Mocked<Queue>
-  let eventEmitter: jest.Mocked<EventEmitter2>
+  let notificationEmitter: jest.Mocked<NotificationEmitterService>
 
   beforeEach(async () => {
     const trackingRepoMock = {
@@ -44,8 +44,8 @@ describe('TrackingService', () => {
       add: jest.fn(),
     }
 
-    const eventEmitterMock = {
-      emitAsync: jest.fn().mockResolvedValue([]),
+    const notificationEmitterMock = {
+      emitSafe: jest.fn().mockResolvedValue(undefined),
     }
 
     const module: TestingModule = await Test.createTestingModule({
@@ -64,8 +64,8 @@ describe('TrackingService', () => {
           useValue: queueFactoryMock,
         },
         {
-          provide: EventEmitter2,
-          useValue: eventEmitterMock,
+          provide: NotificationEmitterService,
+          useValue: notificationEmitterMock,
         },
       ],
     }).compile()
@@ -74,7 +74,7 @@ describe('TrackingService', () => {
     trackingRepo = module.get(TrackingRepository)
     prismaService = module.get(PrismaService)
     greenTechQueue = module.get(getQueueToken(GREEN_TECH_QUEUE_NAME))
-    eventEmitter = module.get(EventEmitter2)
+    notificationEmitter = module.get(NotificationEmitterService)
   })
 
   afterEach(() => {
@@ -104,7 +104,7 @@ describe('TrackingService', () => {
       expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(1, payload, true, {
         codCollection: undefined,
       })
-      expect(eventEmitter.emitAsync).not.toHaveBeenCalled()
+      expect(notificationEmitter.emitSafe).not.toHaveBeenCalled()
     })
 
     it('văng NotFoundException nếu order ko tồn tại', async () => {
@@ -177,7 +177,7 @@ describe('TrackingService', () => {
 
       await service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, payload as any)
 
-      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
+      expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
         userId: 7,
         orderId: 1,
         trackingCode: 'ORD001',
@@ -265,7 +265,7 @@ describe('TrackingService', () => {
         } as any,
       )
 
-      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
+      expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
         userId: 9,
         orderId: 2,
         trackingCode: 'ORD002',

@@ -3,7 +3,8 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { OrdersService } from '../service/orders.service'
 import { OrderRepository } from '../repository/order.repo'
 import { PrismaService } from 'src/database/prisma.service'
-import { EventEmitter2 } from '@nestjs/event-emitter'
+import { CACHE_MANAGER } from '@nestjs/cache-manager'
+import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
 import { NotificationEventName } from 'src/modules/notification/events/notification.event'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { MapsService } from 'src/modules/maps/service/maps.service'
@@ -19,7 +20,7 @@ describe('OrdersService', () => {
   let service: OrdersService
   let orderRepo: jest.Mocked<OrderRepository>
   let prismaService: any // Mucking Prisma is easier by object assignment
-  let eventEmitter: jest.Mocked<EventEmitter2>
+  let notificationEmitter: jest.Mocked<NotificationEmitterService>
   let trackingRepo: jest.Mocked<TrackingRepository>
 
   beforeEach(async () => {
@@ -40,8 +41,8 @@ describe('OrdersService', () => {
       },
     }
 
-    const eventEmitterMock = {
-      emitAsync: jest.fn().mockResolvedValue([]),
+    const notificationEmitterMock = {
+      emitSafe: jest.fn().mockResolvedValue(undefined),
     }
 
     const trackingRepoMock = {
@@ -68,8 +69,8 @@ describe('OrdersService', () => {
           useValue: prismaServiceMock,
         },
         {
-          provide: EventEmitter2,
-          useValue: eventEmitterMock,
+          provide: NotificationEmitterService,
+          useValue: notificationEmitterMock,
         },
         {
           provide: MapsService,
@@ -79,13 +80,20 @@ describe('OrdersService', () => {
           provide: TrackingRepository,
           useValue: trackingRepoMock,
         },
+        {
+          provide: CACHE_MANAGER,
+          useValue: {
+            get: jest.fn(),
+            set: jest.fn(),
+          },
+        },
       ],
     }).compile()
 
     service = module.get<OrdersService>(OrdersService)
     orderRepo = module.get(OrderRepository)
     prismaService = module.get(PrismaService)
-    eventEmitter = module.get(EventEmitter2)
+    notificationEmitter = module.get(NotificationEmitterService)
     trackingRepo = module.get(TrackingRepository)
   })
 
@@ -135,7 +143,7 @@ describe('OrdersService', () => {
           estimatedCo2Saved: 5 * 0.0125, // 0.0625
         }),
       )
-      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_CREATED, {
+      expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(NotificationEventName.ORDER_CREATED, {
         userId: 2,
         orderId: 100,
         trackingCode: 'ORD100',
@@ -173,7 +181,7 @@ describe('OrdersService', () => {
           shippingFee: 96000,
         }),
       )
-      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_CREATED, {
+      expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(NotificationEventName.ORDER_CREATED, {
         userId: 2,
         orderId: 101,
         trackingCode: 'ORD101',
@@ -275,7 +283,7 @@ describe('OrdersService', () => {
       const res = await service.update(1, payload)
       expect(res).toEqual({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.DELIVERED })
       expect(orderRepo.update).toHaveBeenCalledWith(1, payload)
-      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
+      expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
         userId: 7,
         orderId: 1,
         trackingCode: 'ORD001',
@@ -293,7 +301,7 @@ describe('OrdersService', () => {
 
       await service.update(2, { status: ORDER_STATUS.ASSIGNED } as any)
 
-      expect(eventEmitter.emitAsync).not.toHaveBeenCalled()
+      expect(notificationEmitter.emitSafe).not.toHaveBeenCalled()
     })
 
     it('hủy đơn thành công khi customer là owner và status = PENDING', async () => {
@@ -330,7 +338,7 @@ describe('OrdersService', () => {
         trackingCode: 'ORD010',
         status: ORDER_STATUS.CANCELLED,
       })
-      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
+      expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
         userId: 7,
         orderId: 10,
         trackingCode: 'ORD010',

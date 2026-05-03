@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common'
+import { Prisma } from 'generated/prisma'
 import { TripRepository } from '../repository/trip.repository'
 import { PrismaService } from 'src/database/prisma.service'
 import {
@@ -24,8 +25,15 @@ import roleName from 'src/common/constants/role.constant'
 import { NotificationEventName } from 'src/modules/notification/events/notification.event'
 import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
 import { TripHubHelper } from './trip-hub.helper'
-import { DriverAssignmentHelper } from './driver-assignment.helper'
+import { DriverAssignmentHelper, type DriverAssignmentRequestWithDetails } from './driver-assignment.helper'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
+
+type PendingAssignmentTrip = Prisma.TripGetPayload<{
+  include: {
+    stops: true
+    vehicle: true
+  }
+}>
 
 /**
  * Service xử lý toàn bộ Driver Assignment Request workflow.
@@ -369,7 +377,11 @@ export class DriverAssignmentService {
   }
 
   /** Thêm đơn vào chuyến có sẵn khi duyệt assignment request */
-  private async addOrderToApprovedAssignmentRequest(trip: any, request: any, reviewedById: number) {
+  private async addOrderToApprovedAssignmentRequest(
+    trip: PendingAssignmentTrip,
+    request: DriverAssignmentRequestWithDetails,
+    reviewedById: number,
+  ) {
     if (trip.status !== TRIP_STATUS.PENDING) {
       throw new BadRequestException('Chỉ có thể thêm đơn vào chuyến đang chờ khởi hành.')
     }

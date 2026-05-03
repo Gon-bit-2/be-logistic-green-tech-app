@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { Prisma } from 'generated/prisma'
 import { generateTrackingCode } from 'src/common/utils/genTrackingCode'
 import { PrismaService } from 'src/database/prisma.service'
 import { CreateOrderBodyType, GetOrderListQueryType, UpdateOrderStatusType } from 'src/modules/orders/model/order.model'
@@ -70,7 +71,7 @@ export class OrderRepository {
     const skip = (page - 1) * limit
     const take = limit
 
-    const whereParams: any = {
+    const whereParams: Prisma.OrderWhereInput = {
       deletedAt: null,
       ...(trackingCode
         ? {

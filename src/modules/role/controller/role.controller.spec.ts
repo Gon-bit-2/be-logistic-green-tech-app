@@ -1,7 +1,7 @@
 // @ts-nocheck
 import request from 'supertest'
 import { RoleController } from './role.controller'
-import { RoleService } from './role.service'
+import { RoleService } from '../service/role.service'
 import { createHttpTestApp } from '../../../../test/helpers/create-http-test-app'
 import roleName from 'src/common/constants/role.constant'
 
@@ -77,7 +77,7 @@ describe('RoleController', () => {
   it('POST /role-requests gọi service khi payload hợp lệ', async () => {
     await request(app.getHttpServer())
       .post('/role-requests')
-      .send({ targetRoleName: roleName.DRIVER, reason: 'Muon lam tai xe' })
+      .send({ targetRoleName: roleName.DRIVER, reason: 'Muon lam tai xe', hubId: 1 })
       .expect(201)
 
     expect(roleService.create).toHaveBeenCalled()
