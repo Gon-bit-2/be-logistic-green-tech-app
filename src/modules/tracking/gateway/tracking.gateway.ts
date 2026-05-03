@@ -16,6 +16,9 @@ import { AuthType } from 'src/common/constants/auth.constant'
 import { WsJwtGuard } from 'src/common/guards/ws-jwt.guard'
 import envConfig from 'src/config/config'
 import { parseCorsOrigins } from 'src/common/utils/cors.util'
+import { PrismaService } from 'src/database/prisma.service'
+import roleName from 'src/common/constants/role.constant'
+import z from 'zod'
 
 export interface AuthenticatedSocket extends Socket {
   /** User payload đã được WsJwtGuard giải mã từ JWT token */
@@ -24,6 +27,21 @@ export interface AuthenticatedSocket extends Socket {
     disconnectReason?: string
   }
 }
+
+// ===== ZOD SCHEMAS CHO WS MESSAGE VALIDATION =====
+// Validate input trước khi xử lý để tránh injection hoặc dữ liệu rác
+
+/** Schema validate cho message joinTripTracking / leaveTripTracking */
+const TripRoomSchema = z.object({
+  tripId: z.number().int().positive('tripId phải là số nguyên dương'),
+})
+
+/** Schema validate cho message driverLocationUpdate */
+const DriverLocationSchema = z.object({
+  tripId: z.number().int().positive('tripId phải là số nguyên dương'),
+  lat: z.number().min(-90).max(90, 'lat phải nằm trong [-90, 90]'),
+  lng: z.number().min(-180).max(180, 'lng phải nằm trong [-180, 180]'),
+})
 
 // ===== KẾT NỐI REAL-TIME TRACKING =====
 // Cung cấp namespace riêng biệt cho phép theo dõi thời gian thực vị trí tài xế
@@ -45,7 +63,10 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   private readonly logger = new Logger(TrackingGateway.name)
 
-  constructor(private readonly wsJwtGuard: WsJwtGuard) {}
+  constructor(
+    private readonly wsJwtGuard: WsJwtGuard,
+    private readonly prismaService: PrismaService,
+  ) {}
 
   /**
    * Handle client connections — BẮT BUỘC xác thực JWT token.
@@ -103,16 +124,55 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   /**
+   * Kiểm tra quyền truy cập Trip theo role:
+   * - ADMIN / WAREHOUSE_STAFF: Được xem tất cả trips (admin dashboard)
+   * - DRIVER: Chỉ xem trip mình đang lái (driverId phải trùng userId)
+   * - CUSTOMER: Chỉ xem trip chứa đơn hàng thuộc về mình (createdById)
+   */
+  private async verifyTripAccess(user: AccessTokenPayload, tripId: number): Promise<boolean> {
+    // Admin / Staff → toàn quyền
+    if (user.roleName === roleName.ADMIN || user.roleName === roleName.WAREHOUSE_STAFF) {
+      return true
+    }
+
+    const trip = await this.prismaService.trip.findUnique({
+      where: { id: tripId },
+      select: {
+        driverId: true,
+        stops: {
+          select: {
+            order: {
+              select: { createdById: true },
+            },
+          },
+        },
+      },
+    })
+
+    if (!trip) return false
+
+    // DRIVER: Chỉ track trip mình đang lái
+    if (user.roleName === roleName.DRIVER) {
+      return trip.driverId === user.userId
+    }
+
+    // CUSTOMER: Chỉ track trip chứa đơn của mình
+    return trip.stops.some((stop) => stop.order?.createdById === user.userId)
+  }
+
+  /**
    * TÀI XẾ (DRIVER) gửi cập nhật vị trí GPS liên tục
    *
    * Payload: { tripId: number, lat: number, lng: number }
    * System sẽ tự động broadcast (Publish) vị trí này cho tất cả những ai đang Subscribe room của tripId đó.
    *
-   * Bảo mật: Chỉ user đã xác thực mới có thể gửi location update.
-   * User info được lấy từ socket.data.user (đã verify ở handleConnection).
+   * Bảo mật:
+   * - Validate input (lat/lng range, tripId > 0) bằng Zod
+   * - Chỉ DRIVER đúng chuyến mới được gửi location update
+   * - Ngăn Driver A giả mạo GPS cho trip của Driver B
    */
   @SubscribeMessage('driverLocationUpdate')
-  handleLocationUpdate(
+  async handleLocationUpdate(
     @MessageBody() data: { lat: number; lng: number; tripId: number },
     @ConnectedSocket() client: AuthenticatedSocket,
   ) {
@@ -122,16 +182,41 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       return { status: 'error', message: 'Unauthorized' }
     }
 
+    // Validate input bằng Zod schema
+    const parsed = DriverLocationSchema.safeParse(data)
+    if (!parsed.success) {
+      return {
+        status: 'error',
+        message: 'Dữ liệu không hợp lệ',
+        errors: parsed.error.flatten().fieldErrors,
+      }
+    }
+
+    // Chỉ DRIVER mới được gửi location update
+    if (user.roleName !== roleName.DRIVER) {
+      return { status: 'error', message: 'Chỉ tài xế mới được gửi vị trí.' }
+    }
+
+    // Kiểm tra driver đúng là tài xế của chuyến này (ngăn Driver A giả mạo cho Driver B)
+    const trip = await this.prismaService.trip.findUnique({
+      where: { id: parsed.data.tripId },
+      select: { driverId: true },
+    })
+
+    if (!trip || trip.driverId !== user.userId) {
+      return { status: 'error', message: 'Bạn không phải tài xế của chuyến này.' }
+    }
+
     this.logger.debug(
-      `📍 Tài xế (ID: ${user.userId}) cập nhật GPS chuyến đi #${data.tripId}: [${data.lat}, ${data.lng}]`,
+      `📍 Tài xế (ID: ${user.userId}) cập nhật GPS chuyến đi #${parsed.data.tripId}: [${parsed.data.lat}, ${parsed.data.lng}]`,
     )
 
     // Phát lại thông tin vào broadcast room của chuyến đi
-    this.server.to(`trip_${data.tripId}`).emit('locationUpdated', {
+    this.server.to(`trip_${parsed.data.tripId}`).emit('locationUpdated', {
       driverId: user.userId,
-      tripId: data.tripId,
-      lat: data.lat,
-      lng: data.lng,
+      tripId: parsed.data.tripId,
+      lat: parsed.data.lat,
+      lng: parsed.data.lng,
       timestamp: new Date().toISOString(),
     })
 
@@ -142,20 +227,37 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   /**
    * KHÁCH HÀNG (CUSTOMER) tham gia room để nhận live tracking
    *
-   * Bảo mật: Chỉ user đã xác thực mới join được room.
+   * Bảo mật:
+   * - Validate tripId input
+   * - Kiểm tra quyền: Customer chỉ join room của trip chứa đơn mình
+   * - Driver chỉ join room trip mình đang lái
+   * - Admin/Staff join bất kỳ
    */
   @SubscribeMessage('joinTripTracking')
-  handleJoinRoom(@MessageBody() data: { tripId: number }, @ConnectedSocket() client: AuthenticatedSocket) {
+  async handleJoinRoom(@MessageBody() data: { tripId: number }, @ConnectedSocket() client: AuthenticatedSocket) {
     const user = client.data.user
     if (!user) {
       return { event: 'error', message: 'Unauthorized' }
     }
 
-    // Cho phép socket tham gia vào Room riêng biệt
-    client.join(`trip_${data.tripId}`)
-    this.logger.log(`👥 Client ${client.id} (userId=${user.userId}) joined tracking room: trip_${data.tripId}`)
+    // Validate input
+    const parsed = TripRoomSchema.safeParse(data)
+    if (!parsed.success) {
+      return { event: 'error', message: 'tripId không hợp lệ' }
+    }
 
-    return { event: 'joined', message: `Successfully joined trip_${data.tripId}` }
+    // Kiểm tra quyền truy cập trip (ngăn Customer theo dõi đơn người khác)
+    const hasAccess = await this.verifyTripAccess(user, parsed.data.tripId)
+    if (!hasAccess) {
+      this.logger.warn(`🚫 userId=${user.userId} role=${user.roleName} bị chặn join room trip_${parsed.data.tripId}`)
+      return { event: 'error', message: 'Bạn không có quyền theo dõi chuyến xe này.' }
+    }
+
+    // Cho phép socket tham gia vào Room riêng biệt
+    client.join(`trip_${parsed.data.tripId}`)
+    this.logger.log(`👥 Client ${client.id} (userId=${user.userId}) joined tracking room: trip_${parsed.data.tripId}`)
+
+    return { event: 'joined', message: `Successfully joined trip_${parsed.data.tripId}` }
   }
 
   /**
@@ -168,14 +270,20 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       return { event: 'error', message: 'Unauthorized' }
     }
 
-    client.leave(`trip_${data.tripId}`)
-    this.logger.log(`🚶‍♂️ Client ${client.id} (userId=${user.userId}) left tracking room: trip_${data.tripId}`)
+    // Validate input
+    const parsed = TripRoomSchema.safeParse(data)
+    if (!parsed.success) {
+      return { event: 'error', message: 'tripId không hợp lệ' }
+    }
 
-    return { event: 'left', message: `Successfully left trip_${data.tripId}` }
+    client.leave(`trip_${parsed.data.tripId}`)
+    this.logger.log(`🚶‍♂️ Client ${client.id} (userId=${user.userId}) left tracking room: trip_${parsed.data.tripId}`)
+
+    return { event: 'left', message: `Successfully left trip_${parsed.data.tripId}` }
   }
 
   @OnEvent('trip.created')
-  handleTripCreatedEvent(payload: { trip: { id: number; [key: string]: any } }) {
+  handleTripCreatedEvent(payload: { trip: { id: number; [key: string]: unknown } }) {
     this.logger.log(`🚀 Chuyến xe mới được tạo: Trip ID #${payload.trip?.id}. Đang broadcast tới dashboard...`)
     this.server.emit('dashboard.tripCreated', payload.trip)
   }

@@ -7,6 +7,12 @@ import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
 import { TripsProcessor } from './processor/trips.processor'
 import { GreenTechModule } from '../green-tech/green-tech.module'
 import { TrackingRepository } from 'src/modules/tracking/repository/tracking.repo'
+import { DispatchService } from './service/dispatch.service'
+import { DispatchBoardService } from './service/dispatch-board.service'
+import { DriverAssignmentService } from './service/driver-assignment.service'
+import { TripExecutionService } from './service/trip-execution.service'
+import { TripHubHelper } from './service/trip-hub.helper'
+import { DriverAssignmentHelper } from './service/driver-assignment.helper'
 
 @Module({
   imports: [
@@ -31,7 +37,25 @@ import { TrackingRepository } from 'src/modules/tracking/repository/tracking.rep
     }),
   ],
   controllers: [TripsController],
-  providers: [TripsService, TripRepository, TripsProcessor, TrackingRepository],
-  exports: [TripsService],
+  providers: [
+    // === Facade giữ backward-compatibility (sẽ dần thu nhỏ) ===
+    TripsService,
+
+    // === Sub-services chuyên biệt ===
+    DispatchService,          // Auto-dispatch, preview, approve
+    DispatchBoardService,     // Dispatch board cho Admin/Staff/Driver
+    DriverAssignmentService,  // Driver assignment request CRUD
+    TripExecutionService,     // Trip lifecycle (start, cancel, query)
+
+    // === Shared helpers ===
+    TripHubHelper,            // Hub scope resolution, resource validation
+    DriverAssignmentHelper,   // Assignment request mapping helpers
+
+    // === Repositories ===
+    TripRepository,
+    TrackingRepository,
+    TripsProcessor,
+  ],
+  exports: [TripsService, DispatchService, DispatchBoardService, DriverAssignmentService, TripExecutionService],
 })
 export class TripsModule {}
