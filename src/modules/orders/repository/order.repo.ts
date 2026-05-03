@@ -17,6 +17,33 @@ const paymentSummarySelect = {
   },
 } as const
 
+const orderListSelect = {
+  id: true,
+  trackingCode: true,
+  customerId: true,
+  senderName: true,
+  senderPhone: true,
+  senderAddress: true,
+  senderLat: true,
+  senderLng: true,
+  receiverName: true,
+  receiverAddress: true,
+  receiverLat: true,
+  receiverLng: true,
+  status: true,
+  serviceType: true,
+  preferredDeliveryTimeStart: true,
+  preferredDeliveryTimeEnd: true,
+  totalWeight: true,
+  totalVolume: true,
+  shippingFee: true,
+  estimatedCo2Saved: true,
+  currentHubId: true,
+  currentTripId: true,
+  createdAt: true,
+  updatedAt: true,
+} as const
+
 @Injectable()
 export class OrderRepository {
   constructor(private readonly prismaService: PrismaService) {}
@@ -100,10 +127,7 @@ export class OrderRepository {
       }),
       this.prismaService.order.findMany({
         where: whereParams,
-        include: {
-          items: true,
-          ...paymentSummarySelect,
-        },
+        select: orderListSelect,
         orderBy: { createdAt: 'desc' },
         skip,
         take,

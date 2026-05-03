@@ -13,6 +13,7 @@ import { RequestWithId } from './request-id.middleware'
 @Injectable()
 export class LoggingMiddleware implements NestMiddleware {
   private readonly logger = new Logger(LoggingMiddleware.name)
+  private readonly slowRequestMs = Number(process.env.SLOW_REQUEST_MS ?? 1_000)
 
   use(req: RequestWithId, res: Response, next: NextFunction) {
     const startedAt = Date.now()
@@ -33,11 +34,12 @@ export class LoggingMiddleware implements NestMiddleware {
       const rawUa = req.get('user-agent') ?? '-'
       const userAgent = rawUa.length > 60 ? rawUa.substring(0, 60) + '...' : rawUa
 
-      const message = `[${requestId}] ${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs}ms | size=${contentLength} uid=${userId} ua="${userAgent}"`
+      const isSlow = Number.isFinite(this.slowRequestMs) && durationMs >= this.slowRequestMs
+      const message = `[${requestId}] ${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs}ms | size=${contentLength} uid=${userId} slow=${isSlow ? 'yes' : 'no'} ua="${userAgent}"`
 
       if (res.statusCode >= 500) {
         this.logger.error(message)
-      } else if (res.statusCode >= 400) {
+      } else if (res.statusCode >= 400 || isSlow) {
         this.logger.warn(message)
       } else {
         this.logger.log(message)

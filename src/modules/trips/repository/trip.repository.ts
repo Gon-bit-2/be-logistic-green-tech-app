@@ -220,7 +220,25 @@ export class TripRepository {
       this.prismaService.trip.count({ where: whereClause }),
       this.prismaService.trip.findMany({
         where: whereClause,
-        include: {
+        select: {
+          id: true,
+          vehicleId: true,
+          driverId: true,
+          status: true,
+          startTime: true,
+          endTime: true,
+          totalDistance: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: {
+              stops: {
+                where: {
+                  orderId: { not: null },
+                },
+              },
+            },
+          },
           driver: {
             select: {
               avatar: true,
@@ -228,37 +246,8 @@ export class TripRepository {
               id: true,
             },
           },
-          stops: {
-            include: {
-              order: {
-                select: {
-                  currentHubId: true,
-                  id: true,
-                  preferredDeliveryTimeEnd: true,
-                  preferredDeliveryTimeStart: true,
-                  receiverAddress: true,
-                  receiverLat: true,
-                  receiverLng: true,
-                  receiverName: true,
-                  receiverPhone: true,
-                  senderAddress: true,
-                  senderLat: true,
-                  senderLng: true,
-                  status: true,
-                  totalVolume: true,
-                  totalWeight: true,
-                  trackingCode: true,
-                },
-              },
-            },
-            orderBy: { stopSequence: 'asc' },
-          },
           vehicle: {
             select: {
-              capacityVolume: true,
-              capacityWeight: true,
-              emissionRatePerKm: true,
-              fuelType: true,
               hubId: true,
               id: true,
               isActive: true,
@@ -277,7 +266,14 @@ export class TripRepository {
 
     return {
       totalItems,
-      data,
+      data: data.map(({ _count, driver, vehicle, ...trip }) => ({
+        ...trip,
+        driver,
+        driverName: driver.fullName,
+        orderCount: _count.stops,
+        vehicle,
+        vehicleLicensePlate: vehicle.licensePlate,
+      })),
       page,
       limit,
       totalPages: Math.ceil(totalItems / limit),
