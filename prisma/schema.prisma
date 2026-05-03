@@ -292,6 +292,7 @@ model Notification {
   @@index([isRead])
   @@index([createdAt])
   @@index([userId, isRead])
+  @@index([userId, isRead, createdAt])
   @@map("notifications")
 }
 
@@ -451,6 +452,7 @@ model Order {
   @@index([currentTripId])
   @@index([createdAt])
   @@index([deletedAt])
+  @@index([deletedAt, status, currentHubId, createdAt])
   @@map("orders")
 }
 
@@ -520,6 +522,8 @@ model Trip {
   @@index([vehicleId])
   @@index([driverId])
   @@index([status])
+  @@index([status, driverId])
+  @@index([status, vehicleId])
   @@index([startTime])
   @@map("trips")
 }

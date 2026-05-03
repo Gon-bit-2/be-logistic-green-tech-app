@@ -4,9 +4,14 @@ import { ZodError } from 'zod'
 import { RequestWithId } from 'src/common/middlewares/request-id.middleware'
 
 type ExceptionResponseBody = {
+  errorCode?: unknown
   message?: string | { message?: string }[]
   error?: unknown
   errors?: unknown
+}
+
+function looksLikeErrorCode(value: string) {
+  return /^Error\.[A-Za-z]+(?:\.[A-Za-z]+)*$/.test(value.trim())
 }
 
 @Catch()
@@ -24,12 +29,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const { httpAdapter } = this.httpAdapterHost
     const ctx = host.switchToHttp()
 
-    const { httpStatus, message, errors } = this.resolveException(exception)
+    const { errorCode, httpStatus, message, errors } = this.resolveException(exception)
     const request = ctx.getRequest<RequestWithId>()
 
     const responseBody = {
       statusCode: httpStatus,
       message,
+      ...(errorCode ? { errorCode } : {}),
       ...(errors != null ? { errors } : {}),
       ...(request.id && { requestId: request.id }),
       path: httpAdapter.getRequestUrl(request),
@@ -51,11 +57,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private handleWsException(exception: unknown, host: ArgumentsHost) {
     const ws = host.switchToWs()
     const client = ws.getClient<{ emit?: (event: string, payload: unknown) => void; id?: string }>()
-    const { httpStatus, message, errors } = this.resolveException(exception)
+    const { errorCode, httpStatus, message, errors } = this.resolveException(exception)
 
     const responseBody = {
       statusCode: httpStatus,
       message,
+      ...(errorCode ? { errorCode } : {}),
       ...(errors != null ? { errors } : {}),
       timestamp: new Date().toISOString(),
     }
@@ -76,6 +83,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let httpStatus = HttpStatus.INTERNAL_SERVER_ERROR
     let message = 'Internal server error'
     let errors: unknown = null
+    let errorCode: string | null = null
 
     if (exception instanceof HttpException) {
       httpStatus = exception.getStatus()
@@ -95,6 +103,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
 
       errors = responseObject.errors || responseObject.error || null
+      if (typeof responseObject.errorCode === 'string') {
+        errorCode = responseObject.errorCode
+      } else if (looksLikeErrorCode(message)) {
+        errorCode = message
+      }
     } else if (exception instanceof ZodError) {
       httpStatus = HttpStatus.BAD_REQUEST
       message = exception.issues.map((err) => err.message).join(', ')
@@ -103,6 +116,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = exception.message
     }
 
-    return { httpStatus, message, errors }
+    return { errorCode, httpStatus, message, errors }
   }
 }

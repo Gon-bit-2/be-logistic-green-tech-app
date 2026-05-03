@@ -64,6 +64,8 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   server: Server
 
   private readonly logger = new Logger(TrackingGateway.name)
+  private readonly tripAccessCache = new Map<string, { expiresAt: number; hasAccess: boolean }>()
+  private readonly tripAccessCacheTtlMs = Number(process.env.TRACKING_ACCESS_CACHE_TTL_MS ?? 15_000)
 
   constructor(
     private readonly wsJwtGuard: WsJwtGuard,
@@ -137,6 +139,14 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       return true
     }
 
+    const cacheKey = `${user.userId}:${user.roleName}:${tripId}`
+    const cached = this.tripAccessCache.get(cacheKey)
+    const now = Date.now()
+
+    if (cached && cached.expiresAt > now) {
+      return cached.hasAccess
+    }
+
     const trip = await this.prismaService.trip.findUnique({
       where: { id: tripId },
       select: {
@@ -151,15 +161,22 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       },
     })
 
-    if (!trip) return false
+    if (!trip) {
+      this.tripAccessCache.set(cacheKey, { expiresAt: now + this.tripAccessCacheTtlMs, hasAccess: false })
+      return false
+    }
 
     // DRIVER: Chỉ track trip mình đang lái
     if (user.roleName === roleName.DRIVER) {
-      return trip.driverId === user.userId
+      const hasAccess = trip.driverId === user.userId
+      this.tripAccessCache.set(cacheKey, { expiresAt: now + this.tripAccessCacheTtlMs, hasAccess })
+      return hasAccess
     }
 
     // CUSTOMER: Chỉ track trip chứa đơn của mình
-    return trip.stops.some((stop) => stop.order?.createdById === user.userId)
+    const hasAccess = trip.stops.some((stop) => stop.order?.createdById === user.userId)
+    this.tripAccessCache.set(cacheKey, { expiresAt: now + this.tripAccessCacheTtlMs, hasAccess })
+    return hasAccess
   }
 
   /**
