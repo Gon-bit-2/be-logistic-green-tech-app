@@ -1,13 +1,13 @@
-import type { AccessTokenPayload } from 'src/common/types/jwt.type'
+import { ActiveUser } from '@src/common/decorators/active-user.decorator'
+import { Roles } from '@src/common/decorators/roles.decorator'
+import { RolesGuard } from '@src/common/guards/roles.guard'
+import type { AccessTokenPayload } from '@src/common/types/jwt.type'
+import { ZodValidationPipe } from '@src/common/pipes/zod.pipe'
 import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common'
-import { WalletService } from '../service/wallet.service'
-import { ActiveUser } from 'src/common/decorators/active-user.decorator'
-import { RolesGuard } from 'src/common/guards/roles.guard'
-import { Roles } from 'src/common/decorators/roles.decorator'
-import roleName from 'src/common/constants/role.constant'
-import type { AddCodDto, ReconcileCodDto } from '../dto/wallet.dto'
-import { AddCodSchema, ReconcileCodSchema } from '../model/wallet.model'
-import { ZodValidationPipe } from 'src/common/pipes/zod.pipe'
+import { WalletService } from '@src/modules/wallet/service/wallet.service'
+import roleName from '@src/common/constants/role.constant'
+import type { AddCodDto, ReconcileCodDto } from '@src/modules/wallet/dto/wallet.dto'
+import { AddCodSchema, ReconcileCodSchema } from '@src/modules/wallet/model/wallet.model'
 
 @UseGuards(RolesGuard)
 @Controller('wallet')

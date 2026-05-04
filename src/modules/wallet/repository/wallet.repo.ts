@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
-import { PrismaService } from 'src/database/prisma.service'
-import { TransactionType, TransactionStatus } from 'generated/prisma'
+import { PrismaService } from '@src/database/prisma.service'
+import { TransactionStatus, TransactionType } from 'generated/prisma'
 
 @Injectable()
 export class WalletRepository {
@@ -67,8 +67,8 @@ export class WalletRepository {
         data: {
           walletId: wallet.id,
           amount: -amount,
-          type: 'COD_RECONCILIATION',
-          status: 'COMPLETED',
+          type: TransactionType.COD_RECONCILIATION,
+          status: TransactionStatus.COMPLETED,
           referenceId,
           description,
         },

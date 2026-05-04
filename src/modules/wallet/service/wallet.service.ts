@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common'
-import { WalletRepository } from '../repository/wallet.repo'
-import { PrismaService } from 'src/database/prisma.service'
+import { WalletRepository } from '@src/modules/wallet/repository/wallet.repo'
+import { PrismaService } from '@src/database/prisma.service'
 
 @Injectable()
 export class WalletService {

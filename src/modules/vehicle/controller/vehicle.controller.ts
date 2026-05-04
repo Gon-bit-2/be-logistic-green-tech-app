@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe } from '@nestjs/common'
 import { ZodSerializerDto } from 'nestjs-zod'
-import { ActiveUser } from 'src/common/decorators/active-user.decorator'
-import { IsAdmin } from 'src/common/decorators/roles.decorator'
+import { ActiveUser } from '@src/common/decorators/active-user.decorator'
+import { IsAdmin } from '@src/common/decorators/roles.decorator'
 import {
   CreateVehicleBodyDTO,
   GetAllVehiclesQueryDTO,

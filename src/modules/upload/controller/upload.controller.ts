@@ -7,10 +7,10 @@ import {
   UploadedFiles,
   Query,
 } from '@nestjs/common'
-import { UploadService } from '../service/upload.service'
+import { UploadService } from '@src/modules/upload/service/upload.service'
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express'
 import { type Express } from 'express'
-import { MAX_UPLOAD_FILE_COUNT, uploadMulterOptions } from '../upload.constants'
+import { MAX_UPLOAD_FILE_COUNT, uploadMulterOptions } from '@src/modules/upload/upload.constants'
 
 @Controller('upload')
 export class UploadController {

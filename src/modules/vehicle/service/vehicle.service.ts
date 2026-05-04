@@ -4,8 +4,8 @@ import {
   GetAllVehiclesQueryType,
   UpdateVehicleBodyType,
   VehicleSchemaType,
-} from 'src/modules/vehicle/model/vehicle.model'
-import { VehicleRepository } from 'src/modules/vehicle/repository/vehicle.repo'
+} from '@src/modules/vehicle/model/vehicle.model'
+import { VehicleRepository } from '@src/modules/vehicle/repository/vehicle.repo'
 
 @Injectable()
 export class VehicleService {

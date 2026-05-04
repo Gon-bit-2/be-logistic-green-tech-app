@@ -30,19 +30,7 @@ import { DatabaseModule } from './database/database.module'
 import { LoggingMiddleware } from './common/middlewares/logging.middleware'
 import { RequestIdMiddleware } from './common/middlewares/request-id.middleware'
 import { SharedServicesModule } from './common/services/shared-services.module'
-
-function buildRedisUrl() {
-  if (envConfig.REDIS_URL) {
-    return envConfig.REDIS_URL
-  }
-
-  const auth =
-    envConfig.REDIS_USERNAME || envConfig.REDIS_PASSWORD
-      ? `${encodeURIComponent(envConfig.REDIS_USERNAME)}:${encodeURIComponent(envConfig.REDIS_PASSWORD)}@`
-      : ''
-
-  return `redis://${auth}${envConfig.REDIS_HOST}:${envConfig.REDIS_PORT}`
-}
+import { buildRedisUrl } from './common/utils/buildRedisUrl.util'
 
 @Module({
   imports: [
@@ -85,9 +73,7 @@ function buildRedisUrl() {
       useFactory: () => {
         return {
           ttl: 60_000,
-          stores: [
-            createKeyv(buildRedisUrl()),
-          ],
+          stores: [createKeyv(buildRedisUrl())],
         }
       },
     }),

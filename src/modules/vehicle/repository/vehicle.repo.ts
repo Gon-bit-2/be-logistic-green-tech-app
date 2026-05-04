@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common'
-import { PrismaService } from 'src/database/prisma.service'
+import { PrismaService } from '@src/database/prisma.service'
 import {
   CreateVehicleBodyType,
   GetAllVehiclesQueryType,
   UpdateVehicleBodyType,
-} from 'src/modules/vehicle/model/vehicle.model'
+} from '@src/modules/vehicle/model/vehicle.model'
 
 @Injectable()
 export class VehicleRepository {
