@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from 'src/database/prisma.service'
 import { CreateTrackingEventType } from '../model/tracking.model'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
+import { CodSettlementService } from 'src/common/services/cod-settlement.service'
 
 type CodCollectionOptions = {
   amount: number
@@ -11,7 +12,10 @@ type CodCollectionOptions = {
 
 @Injectable()
 export class TrackingRepository {
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly codSettlementService: CodSettlementService,
+  ) {}
 
   /**
    * Tạo tracking event + cập nhật status đơn hàng trong 1 Transaction
@@ -78,10 +82,6 @@ export class TrackingRepository {
         if (payload.status === ORDER_STATUS.DELIVERED) {
           updateData.currentTripId = null
           updateData.currentHubId = null
-          if (options?.codCollection) {
-            updateData.isCodCollected = true
-            updateData.codCollectedAt = now
-          }
         }
 
         if (options?.extraOrderUpdate) {
@@ -95,39 +95,11 @@ export class TrackingRepository {
       }
 
       if (options?.codCollection) {
-        const wallet = await tx.wallet.upsert({
-          where: { userId: options.codCollection.driverId },
-          create: { userId: options.codCollection.driverId },
-          update: {},
-        })
-
-        await tx.transaction.create({
-          data: {
-            walletId: wallet.id,
-            amount: options.codCollection.amount,
-            type: 'COD_COLLECTION',
-            status: 'COMPLETED',
-            referenceId: `ORDER_${payload.orderId}`,
-            description: `Thu hộ COD cho đơn hàng #${options.codCollection.orderReference}`,
-          },
-        })
-
-        await tx.wallet.update({
-          where: { id: wallet.id },
-          data: {
-            codCollected: {
-              increment: options.codCollection.amount,
-            },
-          },
-        })
-
-        await tx.payment.update({
-          where: { orderId: payload.orderId },
-          data: {
-            status: 'COMPLETED',
-            paidAt: now,
-            updatedById: options.codCollection.driverId,
-          },
+        await this.codSettlementService.collectCodForOrder(payload.orderId, options.codCollection.driverId, {
+          amount: options.codCollection.amount,
+          orderReference: options.codCollection.orderReference,
+          now,
+          tx,
         })
       }
 
