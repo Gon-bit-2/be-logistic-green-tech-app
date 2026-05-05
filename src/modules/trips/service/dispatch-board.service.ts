@@ -1,11 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { TripRepository } from '../repository/trip.repository'
 import { PrismaService } from 'src/database/prisma.service'
-import {
-  DispatchBoardResType,
-  DriverAssignmentRequestResType,
-  DriverDispatchBoardResType,
-} from '../model/trip.model'
+import { DispatchBoardResType, DriverAssignmentRequestResType, DriverDispatchBoardResType } from '../model/trip.model'
 import { TRIP_STATUS } from 'src/common/constants/trip.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { DISPATCHABLE_PAYMENT_FILTER } from 'src/common/constants/order-query.constant'
