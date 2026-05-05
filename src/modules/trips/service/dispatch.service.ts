@@ -211,17 +211,10 @@ export class DispatchService {
 
     const stops = this.normalizeAndValidateApproveStops(dto)
 
-    return this.tripRepo.createTripWithStops(
-      dto.vehicleId,
-      dto.driverId,
-      dto.orderIds,
-      stops,
-      undefined,
-      {
-        stateCreatedById: actor.userId,
-        stateSource: actor.roleName === roleName.WAREHOUSE_STAFF ? EVENT_SOURCE.HUB_SCANNER : EVENT_SOURCE.ADMIN_PORTAL,
-      },
-    )
+    return this.tripRepo.createTripWithStops(dto.vehicleId, dto.driverId, dto.orderIds, stops, undefined, {
+      stateCreatedById: actor.userId,
+      stateSource: actor.roleName === roleName.WAREHOUSE_STAFF ? EVENT_SOURCE.HUB_SCANNER : EVENT_SOURCE.ADMIN_PORTAL,
+    })
   }
 
   private normalizeAndValidateApproveStops(dto: DispatchApproveType) {

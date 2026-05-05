@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { TripRepository } from '../repository/trip.repository'
 import { PrismaService } from 'src/database/prisma.service'
 import {
@@ -78,13 +72,12 @@ export class TripExecutionService {
       vehicleId: dto.vehicleId,
     })
 
-    const stops =
-      dto.orderIds.map((orderId, index) => ({
-        orderId,
-        hubId: null as number | null,
-        stopSequence: index + 1,
-        stopType: STOP_TYPE.DROPOFF,
-      }))
+    const stops = dto.orderIds.map((orderId, index) => ({
+      orderId,
+      hubId: null as number | null,
+      stopSequence: index + 1,
+      stopType: STOP_TYPE.DROPOFF,
+    }))
 
     return this.tripRepo.createTripWithStops(dto.vehicleId, dto.driverId, dto.orderIds, stops, undefined, {
       stateCreatedById: actor.userId,
@@ -194,9 +187,7 @@ export class TripExecutionService {
     }
 
     const updatedTrip = await this.prismaService.$transaction(async (tx) => {
-      const orderIds = trip.stops
-        .filter((stop) => stop.order)
-        .map((stop) => stop.order!.id)
+      const orderIds = trip.stops.filter((stop) => stop.order).map((stop) => stop.order!.id)
 
       if (orderIds.length) {
         await this.orderStateService.transitionOrdersInTransaction({
@@ -241,9 +232,7 @@ export class TripExecutionService {
       throw new BadRequestException('Chỉ có thể hủy chuyến đang ở trạng thái PENDING.')
     }
 
-    const orderIds = trip.stops
-      .filter((stop) => stop.order)
-      .map((stop) => stop.order!.id)
+    const orderIds = trip.stops.filter((stop) => stop.order).map((stop) => stop.order!.id)
 
     const cancelledTrip = await this.prismaService.$transaction(async (tx) => {
       if (orderIds.length) {

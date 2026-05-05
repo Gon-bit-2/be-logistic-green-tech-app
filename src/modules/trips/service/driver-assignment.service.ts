@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { Prisma } from 'generated/prisma'
 import { TripRepository } from '../repository/trip.repository'
 import { PrismaService } from 'src/database/prisma.service'
@@ -258,7 +252,7 @@ export class DriverAssignmentService {
       orderBy: [{ createdAt: 'desc' }],
     })
 
-    let approvedRequest
+    let approvedRequest: DriverAssignmentRequestWithDetails
 
     if (pendingTrips.length === 1) {
       approvedRequest = await this.addOrderToApprovedAssignmentRequest(pendingTrips[0], request, actor.userId)
@@ -394,7 +388,7 @@ export class DriverAssignmentService {
     trip: PendingAssignmentTrip,
     request: DriverAssignmentRequestWithDetails,
     reviewedById: number,
-  ) {
+  ): Promise<DriverAssignmentRequestWithDetails> {
     if (trip.status !== TRIP_STATUS.PENDING) {
       throw new BadRequestException('Chỉ có thể thêm đơn vào chuyến đang chờ khởi hành.')
     }

@@ -114,10 +114,7 @@ export class TripCapacityService {
     }
   }
 
-  async assertVehicleCapacityForTrip(input: {
-    tripId: number
-    vehicleId: number
-  }): Promise<TripCapacitySnapshot> {
+  async assertVehicleCapacityForTrip(input: { tripId: number; vehicleId: number }): Promise<TripCapacitySnapshot> {
     const [vehicle, existingTripStops] = await Promise.all([
       this.prismaService.vehicle.findFirst({
         where: { id: input.vehicleId, deletedAt: null, isActive: true },

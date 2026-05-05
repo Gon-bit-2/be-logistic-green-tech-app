@@ -1,37 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { calculateHaversineDistance } from 'src/common/utils/geo.util'
-
-export type RouteWaypoint = {
-  id: string
-  lat: number
-  lng: number
-  stopId?: number
-}
-
-export type OptimizedWaypoint = RouteWaypoint & {
-  inputIndex: number
-  optimizedSequence: number
-}
-
-export type RouteOptimizationResult = {
-  distanceMeters: number
-  durationSeconds: number
-  fallbackUsed: boolean
-  provider: 'OSRM' | 'HAVERSINE'
-  waypoints: OptimizedWaypoint[]
-}
-
-type OsrmTripResponse = {
-  code: string
-  message?: string
-  trips?: {
-    distance: number
-    duration: number
-  }[]
-  waypoints?: {
-    waypoint_index: number
-  }[]
-}
+import { OsrmTripResponse, RouteOptimizationResult, RouteWaypoint } from '../types/osrm.type'
 
 @Injectable()
 export class OsrmRoutingClient {
@@ -45,8 +14,7 @@ export class OsrmRoutingClient {
 
     const coordinatePath = waypoints.map((waypoint) => `${waypoint.lng},${waypoint.lat}`).join(';')
     const url =
-      `${this.baseUrl}/trip/v1/driving/${coordinatePath}` +
-      `?roundtrip=${roundtrip}&source=first&geometries=polyline`
+      `${this.baseUrl}/trip/v1/driving/${coordinatePath}` + `?roundtrip=${roundtrip}&source=first&geometries=polyline`
 
     try {
       const response = await fetch(url)
@@ -72,9 +40,7 @@ export class OsrmRoutingClient {
       }
     } catch (error) {
       this.logger.warn(
-        `OSRM optimization failed, using Haversine fallback: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `OSRM optimization failed, using Haversine fallback: ${error instanceof Error ? error.message : String(error)}`,
       )
       return this.buildFallbackResult(waypoints)
     }

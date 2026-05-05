@@ -12,6 +12,7 @@
     "p": "ts-node inittalScript/create-permission.ts",
     "start": "nest start",
     "start:dev": "nest start --watch",
+    "wdev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
