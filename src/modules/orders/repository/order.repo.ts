@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { Prisma } from 'generated/prisma'
 import { generateTrackingCode } from 'src/common/utils/genTrackingCode'
 import { PrismaService } from 'src/database/prisma.service'
-import { CreateOrderBodyType, GetOrderListQueryType, UpdateOrderStatusType } from 'src/modules/orders/model/order.model'
+import { CreateOrderBodyType, GetOrderListQueryType } from 'src/modules/orders/model/order.model'
 
 const paymentSummarySelect = {
   payment: {
@@ -148,19 +148,6 @@ export class OrderRepository {
         id,
         deletedAt: null,
       },
-      include: {
-        items: true,
-        ...paymentSummarySelect,
-      },
-    })
-  }
-
-  async update(id: number, payload: UpdateOrderStatusType) {
-    return this.prismaService.order.update({
-      where: {
-        id,
-      },
-      data: payload,
       include: {
         items: true,
         ...paymentSummarySelect,

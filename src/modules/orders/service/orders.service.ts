@@ -9,7 +9,6 @@ import {
 } from '@nestjs/common'
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager'
 import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
-import { isNotifiableOrderStatus } from 'src/common/constants/notification.constant'
 import {
   CreateOrderBodyType,
   GetOrderListQueryType,
@@ -22,14 +21,12 @@ import { calculateHaversineDistance } from 'src/common/utils/geo.util'
 import { PrismaService } from 'src/database/prisma.service'
 import {
   NotificationEventName,
-  OrderCreatedEvent,
-  OrderStatusUpdatedEvent,
 } from 'src/modules/notification/events/notification.event'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import roleName from 'src/common/constants/role.constant'
-import { TrackingRepository } from 'src/modules/tracking/repository/tracking.repo'
-import { EVENT_SOURCE, TRACKING_EVENT_TYPE } from 'src/common/constants/tracking.constant'
+import { EVENT_SOURCE } from 'src/common/constants/tracking.constant'
 import { AccessTokenPayload } from 'src/common/types/jwt.type'
+import { OrderStateService } from 'src/common/services/order-state.service'
 
 const CUSTOMER_CANCELLABLE_STATUSES = new Set<string>([ORDER_STATUS.PENDING, ORDER_STATUS.ASSIGNED])
 const ACTIVE_HUBS_GEO_CACHE_KEY = 'orders:active-hubs:geo'
@@ -45,7 +42,7 @@ export class OrdersService {
     private readonly prismaService: PrismaService,
     private readonly notificationEmitter: NotificationEmitterService,
     private readonly mapsService: MapsService,
-    private readonly trackingRepo: TrackingRepository,
+    private readonly orderStateService: OrderStateService,
     @Optional() @Inject(CACHE_MANAGER) private readonly cacheManager?: Cache,
   ) {}
 
@@ -240,16 +237,19 @@ export class OrdersService {
     return this.orderRepo.findById(id)
   }
 
-  async update(id: number, payload: UpdateOrderStatusType) {
-    const updatedOrder = await this.orderRepo.update(id, payload)
+  async update(id: number, payload: UpdateOrderStatusType, actor?: AccessTokenPayload) {
+    await this.orderStateService.transitionOrderStatus({
+      createdById: actor?.userId ?? null,
+      description: 'Cập nhật trạng thái đơn hàng từ màn hình quản trị.',
+      orderId: id,
+      source: actor ? this.resolveOrderEventSource(actor) : EVENT_SOURCE.SYSTEM,
+      status: payload.status,
+      validationMode: actor ? 'strict' : 'system',
+    })
 
-    if (isNotifiableOrderStatus(updatedOrder.status)) {
-      await this.notificationEmitter.emitSafe(NotificationEventName.ORDER_STATUS_UPDATED, {
-        userId: updatedOrder.customerId,
-        orderId: updatedOrder.id,
-        trackingCode: updatedOrder.trackingCode,
-        status: updatedOrder.status as OrderStatusUpdatedEvent['status'],
-      })
+    const updatedOrder = await this.orderRepo.findById(id)
+    if (!updatedOrder) {
+      throw new NotFoundException(`Đơn hàng #${id} không tồn tại sau khi cập nhật`)
     }
 
     return updatedOrder
@@ -296,17 +296,13 @@ export class OrdersService {
           ? 'Quản trị viên đã hủy đơn hàng.'
           : 'Khách hàng đã hủy đơn hàng.'
 
-    await this.trackingRepo.createEventWithStatusUpdate(
-      actor.userId,
-      {
-        orderId: id,
-        eventType: TRACKING_EVENT_TYPE.STATUS_CHANGE,
-        status: ORDER_STATUS.CANCELLED,
-        source: eventSource,
-        description,
-      },
-      true,
-    )
+    await this.orderStateService.transitionOrderStatus({
+      createdById: actor.userId,
+      description,
+      orderId: id,
+      source: eventSource,
+      status: ORDER_STATUS.CANCELLED,
+    })
 
     const cancelledOrder = await this.orderRepo.findById(id)
 
@@ -328,5 +324,10 @@ export class OrdersService {
     return this.orderRepo.delete({ id, deletedById })
   }
 
+  private resolveOrderEventSource(actor: AccessTokenPayload) {
+    if (actor.roleName === roleName.WAREHOUSE_STAFF) return EVENT_SOURCE.HUB_SCANNER
+    if (actor.roleName === roleName.CUSTOMER) return EVENT_SOURCE.CUSTOMER_APP
+    return EVENT_SOURCE.ADMIN_PORTAL
+  }
 
 }

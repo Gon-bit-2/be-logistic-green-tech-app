@@ -14,6 +14,7 @@ import { TripExecutionService } from './service/trip-execution.service'
 import { TripHubHelper } from './service/trip-hub.helper'
 import { DriverAssignmentHelper } from './service/driver-assignment.helper'
 import { SharedServicesModule } from 'src/common/services/shared-services.module'
+import { TripCapacityService } from './service/trip-capacity.service'
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { SharedServicesModule } from 'src/common/services/shared-services.module
     // === Shared helpers ===
     TripHubHelper,            // Hub scope resolution, resource validation
     DriverAssignmentHelper,   // Assignment request mapping helpers
+    TripCapacityService,      // Vehicle weight/volume capacity validation
 
     // === Repositories ===
     TripRepository,

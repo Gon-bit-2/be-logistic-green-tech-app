@@ -1,14 +1,19 @@
-import { Injectable } from '@nestjs/common'
+import { BadRequestException, Injectable } from '@nestjs/common'
 import { PrismaService } from 'src/database/prisma.service'
 import { GetTripListQueryType, TripStopType } from 'src/modules/trips/model/trip.model'
 import { TRIP_STATUS } from 'src/common/constants/trip.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { Prisma } from 'generated/prisma'
 import { DISPATCHABLE_PAYMENT_FILTER } from 'src/common/constants/order-query.constant'
+import { OrderStateService } from 'src/common/services/order-state.service'
+import { EVENT_SOURCE, EventSourceValue } from 'src/common/constants/tracking.constant'
 
 @Injectable()
 export class TripRepository {
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly orderStateService: OrderStateService,
+  ) {}
 
   /**
    * Truy vấn các đơn hàng sẵn sàng để gom chuyến:
@@ -117,15 +122,51 @@ export class TripRepository {
     stopsData: Omit<TripStopType, 'id' | 'tripId'>[],
     totalDistance?: number,
     options?: {
+      allowPartial?: boolean
       assignmentRequestToApproveId?: number | null
+      stateCreatedById?: number | null
+      stateSource?: EventSourceValue
     },
   ) {
+    const requestedOrderIds = [...new Set(orderIds)]
+    if (requestedOrderIds.length !== orderIds.length) {
+      throw new BadRequestException('Danh sách đơn hàng không được chứa trùng lặp.')
+    }
+    if (!requestedOrderIds.length) {
+      throw new BadRequestException('Cần chọn ít nhất một đơn hàng để tạo chuyến.')
+    }
+
     return this.prismaService.$transaction(async (tx) => {
+      const [activeVehicleTrip, activeDriverTrip] = await Promise.all([
+        tx.trip.findFirst({
+          where: {
+            status: { in: [TRIP_STATUS.PENDING, TRIP_STATUS.IN_PROGRESS] },
+            vehicleId,
+          },
+          select: { id: true },
+        }),
+        tx.trip.findFirst({
+          where: {
+            driverId,
+            status: { in: [TRIP_STATUS.PENDING, TRIP_STATUS.IN_PROGRESS] },
+          },
+          select: { id: true },
+        }),
+      ])
+
+      if (activeVehicleTrip) {
+        throw new BadRequestException(`Xe #${vehicleId} đang bận ở chuyến #${activeVehicleTrip.id}`)
+      }
+
+      if (activeDriverTrip) {
+        throw new BadRequestException(`Tài xế #${driverId} đang bận ở chuyến #${activeDriverTrip.id}`)
+      }
+
       // ====== OPTIMISTIC CONCURRENCY CHECK ======
       // Re-query các Order bên trong Transaction để kiểm tra chúng vẫn sẵn sàng dispatch
       const stillPendingOrders = await tx.order.findMany({
         where: {
-          id: { in: orderIds },
+          id: { in: requestedOrderIds },
           status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
           currentTripId: null,
           ...DISPATCHABLE_PAYMENT_FILTER,
@@ -134,10 +175,18 @@ export class TripRepository {
       })
 
       const validOrderIds = stillPendingOrders.map((o) => o.id)
+      const allowPartial = options?.allowPartial ?? false
 
-      // Nếu toàn bộ đơn đã bị worker khác giành hết → không tạo Trip rỗng
-      if (validOrderIds.length === 0) {
+      if (validOrderIds.length === 0 && allowPartial) {
         return null
+      }
+
+      if (!allowPartial && validOrderIds.length !== requestedOrderIds.length) {
+        throw new BadRequestException('Một hoặc nhiều đơn hàng không còn khả dụng để điều phối.')
+      }
+
+      if (validOrderIds.length === 0) {
+        throw new BadRequestException('Không còn đơn hàng khả dụng để tạo chuyến.')
       }
 
       // Lọc lại stopsData chỉ giữ những node thuộc các Order còn hợp lệ
@@ -145,6 +194,13 @@ export class TripRepository {
       const filteredStops = stopsData.filter(
         (stop) => stop.orderId === null || stop.orderId === undefined || validOrderIdSet.has(stop.orderId),
       )
+      const stopOrderIds = new Set(
+        filteredStops.map((stop) => stop.orderId).filter((orderId): orderId is number => orderId != null),
+      )
+      const missingStopOrderIds = validOrderIds.filter((orderId) => !stopOrderIds.has(orderId))
+      if (missingStopOrderIds.length) {
+        throw new BadRequestException(`Thiếu stop cho đơn hàng: ${missingStopOrderIds.join(', ')}`)
+      }
 
       // 1. Tạo Trip (bao gồm totalDistance ước tính từ Route Optimization)
       const trip = await tx.trip.create({
@@ -162,17 +218,21 @@ export class TripRepository {
         },
       })
 
-      // 2. Chuyển trạng thái Order sang ASSIGNED và gán currentTripId
-      await tx.order.updateMany({
-        where: {
-          id: { in: validOrderIds },
-          status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
-          currentTripId: null,
-        },
-        data: {
-          status: ORDER_STATUS.ASSIGNED,
+      // 2. Chuyển trạng thái Order sang ASSIGNED, gán currentTripId và ghi audit event
+      await this.orderStateService.transitionOrdersInTransaction({
+        createdById: options?.stateCreatedById ?? null,
+        description: `Đơn hàng được gán vào chuyến #${trip.id}.`,
+        expectedCurrentTripId: null,
+        expectedStatuses: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
+        extraWhere: DISPATCHABLE_PAYMENT_FILTER,
+        nextOrderData: {
           currentTripId: trip.id,
         },
+        orderIds: validOrderIds,
+        source: options?.stateSource ?? EVENT_SOURCE.SYSTEM,
+        status: ORDER_STATUS.ASSIGNED,
+        tx,
+        validationMode: 'system',
       })
 
       await tx.driverAssignmentRequest.updateMany({
@@ -371,123 +431,6 @@ export class TripRepository {
   }
 
   /**
-   * Hoàn thành chuyến xe và xử lý trạng thái đơn hàng theo loại TripStop.
-   *
-   * Logic nghiệp vụ quan trọng:
-   * - Đơn có stop DROPOFF     → status = DELIVERED   (giao thành công tận nhà)
-   * - Đơn có stop HUB_TRANSFER → status = ARRIVED_AT_HUB (hàng đã về kho, chờ chặng tiếp theo)
-   *                              + reset currentTripId = null
-   *                              + Tìm Hub đích gần nhất với receiverLat/Lng → gán currentHubId mới
-   *                              → Đơn sẽ tự động xuất hiện trong lượt dispatch tiếp của Hub đích
-   */
-  async completeTrip(
-    tripId: number,
-    allHubs: {
-      id: number
-      latitude: number
-      longitude: number
-      capacityVolume: number
-      ordersCurrentlyHere: { totalVolume: number }[]
-    }[],
-  ) {
-    return this.prismaService.$transaction(async (tx) => {
-      // 1. Cập nhật Trip status = COMPLETED
-      const trip = await tx.trip.update({
-        where: { id: tripId },
-        data: {
-          status: TRIP_STATUS.COMPLETED,
-          endTime: new Date(),
-        },
-        include: {
-          stops: { include: { order: true } },
-        },
-      })
-
-      // 2. Phân loại đơn hàng theo loại stop
-      const deliveredOrderIds: number[] = []
-      const hubTransferOrders: {
-        orderId: number
-        receiverLat: number
-        receiverLng: number
-        totalVolume: number
-      }[] = []
-
-      for (const stop of trip.stops) {
-        if (!stop.orderId || !stop.order) continue
-
-        if (stop.stopType === 'DROPOFF') {
-          deliveredOrderIds.push(stop.orderId)
-        } else if (stop.stopType === 'HUB_TRANSFER') {
-          hubTransferOrders.push({
-            orderId: stop.orderId,
-            receiverLat: stop.order.receiverLat,
-            receiverLng: stop.order.receiverLng,
-            totalVolume: stop.order.totalVolume,
-          })
-        }
-      }
-
-      // 3a. Đơn nội ô: Chuyển sang DELIVERED
-      if (deliveredOrderIds.length > 0) {
-        await tx.order.updateMany({
-          where: { id: { in: deliveredOrderIds } },
-          data: {
-            status: ORDER_STATUS.DELIVERED,
-            currentTripId: null,
-          },
-        })
-      }
-
-      // 3b. Đơn liên tỉnh: Chuyển sang ARRIVED_AT_HUB + tìm Hub đích gần nhất
-      for (const htOrder of hubTransferOrders) {
-        // Tìm Hub gần nhất với nơi người nhận (Hub đích cho chặng tiếp theo)
-        // ====== #9: HUB WAREHOUSE CAPACITY ======
-        let nearestHubId: number | null = null
-        let minDist = Infinity
-        let backupHubId: number | null = null // Fallback nếu tất cả Hub đều đầy
-
-        for (const hub of allHubs) {
-          const dist =
-            Math.pow(hub.latitude - htOrder.receiverLat, 2) + Math.pow(hub.longitude - htOrder.receiverLng, 2)
-
-          // Lưu lại fallback phòng trường hợp thiên tai/dịch bệnh làm 100% Hub bị đầy
-          if (dist < minDist) {
-            backupHubId = hub.id
-          }
-
-          // Kiểm tra Capacity Hub (chặn ở mức 90% để chừa khoảng trống vận hành thực tế)
-          const currentOccupiedVolume = hub.ordersCurrentlyHere.reduce((sum, order) => sum + order.totalVolume, 0)
-
-          if (currentOccupiedVolume + htOrder.totalVolume > hub.capacityVolume * 0.9) {
-            continue // Hub này đã đầy -> Pass qua xét Hub phụ cận xa hơn 1 chút
-          }
-
-          if (dist < minDist) {
-            minDist = dist
-            nearestHubId = hub.id
-          }
-        }
-
-        // Nếu kẹt quá độ (mọi Hub đều > 90% capacity), đành thả đại vào Hub gần nhất
-        if (!nearestHubId) {
-          nearestHubId = backupHubId
-        }
-
-        await tx.order.update({
-          where: { id: htOrder.orderId },
-          data: {
-            status: ORDER_STATUS.ARRIVED_AT_HUB,
-            currentTripId: null, // Không còn trên xe nào
-            currentHubId: nearestHubId, // Gán vào Hub đích → dispatch tiếp sẽ nhặt được
-          },
-        })
-      }
-
-      return trip
-    })
-  }
-
-  /**
    * Hủy đơn hàng giữa chuyến xe (Mid-Trip Cancellation).
    *
    * Logic xử lý trong Transaction:
@@ -503,13 +446,18 @@ export class TripRepository {
         where: { tripId, orderId },
       })
 
-      // 2. Chuyển Order sang CANCELLED và gỡ khỏi chuyến xe
-      await tx.order.update({
-        where: { id: orderId },
-        data: {
-          status: ORDER_STATUS.CANCELLED,
+      // 2. Chuyển Order sang CANCELLED, gỡ khỏi chuyến xe và ghi audit event
+      await this.orderStateService.transitionOrderStatus({
+        createdById: null,
+        description: `Đơn hàng #${orderId} bị hủy khỏi chuyến #${tripId}.`,
+        nextOrderData: {
           currentTripId: null,
         },
+        orderId,
+        source: EVENT_SOURCE.SYSTEM,
+        status: ORDER_STATUS.CANCELLED,
+        tx,
+        validationMode: 'system',
       })
 
       // 3. Kiểm tra Trip còn stop nào có orderId không (bỏ qua Return-to-Depot)

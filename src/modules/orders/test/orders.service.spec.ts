@@ -9,6 +9,7 @@ import { NotificationEventName } from 'src/modules/notification/events/notificat
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { MapsService } from 'src/modules/maps/service/maps.service'
 import { TrackingRepository } from 'src/modules/tracking/repository/tracking.repo'
+import { OrderStateService } from 'src/common/services/order-state.service'
 
 // Mock calculateHaversineDistance before testing
 jest.mock('src/common/utils/geo.util', () => ({
@@ -22,6 +23,7 @@ describe('OrdersService', () => {
   let prismaService: any // Mucking Prisma is easier by object assignment
   let notificationEmitter: jest.Mocked<NotificationEmitterService>
   let trackingRepo: jest.Mocked<TrackingRepository>
+  let orderStateService: jest.Mocked<OrderStateService>
 
   beforeEach(async () => {
     const orderRepoMock = {
@@ -47,6 +49,9 @@ describe('OrdersService', () => {
 
     const trackingRepoMock = {
       createEventWithStatusUpdate: jest.fn(),
+    }
+    const orderStateServiceMock = {
+      transitionOrderStatus: jest.fn().mockResolvedValue({ event: { id: 1 }, order: { id: 1 } }),
     }
 
     const mapsServiceMock = {
@@ -81,6 +86,10 @@ describe('OrdersService', () => {
           useValue: trackingRepoMock,
         },
         {
+          provide: OrderStateService,
+          useValue: orderStateServiceMock,
+        },
+        {
           provide: CACHE_MANAGER,
           useValue: {
             get: jest.fn(),
@@ -95,6 +104,7 @@ describe('OrdersService', () => {
     prismaService = module.get(PrismaService)
     notificationEmitter = module.get(NotificationEmitterService)
     trackingRepo = module.get(TrackingRepository)
+    orderStateService = module.get(OrderStateService)
   })
 
   afterEach(() => {
@@ -272,27 +282,26 @@ describe('OrdersService', () => {
   })
 
   describe('update, cancel & delete', () => {
-    it('gọi hàm update của repo', async () => {
-      orderRepo.update.mockResolvedValue({
+    it('cập nhật trạng thái qua OrderStateService', async () => {
+      orderRepo.findById.mockResolvedValue({
         id: 1,
         customerId: 7,
         trackingCode: 'ORD001',
-        status: ORDER_STATUS.DELIVERED,
+        status: ORDER_STATUS.ASSIGNED,
       } as any)
-      const payload: any = { status: ORDER_STATUS.DELIVERED }
-      const res = await service.update(1, payload)
-      expect(res).toEqual({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.DELIVERED })
-      expect(orderRepo.update).toHaveBeenCalledWith(1, payload)
-      expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
-        userId: 7,
+      const payload: any = { status: ORDER_STATUS.ASSIGNED }
+      const res = await service.update(1, payload, { userId: 9, roleName: 'ADMIN' } as any)
+      expect(res).toEqual({ id: 1, customerId: 7, trackingCode: 'ORD001', status: ORDER_STATUS.ASSIGNED })
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(expect.objectContaining({
+        createdById: 9,
         orderId: 1,
-        trackingCode: 'ORD001',
-        status: ORDER_STATUS.DELIVERED,
-      })
+        source: 'ADMIN_PORTAL',
+        status: ORDER_STATUS.ASSIGNED,
+      }))
     })
 
     it('không bắn notification cho status không nằm trong danh sách notify', async () => {
-      orderRepo.update.mockResolvedValue({
+      orderRepo.findById.mockResolvedValue({
         id: 2,
         customerId: 7,
         trackingCode: 'ORD002',
@@ -301,6 +310,7 @@ describe('OrdersService', () => {
 
       await service.update(2, { status: ORDER_STATUS.ASSIGNED } as any)
 
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalled()
       expect(notificationEmitter.emitSafe).not.toHaveBeenCalled()
     })
 
@@ -318,29 +328,19 @@ describe('OrdersService', () => {
           trackingCode: 'ORD010',
           status: ORDER_STATUS.CANCELLED,
         } as any)
-      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 99 } as any)
 
       const result = await service.cancel(10, { userId: 7, roleName: 'CUSTOMER' } as any)
 
-      expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(
-        7,
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(
         expect.objectContaining({
           orderId: 10,
-          eventType: 'STATUS_CHANGE',
           status: ORDER_STATUS.CANCELLED,
           source: 'CUSTOMER_APP',
         }),
-        true,
       )
       expect(result).toEqual({
         id: 10,
         customerId: 7,
-        trackingCode: 'ORD010',
-        status: ORDER_STATUS.CANCELLED,
-      })
-      expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
-        userId: 7,
-        orderId: 10,
         trackingCode: 'ORD010',
         status: ORDER_STATUS.CANCELLED,
       })
@@ -360,17 +360,14 @@ describe('OrdersService', () => {
           trackingCode: 'ORD011',
           status: ORDER_STATUS.CANCELLED,
         } as any)
-      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 100 } as any)
 
       await service.cancel(11, { userId: 8, roleName: 'CUSTOMER' } as any)
 
-      expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(
-        8,
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(
         expect.objectContaining({
           orderId: 11,
           status: ORDER_STATUS.CANCELLED,
         }),
-        true,
       )
     })
 
@@ -388,7 +385,7 @@ describe('OrdersService', () => {
           'Đơn hàng chỉ có thể hủy khi đang chờ xử lý hoặc đã phân công.',
         )
 
-        expect(trackingRepo.createEventWithStatusUpdate).not.toHaveBeenCalled()
+        expect(orderStateService.transitionOrderStatus).not.toHaveBeenCalled()
       },
     )
 
@@ -409,7 +406,6 @@ describe('OrdersService', () => {
           status: ORDER_STATUS.CANCELLED,
         } as any)
       prismaService.user.findFirst.mockResolvedValue({ hubId: 8 })
-      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 101 } as any)
 
       const result = await service.cancel(13, { userId: 22, roleName: 'WAREHOUSE_STAFF' } as any)
 
@@ -423,15 +419,14 @@ describe('OrdersService', () => {
           hubId: true,
         },
       })
-      expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(
-        22,
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(
         expect.objectContaining({
+          createdById: 22,
           orderId: 13,
           status: ORDER_STATUS.CANCELLED,
           source: 'HUB_SCANNER',
           description: 'Nhân viên kho đã hủy đơn hàng.',
         }),
-        true,
       )
       expect(result).toEqual({
         id: 13,
@@ -456,7 +451,7 @@ describe('OrdersService', () => {
         'Nhân viên kho chỉ được hủy đơn thuộc kho của mình.',
       )
 
-      expect(trackingRepo.createEventWithStatusUpdate).not.toHaveBeenCalled()
+      expect(orderStateService.transitionOrderStatus).not.toHaveBeenCalled()
     })
 
     it('cho phép admin hủy đơn và ghi audit với nguồn admin portal', async () => {
@@ -473,20 +468,18 @@ describe('OrdersService', () => {
           trackingCode: 'ORD015',
           status: ORDER_STATUS.CANCELLED,
         } as any)
-      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 102 } as any)
 
       const result = await service.cancel(15, { userId: 1, roleName: 'ADMIN' } as any)
 
       expect(prismaService.user.findFirst).not.toHaveBeenCalled()
-      expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(
-        1,
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(
         expect.objectContaining({
+          createdById: 1,
           orderId: 15,
           status: ORDER_STATUS.CANCELLED,
           source: 'ADMIN_PORTAL',
           description: 'Quản trị viên đã hủy đơn hàng.',
         }),
-        true,
       )
       expect(result).toEqual({
         id: 15,

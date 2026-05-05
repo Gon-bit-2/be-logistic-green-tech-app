@@ -168,7 +168,7 @@ export const TrackingEventResponseSchema = z.object({
   attemptNumber: z.number().nullable(),
   occurredAt: z.date(),
   recordedAt: z.date(),
-  createdById: z.number(),
+  createdById: z.number().nullable(),
   pod: ProofOfDeliveryResponseSchema.nullable().optional(),
 })
 

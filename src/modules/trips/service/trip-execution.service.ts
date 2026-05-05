@@ -22,6 +22,9 @@ import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import roleName from 'src/common/constants/role.constant'
 import { GamificationService } from 'src/modules/green-tech/service/gamification.service'
 import { DISPATCHABLE_PAYMENT_FILTER } from 'src/common/constants/order-query.constant'
+import { TripCapacityService } from './trip-capacity.service'
+import { EVENT_SOURCE } from 'src/common/constants/tracking.constant'
+import { OrderStateService } from 'src/common/services/order-state.service'
 
 /**
  * Service xử lý vòng đời (lifecycle) của Trip:
@@ -39,6 +42,8 @@ export class TripExecutionService {
     private readonly prismaService: PrismaService,
     private readonly hubHelper: TripHubHelper,
     private readonly gamificationService: GamificationService,
+    private readonly tripCapacityService: TripCapacityService,
+    private readonly orderStateService: OrderStateService,
   ) {}
 
   /** Lấy danh sách chuyến (phân trang, filter) */
@@ -68,6 +73,10 @@ export class TripExecutionService {
     const hubId = await this.hubHelper.resolveHubScope(dto.hubId, actor)
     await this.hubHelper.assertDispatchResourcesBelongToHub(hubId, dto.vehicleId, dto.driverId, dto.orderIds)
     await this.hubHelper.assertDriverAndVehicleAvailability(dto.vehicleId, dto.driverId)
+    await this.tripCapacityService.assertVehicleCapacityForOrders({
+      orderIds: dto.orderIds,
+      vehicleId: dto.vehicleId,
+    })
 
     const stops =
       dto.orderIds.map((orderId, index) => ({
@@ -77,7 +86,10 @@ export class TripExecutionService {
         stopType: STOP_TYPE.DROPOFF,
       }))
 
-    return this.tripRepo.createTripWithStops(dto.vehicleId, dto.driverId, dto.orderIds, stops)
+    return this.tripRepo.createTripWithStops(dto.vehicleId, dto.driverId, dto.orderIds, stops, undefined, {
+      stateCreatedById: actor.userId,
+      stateSource: actor.roleName === roleName.WAREHOUSE_STAFF ? EVENT_SOURCE.HUB_SCANNER : EVENT_SOURCE.ADMIN_PORTAL,
+    })
   }
 
   /** Chuyển xe cho Trip PENDING */
@@ -128,6 +140,10 @@ export class TripExecutionService {
     }
 
     await this.hubHelper.assertDriverAndVehicleAvailability(dto.vehicleId, nextDriverId, tripId)
+    await this.tripCapacityService.assertVehicleCapacityForTrip({
+      tripId,
+      vehicleId: dto.vehicleId,
+    })
 
     const updatedTrip = await this.prismaService.trip.update({
       where: { id: tripId },
@@ -183,12 +199,15 @@ export class TripExecutionService {
         .map((stop) => stop.order!.id)
 
       if (orderIds.length) {
-        await tx.order.updateMany({
-          where: {
-            id: { in: orderIds },
-            status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ASSIGNED, ORDER_STATUS.ARRIVED_AT_HUB] },
-          },
-          data: { status: ORDER_STATUS.IN_TRANSIT },
+        await this.orderStateService.transitionOrdersInTransaction({
+          createdById: actor.userId,
+          description: `Chuyến #${tripId} bắt đầu vận chuyển.`,
+          expectedStatuses: [ORDER_STATUS.PENDING, ORDER_STATUS.ASSIGNED, ORDER_STATUS.ARRIVED_AT_HUB],
+          orderIds,
+          source: EVENT_SOURCE.DRIVER_APP,
+          status: ORDER_STATUS.IN_TRANSIT,
+          tx,
+          validationMode: 'system',
         })
       }
 
@@ -228,15 +247,18 @@ export class TripExecutionService {
 
     const cancelledTrip = await this.prismaService.$transaction(async (tx) => {
       if (orderIds.length) {
-        await tx.order.updateMany({
-          where: {
-            id: { in: orderIds },
-            status: ORDER_STATUS.ASSIGNED,
-          },
-          data: {
+        await this.orderStateService.transitionOrdersInTransaction({
+          createdById: actor.userId,
+          description: dto.reason ?? `Chuyến #${tripId} bị hủy trước khi khởi hành.`,
+          expectedStatuses: [ORDER_STATUS.ASSIGNED],
+          nextOrderData: {
             currentTripId: null,
-            status: ORDER_STATUS.PENDING,
           },
+          orderIds,
+          source: actor.roleName === roleName.DRIVER ? EVENT_SOURCE.DRIVER_APP : EVENT_SOURCE.ADMIN_PORTAL,
+          status: ORDER_STATUS.PENDING,
+          tx,
+          validationMode: 'system',
         })
       }
 
@@ -343,6 +365,11 @@ export class TripExecutionService {
     }
 
     await this.hubHelper.assertOrdersBelongToHub(tripHubId, dto.orderIds)
+    await this.tripCapacityService.assertVehicleCapacityForOrders({
+      existingTripId: tripId,
+      orderIds: dto.orderIds,
+      vehicleId: trip.vehicleId,
+    })
 
     const orders = await this.prismaService.order.findMany({
       where: { id: { in: dto.orderIds } },
@@ -381,22 +408,21 @@ export class TripExecutionService {
     })
 
     return this.prismaService.$transaction(async (tx) => {
-      const orderUpdate = await tx.order.updateMany({
-        where: {
-          id: { in: dto.orderIds },
-          currentTripId: null,
-          status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
-          ...DISPATCHABLE_PAYMENT_FILTER,
-        },
-        data: {
+      await this.orderStateService.transitionOrdersInTransaction({
+        createdById: actor.userId,
+        description: `Đơn hàng được thêm vào chuyến #${tripId}.`,
+        expectedCurrentTripId: null,
+        expectedStatuses: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
+        extraWhere: DISPATCHABLE_PAYMENT_FILTER,
+        nextOrderData: {
           currentTripId: tripId,
-          status: ORDER_STATUS.ASSIGNED,
         },
+        orderIds: dto.orderIds,
+        source: actor.roleName === roleName.WAREHOUSE_STAFF ? EVENT_SOURCE.HUB_SCANNER : EVENT_SOURCE.ADMIN_PORTAL,
+        status: ORDER_STATUS.ASSIGNED,
+        tx,
+        validationMode: 'system',
       })
-
-      if (orderUpdate.count !== dto.orderIds.length) {
-        throw new BadRequestException('Một hoặc nhiều đơn hàng không còn khả dụng để thêm vào chuyến.')
-      }
 
       await tx.tripStop.createMany({
         data: newStops.map((stop) => ({

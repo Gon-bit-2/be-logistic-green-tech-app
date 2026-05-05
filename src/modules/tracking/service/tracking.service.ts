@@ -4,18 +4,16 @@ import { CreateTrackingEventType } from '../model/tracking.model'
 import { PrismaService } from 'src/database/prisma.service'
 import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
-import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
-import { isNotifiableOrderStatus } from 'src/common/constants/notification.constant'
 import {
+  EVENT_SOURCE,
   TRACKING_EVENT_TYPE,
-  VALID_STATUS_TRANSITIONS,
   MAX_DELIVERY_ATTEMPTS,
 } from 'src/common/constants/tracking.constant'
 import { GREEN_TECH_QUEUE_NAME, CALCULATE_EMISSION_JOB_NAME } from 'src/common/constants/queue.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
-import { NotificationEventName, OrderStatusUpdatedEvent } from 'src/modules/notification/events/notification.event'
 import roleName from 'src/common/constants/role.constant'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
+import { OrderStateService } from 'src/common/services/order-state.service'
 
 @Injectable()
 export class TrackingService {
@@ -25,7 +23,7 @@ export class TrackingService {
     private readonly trackingRepo: TrackingRepository,
     private readonly prismaService: PrismaService,
     @InjectQueue(GREEN_TECH_QUEUE_NAME) private readonly greenTechQueue: Queue,
-    private readonly notificationEmitter: NotificationEmitterService,
+    private readonly orderStateService: OrderStateService,
   ) {}
 
   /**
@@ -76,29 +74,6 @@ export class TrackingService {
       }
     }
 
-    // 2. Nếu là STATUS_CHANGE → validate State Machine
-    let shouldUpdateOrderStatus = false
-
-    if (payload.eventType === TRACKING_EVENT_TYPE.STATUS_CHANGE && payload.status) {
-      this.validateStatusTransition(order.status, payload.status)
-      shouldUpdateOrderStatus = true
-
-      this.logger.log(
-        `[TRACKING] Order #${payload.orderId}: ${order.status} → ${payload.status} | by User #${createdById}`,
-      )
-    }
-
-    const shouldCollectCodOnDelivery =
-      shouldUpdateOrderStatus &&
-      payload.status === ORDER_STATUS.DELIVERED &&
-      order.payment?.method === 'COD' &&
-      order.payment.status !== 'COMPLETED' &&
-      !order.isCodCollected
-
-    if (shouldCollectCodOnDelivery && actor.roleName !== roleName.DRIVER) {
-      throw new ForbiddenException('Error.PermissionDenied.CodCollectionRequiresDriver')
-    }
-
     // 3. Nếu là EXCEPTION (giao thất bại) → kiểm tra số lần đã fail
     if (payload.eventType === TRACKING_EVENT_TYPE.EXCEPTION) {
       const failedCount = await this.trackingRepo.countFailedAttempts(payload.orderId)
@@ -114,50 +89,66 @@ export class TrackingService {
       )
     }
 
-    // 4. Gọi Repository tạo event + update status (trong Transaction)
-    const event = await this.trackingRepo.createEventWithStatusUpdate(createdById, payload, shouldUpdateOrderStatus, {
-      codCollection: shouldCollectCodOnDelivery
-        ? {
-            amount: Number(order.payment?.amount ?? 0),
-            driverId: createdById,
-            orderReference: order.trackingCode || String(order.id),
-          }
-        : undefined,
-    })
-
-    if (shouldUpdateOrderStatus && payload.status && isNotifiableOrderStatus(payload.status)) {
-      await this.notificationEmitter.emitSafe(NotificationEventName.ORDER_STATUS_UPDATED, {
-        userId: order.customerId,
-        orderId: order.id,
-        trackingCode: order.trackingCode,
-        status: payload.status as OrderStatusUpdatedEvent['status'],
-      })
-    }
-
-    // 5. Nếu DELIVERED → kiểm tra Trip có hoàn thành chưa (tất cả đơn đều DELIVERED)
-    if (payload.status === ORDER_STATUS.DELIVERED && order.currentTripId) {
-      await this.checkAndCompleteTrip(order.currentTripId)
-    }
-
-    return event
-  }
-
-  /**
-   * State Machine: Validate chuyển trạng thái hợp lệ
-   * Chặn mọi chuyển trạng thái bậy bạ (ví dụ: PENDING → DELIVERED)
-   */
-  private validateStatusTransition(currentStatus: string, newStatus: string): void {
-    const allowedTransitions = VALID_STATUS_TRANSITIONS[currentStatus]
-
-    if (!allowedTransitions) {
-      throw new BadRequestException(`Trạng thái "${currentStatus}" là trạng thái cuối, không thể chuyển tiếp.`)
-    }
-
-    if (!allowedTransitions.includes(newStatus)) {
-      throw new BadRequestException(
-        `Không thể chuyển từ "${currentStatus}" sang "${newStatus}". Chỉ cho phép: [${allowedTransitions.join(', ')}]`,
+    if (payload.eventType === TRACKING_EVENT_TYPE.STATUS_CHANGE && payload.status) {
+      this.logger.log(
+        `[TRACKING] Order #${payload.orderId}: ${order.status} → ${payload.status} | by User #${createdById}`,
       )
+
+      const shouldCollectCodOnDelivery =
+        payload.status === ORDER_STATUS.DELIVERED &&
+        order.payment?.method === 'COD' &&
+        order.payment.status !== 'COMPLETED' &&
+        !order.isCodCollected
+
+      if (shouldCollectCodOnDelivery && actor.roleName !== roleName.DRIVER) {
+        throw new ForbiddenException('Error.PermissionDenied.CodCollectionRequiresDriver')
+      }
+
+      const result = await this.orderStateService.transitionOrderStatus({
+        attemptNumber: payload.attemptNumber ?? null,
+        codCollection: shouldCollectCodOnDelivery
+          ? {
+              amount: Number(order.payment?.amount ?? 0),
+              driverId: createdById,
+              orderReference: order.trackingCode || String(order.id),
+            }
+          : undefined,
+        createdById,
+        description: payload.description ?? null,
+        failureReasonCode: payload.failureReasonCode ?? null,
+        latitude: payload.latitude ?? null,
+        location: payload.location ?? null,
+        longitude: payload.longitude ?? null,
+        occurredAt: payload.occurredAt ?? null,
+        orderId: payload.orderId,
+        pod: payload.pod,
+        source: payload.source ?? this.resolveActorSource(actor),
+        status: payload.status,
+      })
+
+      // 5. Nếu DELIVERED → kiểm tra Trip có hoàn thành chưa (tất cả đơn đều DELIVERED)
+      if (payload.status === ORDER_STATUS.DELIVERED && order.currentTripId) {
+        await this.checkAndCompleteTrip(order.currentTripId)
+      }
+
+      return result.event
     }
+
+    return this.orderStateService.recordTrackingEvent({
+      attemptNumber: payload.attemptNumber ?? null,
+      createdById,
+      description: payload.description ?? null,
+      eventType: payload.eventType,
+      failureReasonCode: payload.failureReasonCode ?? null,
+      latitude: payload.latitude ?? null,
+      location: payload.location ?? null,
+      longitude: payload.longitude ?? null,
+      occurredAt: payload.occurredAt ?? null,
+      orderId: payload.orderId,
+      pod: payload.pod,
+      source: payload.source ?? this.resolveActorSource(actor),
+      status: payload.status ?? null,
+    })
   }
 
   /**
@@ -266,5 +257,11 @@ export class TrackingService {
     }
   }
 
+  private resolveActorSource(actor: AccessTokenPayload) {
+    if (actor.roleName === roleName.DRIVER) return EVENT_SOURCE.DRIVER_APP
+    if (actor.roleName === roleName.WAREHOUSE_STAFF) return EVENT_SOURCE.HUB_SCANNER
+    if (actor.roleName === roleName.CUSTOMER) return EVENT_SOURCE.CUSTOMER_APP
+    return EVENT_SOURCE.ADMIN_PORTAL
+  }
 
 }

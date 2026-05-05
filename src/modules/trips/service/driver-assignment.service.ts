@@ -27,6 +27,9 @@ import { NotificationEmitterService } from 'src/common/services/notification-emi
 import { TripHubHelper } from './trip-hub.helper'
 import { DriverAssignmentHelper, type DriverAssignmentRequestWithDetails } from './driver-assignment.helper'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
+import { TripCapacityService } from './trip-capacity.service'
+import { OrderStateService } from 'src/common/services/order-state.service'
+import { EVENT_SOURCE } from 'src/common/constants/tracking.constant'
 
 type PendingAssignmentTrip = Prisma.TripGetPayload<{
   include: {
@@ -53,6 +56,8 @@ export class DriverAssignmentService {
     private readonly notificationEmitter: NotificationEmitterService,
     private readonly hubHelper: TripHubHelper,
     private readonly assignmentHelper: DriverAssignmentHelper,
+    private readonly tripCapacityService: TripCapacityService,
+    private readonly orderStateService: OrderStateService,
   ) {}
 
   /** Liệt kê yêu cầu nhận đơn của tài xế hiện tại */
@@ -275,6 +280,10 @@ export class DriverAssignmentService {
 
       await this.hubHelper.assertDispatchResourcesBelongToHub(hubId, dto.vehicleId, request.driverId, [request.orderId])
       await this.hubHelper.assertDriverHasNoInProgressTrip(request.driverId)
+      await this.tripCapacityService.assertVehicleCapacityForOrders({
+        orderIds: [request.orderId],
+        vehicleId: dto.vehicleId,
+      })
 
       const createdTrip = await this.tripRepo.createTripWithStops(
         dto.vehicleId,
@@ -297,7 +306,11 @@ export class DriverAssignmentService {
           },
         ],
         undefined,
-        { assignmentRequestToApproveId: requestId },
+        {
+          assignmentRequestToApproveId: requestId,
+          stateCreatedById: actor.userId,
+          stateSource: EVENT_SOURCE.HUB_SCANNER,
+        },
       )
 
       if (!createdTrip) {
@@ -388,24 +401,15 @@ export class DriverAssignmentService {
 
     this.hubHelper.assertOrderPaymentReadyForDispatch(request.order)
 
-    const currentOrderIds = trip.stops
-      .map((stop: { orderId?: number | null }) => stop.orderId)
-      .filter((id: number | null) => id != null)
-    const currentOrders = currentOrderIds.length
-      ? await this.prismaService.order.findMany({
-          where: { id: { in: currentOrderIds } },
-          select: { totalWeight: true },
-        })
-      : []
-    const totalWeight =
-      currentOrders.reduce((sum: number, order: { totalWeight: number }) => sum + order.totalWeight, 0) +
-      request.order.totalWeight
-
-    if (!trip.vehicle || totalWeight > trip.vehicle.capacityWeight) {
-      throw new BadRequestException(
-        `Tổng trọng lượng mới (${totalWeight}kg) sẽ vượt quá tải trọng xe (${trip.vehicle?.capacityWeight}kg)`,
-      )
+    if (!trip.vehicle) {
+      throw new BadRequestException('Chuyến chưa có xe hợp lệ để kiểm tra tải.')
     }
+
+    await this.tripCapacityService.assertVehicleCapacityForOrders({
+      existingTripId: trip.id,
+      orderIds: [request.orderId],
+      vehicleId: trip.vehicle.id,
+    })
 
     const nextSequence =
       (trip.stops.length > 0 ? Math.max(...trip.stops.map((stop: { stopSequence: number }) => stop.stopSequence)) : 0) +
@@ -421,24 +425,21 @@ export class DriverAssignmentService {
         : STOP_TYPE.HUB_TRANSFER
 
     const updatedRequest = await this.prismaService.$transaction(async (tx) => {
-      const orderUpdate = await tx.order.updateMany({
-        where: {
-          currentTripId: null,
-          id: request.orderId,
-          status: {
-            in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
-          },
-          ...DISPATCHABLE_PAYMENT_FILTER,
-        },
-        data: {
+      await this.orderStateService.transitionOrdersInTransaction({
+        createdById: reviewedById,
+        description: `Yêu cầu nhận đơn #${request.id} đã được duyệt và thêm vào chuyến #${trip.id}.`,
+        expectedCurrentTripId: null,
+        expectedStatuses: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
+        extraWhere: DISPATCHABLE_PAYMENT_FILTER,
+        nextOrderData: {
           currentTripId: trip.id,
-          status: ORDER_STATUS.ASSIGNED,
         },
+        orderIds: [request.orderId],
+        source: EVENT_SOURCE.HUB_SCANNER,
+        status: ORDER_STATUS.ASSIGNED,
+        tx,
+        validationMode: 'system',
       })
-
-      if (orderUpdate.count === 0) {
-        throw new BadRequestException('Đơn hàng không còn khả dụng để thêm vào chuyến.')
-      }
 
       await tx.tripStop.create({
         data: {
