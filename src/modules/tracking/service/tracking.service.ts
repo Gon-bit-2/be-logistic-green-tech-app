@@ -14,6 +14,7 @@ import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import roleName from 'src/common/constants/role.constant'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import { OrderStateService } from 'src/common/services/order-state.service'
+import { TrackingAccessService } from './tracking-access.service'
 
 @Injectable()
 export class TrackingService {
@@ -24,6 +25,7 @@ export class TrackingService {
     private readonly prismaService: PrismaService,
     @InjectQueue(GREEN_TECH_QUEUE_NAME) private readonly greenTechQueue: Queue,
     private readonly orderStateService: OrderStateService,
+    private readonly trackingAccessService: TrackingAccessService,
   ) {}
 
   /**
@@ -57,22 +59,7 @@ export class TrackingService {
       throw new NotFoundException(`Đơn hàng #${payload.orderId} không tồn tại`)
     }
 
-    if (actor.roleName === roleName.WAREHOUSE_STAFF) {
-      const warehouseUser = await this.prismaService.user.findFirst({
-        where: {
-          id: actor.userId,
-          deletedAt: null,
-          isDeleted: false,
-        },
-        select: {
-          hubId: true,
-        },
-      })
-
-      if (!warehouseUser?.hubId || warehouseUser.hubId !== order.currentHubId) {
-        throw new ForbiddenException('Error.PermissionDenied.NotYourHub')
-      }
-    }
+    await this.trackingAccessService.assertCanCreateTrackingEvent(actor, payload.orderId)
 
     // 3. Nếu là EXCEPTION (giao thất bại) → kiểm tra số lần đã fail
     if (payload.eventType === TRACKING_EVENT_TYPE.EXCEPTION) {
@@ -196,7 +183,9 @@ export class TrackingService {
   /**
    * Lấy timeline tracking của 1 đơn hàng (cần login)
    */
-  async getTimeline(orderId: number) {
+  async getTimeline(orderId: number, actor: AccessTokenPayload) {
+    await this.trackingAccessService.assertCanViewOrderTimeline(actor, orderId)
+
     const order = await this.prismaService.order.findFirst({
       where: { id: orderId, deletedAt: null },
       select: { id: true, trackingCode: true, status: true },

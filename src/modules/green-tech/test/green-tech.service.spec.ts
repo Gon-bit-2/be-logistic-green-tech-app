@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing'
 import { GreenTechService } from '../service/green-tech.service'
 import { EmissionRepository } from '../repository/emission.repo'
-import { NotFoundException } from '@nestjs/common'
+import { BadRequestException, NotFoundException } from '@nestjs/common'
 
 describe('GreenTechService', () => {
   let service: GreenTechService
@@ -71,6 +71,7 @@ describe('GreenTechService', () => {
           // Log params
           version: 3,
           actualDistance: 100,
+          calculationMethod: 'TRIP_TOTAL_DISTANCE',
           payloadWeight: 50,
           co2Emitted: 5,
           co2Saved: 20,
@@ -93,6 +94,21 @@ describe('GreenTechService', () => {
     it('văng NotFoundException khi trip chưa có vehicle', async () => {
       repo.getTripSourceData.mockResolvedValue({ vehicle: null } as any)
       await expect(service.calculateTripEmission(1)).rejects.toThrow(NotFoundException)
+    })
+
+    it('văng BadRequestException khi trip chưa có totalDistance hợp lệ', async () => {
+      repo.getTripSourceData.mockResolvedValue({
+        ordersOnBoard: [{ id: 1, totalWeight: 10 }],
+        totalDistance: 0,
+        vehicle: {
+          emissionRatePerKm: 50,
+          fuelType: 'ELECTRIC',
+          type: 'ELECTRIC_VAN',
+        },
+      } as any)
+
+      await expect(service.calculateTripEmission(1)).rejects.toThrow(BadRequestException)
+      expect(repo.saveEmissionData).not.toHaveBeenCalled()
     })
   })
 

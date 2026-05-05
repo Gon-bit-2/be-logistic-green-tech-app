@@ -19,6 +19,7 @@ import { TripHubHelper } from '../service/trip-hub.helper'
 import { DriverAssignmentHelper } from '../service/driver-assignment.helper'
 import { TripCapacityService } from '../service/trip-capacity.service'
 import { OrderStateService } from 'src/common/services/order-state.service'
+import { TripRouteOptimizationService } from '../service/trip-route-optimization.service'
 
 describe('TripsService', () => {
   let service: TripsService
@@ -26,6 +27,7 @@ describe('TripsService', () => {
   let prismaService: any
   let queueMock: jest.Mocked<Queue>
   let gamificationServiceMock: any
+  let tripRouteOptimizationServiceMock: any
 
   beforeEach(async () => {
     const stripRepoMock = {
@@ -106,6 +108,16 @@ describe('TripsService', () => {
     gamificationServiceMock = {
       processTripEmission: jest.fn().mockResolvedValue(undefined),
     }
+    tripRouteOptimizationServiceMock = {
+      optimizeRouteForTrip: jest.fn().mockResolvedValue({
+        fallbackUsed: false,
+        provider: 'OSRM',
+        stops: [],
+        totalDistance: 10,
+        totalDuration: 600,
+        tripId: 1,
+      }),
+    }
     const trackingRepoMock = {
       createEventWithStatusUpdate: jest.fn().mockResolvedValue({ id: 1 }),
     }
@@ -155,6 +167,10 @@ describe('TripsService', () => {
         {
           provide: OrderStateService,
           useValue: orderStateServiceMock,
+        },
+        {
+          provide: TripRouteOptimizationService,
+          useValue: tripRouteOptimizationServiceMock,
         },
       ],
     }).compile()
@@ -417,6 +433,22 @@ describe('TripsService', () => {
 
       expect(res).toEqual({ id: 1, status: 'COMPLETED' })
       expect(gamificationServiceMock.processTripEmission).toHaveBeenCalledWith(1)
+    })
+  })
+
+  describe('optimizeRouteForTrip', () => {
+    it('delegate route optimization sang TripRouteOptimizationService', async () => {
+      const result = await service.optimizeRouteForTrip(1)
+
+      expect(result).toEqual({
+        fallbackUsed: false,
+        provider: 'OSRM',
+        stops: [],
+        totalDistance: 10,
+        totalDuration: 600,
+        tripId: 1,
+      })
+      expect(tripRouteOptimizationServiceMock.optimizeRouteForTrip).toHaveBeenCalledWith(1)
     })
   })
 

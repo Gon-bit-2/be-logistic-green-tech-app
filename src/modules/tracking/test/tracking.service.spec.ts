@@ -12,6 +12,7 @@ import { Queue } from 'bullmq'
 import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
 import { ForbiddenException } from '@nestjs/common'
 import { OrderStateService } from 'src/common/services/order-state.service'
+import { TrackingAccessService } from '../service/tracking-access.service'
 
 describe('TrackingService', () => {
   let service: TrackingService
@@ -20,6 +21,7 @@ describe('TrackingService', () => {
   let greenTechQueue: jest.Mocked<Queue>
   let notificationEmitter: jest.Mocked<NotificationEmitterService>
   let orderStateService: jest.Mocked<OrderStateService>
+  let trackingAccessService: jest.Mocked<TrackingAccessService>
 
   beforeEach(async () => {
     const trackingRepoMock = {
@@ -52,6 +54,10 @@ describe('TrackingService', () => {
       recordTrackingEvent: jest.fn().mockResolvedValue({ id: 20 }),
       transitionOrderStatus: jest.fn().mockResolvedValue({ event: { id: 10 }, order: { id: 1 } }),
     }
+    const trackingAccessServiceMock = {
+      assertCanCreateTrackingEvent: jest.fn().mockResolvedValue(undefined),
+      assertCanViewOrderTimeline: jest.fn().mockResolvedValue(undefined),
+    }
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -76,6 +82,10 @@ describe('TrackingService', () => {
           provide: OrderStateService,
           useValue: orderStateServiceMock,
         },
+        {
+          provide: TrackingAccessService,
+          useValue: trackingAccessServiceMock,
+        },
       ],
     }).compile()
 
@@ -85,6 +95,7 @@ describe('TrackingService', () => {
     greenTechQueue = module.get(getQueueToken(GREEN_TECH_QUEUE_NAME))
     notificationEmitter = module.get(NotificationEmitterService)
     orderStateService = module.get(OrderStateService)
+    trackingAccessService = module.get(TrackingAccessService)
   })
 
   afterEach(() => {
@@ -110,6 +121,10 @@ describe('TrackingService', () => {
       const result = await service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, payload as any)
 
       expect(result).toEqual({ id: 10 })
+      expect(trackingAccessService.assertCanCreateTrackingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ roleName: 'ADMIN', userId: 1 }),
+        1,
+      )
       expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(expect.objectContaining({
         createdById: 1,
         orderId: 1,
@@ -123,6 +138,7 @@ describe('TrackingService', () => {
       await expect(service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, { orderId: 1 } as any)).rejects.toThrow(
         NotFoundException,
       )
+      expect(trackingAccessService.assertCanCreateTrackingEvent).not.toHaveBeenCalled()
     })
 
     it('văng lỗi BadRequestException khi chuyển trạng thái sai logic (Vd: PENDING -> DELIVERED)', async () => {
@@ -283,7 +299,9 @@ describe('TrackingService', () => {
         currentTripId: null,
         currentHubId: 9,
       })
-      prismaService.user.findFirst.mockResolvedValue({ hubId: 8 })
+      trackingAccessService.assertCanCreateTrackingEvent.mockRejectedValueOnce(
+        new ForbiddenException('Error.PermissionDenied.TrackingEventScope'),
+      )
 
       await expect(
         service.createEvent(
@@ -304,17 +322,20 @@ describe('TrackingService', () => {
       prismaService.order.findFirst.mockResolvedValue({ id: 1, trackingCode: 'CODE123', status: 'PENDING' })
       trackingRepo.findByOrderId.mockResolvedValue([{ id: 1 }] as any)
 
-      const res = await service.getTimeline(1)
+      const actor = { userId: 1, roleName: 'ADMIN' } as any
+      const res = await service.getTimeline(1, actor)
       expect(res).toEqual({
         trackingCode: 'CODE123',
         currentStatus: 'PENDING',
         events: [{ id: 1 }],
       })
+      expect(trackingAccessService.assertCanViewOrderTimeline).toHaveBeenCalledWith(actor, 1)
     })
 
     it('văng NotFoundException khi order k tồn tại', async () => {
+      trackingAccessService.assertCanViewOrderTimeline.mockResolvedValueOnce(undefined)
       prismaService.order.findFirst.mockResolvedValue(null)
-      await expect(service.getTimeline(1)).rejects.toThrow(NotFoundException)
+      await expect(service.getTimeline(1, { userId: 1, roleName: 'ADMIN' } as any)).rejects.toThrow(NotFoundException)
     })
   })
 

@@ -43,6 +43,12 @@ export class AnalyticsRepository {
     return date.toLocaleString('en-US', { weekday: 'short' })
   }
 
+  private roundMetric(value: number | null | undefined, fractionDigits = 2) {
+    const numericValue = Number(value ?? 0)
+    if (!Number.isFinite(numericValue)) return 0
+    return Number(numericValue.toFixed(fractionDigits))
+  }
+
   async getDashboardSummary(query: GetAnalyticsQueryType) {
     const { startDate, endDate } = this.getDateRangeCondition(query.dateRange || '30d')
 
@@ -68,16 +74,52 @@ export class AnalyticsRepository {
     })
     const totalCo2Saved = Number(co2Result._sum.co2Saved || 0)
 
-    const avgDeliveryTime = 2.5
-    const onTimeDeliveryRate = 94.5
+    const [deliveryMetrics] = await this.prismaService.$queryRaw<
+      {
+        avgDeliveryTime: number
+        onTimeDeliveryRate: number
+      }[]
+    >`
+      WITH delivered_events AS (
+        SELECT "orderId", MAX("occurredAt") AS "deliveredAt"
+        FROM "order_tracking_events"
+        WHERE "status" = 'DELIVERED'
+        GROUP BY "orderId"
+      ),
+      delivered_orders AS (
+        SELECT
+          o.id,
+          o."createdAt",
+          o."preferredDeliveryTimeEnd",
+          COALESCE(de."deliveredAt", o."updatedAt") AS "deliveredAt"
+        FROM "orders" o
+        LEFT JOIN delivered_events de ON de."orderId" = o.id
+        WHERE o."createdAt" >= ${startDate}
+          AND o."createdAt" <= ${endDate}
+          AND o."status" = 'DELIVERED'
+      )
+      SELECT
+        COALESCE(AVG(EXTRACT(EPOCH FROM ("deliveredAt" - "createdAt")) / 3600), 0)::float AS "avgDeliveryTime",
+        CASE
+          WHEN COUNT(*) FILTER (WHERE "preferredDeliveryTimeEnd" IS NOT NULL) = 0 THEN 0
+          ELSE (
+            COUNT(*) FILTER (
+              WHERE "preferredDeliveryTimeEnd" IS NOT NULL
+                AND "deliveredAt" <= "preferredDeliveryTimeEnd"
+            )::float
+            / COUNT(*) FILTER (WHERE "preferredDeliveryTimeEnd" IS NOT NULL)::float
+          ) * 100
+        END::float AS "onTimeDeliveryRate"
+      FROM delivered_orders
+    `
 
     return {
       totalOrders,
       totalRevenue,
       totalDistance,
       totalCo2Saved,
-      avgDeliveryTime,
-      onTimeDeliveryRate,
+      avgDeliveryTime: this.roundMetric(deliveryMetrics?.avgDeliveryTime),
+      onTimeDeliveryRate: this.roundMetric(deliveryMetrics?.onTimeDeliveryRate),
     }
   }
 
@@ -90,14 +132,27 @@ export class AnalyticsRepository {
         truncDate: Date
         count: number
         revenue: number
+        avgDeliveryTime: number
       }[]
     >`
+      WITH delivered_events AS (
+        SELECT "orderId", MAX("occurredAt") AS "deliveredAt"
+        FROM "order_tracking_events"
+        WHERE "status" = 'DELIVERED'
+        GROUP BY "orderId"
+      )
       SELECT 
-        DATE_TRUNC(${truncFormat}, "createdAt") as "truncDate",
-        COUNT(id)::int as "count",
-        COALESCE(SUM("shippingFee"), 0)::float as "revenue"
-      FROM "orders"
-      WHERE "createdAt" >= ${startDate} AND "createdAt" <= ${endDate}
+        DATE_TRUNC(${truncFormat}, o."createdAt") as "truncDate",
+        COUNT(o.id)::int as "count",
+        COALESCE(SUM(o."shippingFee"), 0)::float as "revenue",
+        COALESCE(
+          AVG(EXTRACT(EPOCH FROM (COALESCE(de."deliveredAt", o."updatedAt") - o."createdAt")) / 3600)
+            FILTER (WHERE o."status" = 'DELIVERED'),
+          0
+        )::float as "avgDeliveryTime"
+      FROM "orders" o
+      LEFT JOIN delivered_events de ON de."orderId" = o.id
+      WHERE o."createdAt" >= ${startDate} AND o."createdAt" <= ${endDate}
       GROUP BY "truncDate"
       ORDER BY "truncDate" ASC
     `
@@ -106,7 +161,7 @@ export class AnalyticsRepository {
       period: this.getPeriodName(query.dateRange || '30d', new Date(row.truncDate)),
       count: row.count,
       revenue: row.revenue,
-      avgDeliveryTime: +(Math.random() * (3.0 - 1.5) + 1.5).toFixed(1),
+      avgDeliveryTime: this.roundMetric(row.avgDeliveryTime),
     }))
   }
 
@@ -148,21 +203,52 @@ export class AnalyticsRepository {
       {
         vehicleId: string
         licensePlate: string
+        orderCount: number
         totalTrips: number
         totalDistance: number
         co2Saved: number
       }[]
     >`
+      WITH completed_trips AS (
+        SELECT id, "vehicleId", COALESCE("totalDistance", 0) AS "totalDistance"
+        FROM "trips"
+        WHERE "createdAt" >= ${startDate}
+          AND "createdAt" <= ${endDate}
+          AND "status" = 'COMPLETED'
+      ),
+      trip_order_counts AS (
+        SELECT "tripId", COUNT(DISTINCT "orderId") FILTER (WHERE "orderId" IS NOT NULL)::int AS "orderCount"
+        FROM "trip_stops"
+        GROUP BY "tripId"
+      ),
+      vehicle_trip_metrics AS (
+        SELECT
+          ct."vehicleId",
+          COUNT(ct.id)::int AS "totalTrips",
+          COALESCE(SUM(toc."orderCount"), 0)::int AS "orderCount",
+          COALESCE(SUM(ct."totalDistance"), 0)::float AS "totalDistance"
+        FROM completed_trips ct
+        LEFT JOIN trip_order_counts toc ON toc."tripId" = ct.id
+        GROUP BY ct."vehicleId"
+      ),
+      vehicle_emission_metrics AS (
+        SELECT
+          ct."vehicleId",
+          COALESCE(SUM(el."co2Saved"), 0)::float AS "co2Saved"
+        FROM completed_trips ct
+        LEFT JOIN "trip_emission_logs" el ON el."tripId" = ct.id AND el."isLatest" = true
+        GROUP BY ct."vehicleId"
+      )
       SELECT 
         v.id as "vehicleId",
         v."licensePlate",
-        COUNT(t.id)::int as "totalTrips",
-        COALESCE(SUM(t."totalDistance"), 0)::float as "totalDistance",
-        COALESCE(SUM(el."co2Saved"), 0)::float as "co2Saved"
+        COALESCE(vtm."totalTrips", 0)::int as "totalTrips",
+        COALESCE(vtm."orderCount", 0)::int as "orderCount",
+        COALESCE(vtm."totalDistance", 0)::float as "totalDistance",
+        COALESCE(vem."co2Saved", 0)::float as "co2Saved"
       FROM "vehicles" v
-      LEFT JOIN "trips" t ON v.id = t."vehicleId" AND t."createdAt" >= ${startDate} AND t."createdAt" <= ${endDate}
-      LEFT JOIN "trip_emission_logs" el ON t.id = el."tripId" AND el."isLatest" = true
-      GROUP BY v.id, v."licensePlate"
+      LEFT JOIN vehicle_trip_metrics vtm ON vtm."vehicleId" = v.id
+      LEFT JOIN vehicle_emission_metrics vem ON vem."vehicleId" = v.id
       ORDER BY "totalDistance" DESC
       LIMIT 10
     `
@@ -170,9 +256,10 @@ export class AnalyticsRepository {
     return rawData.map((row) => ({
       vehicleId: `v${row.vehicleId}`,
       licensePlate: row.licensePlate,
+      orderCount: row.orderCount,
       totalTrips: row.totalTrips,
       totalDistance: row.totalDistance,
-      efficiency: +(Math.random() * (100 - 80) + 80).toFixed(1),
+      efficiency: this.roundMetric(row.totalDistance > 0 ? row.orderCount / row.totalDistance : 0),
       co2Saved: row.co2Saved,
     }))
   }

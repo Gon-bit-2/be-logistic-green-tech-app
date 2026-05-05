@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { EmissionLogInput, EmissionAllocationInput } from '../model/emission.model'
 import { EmissionRepository } from '../repository/emission.repo'
 
@@ -27,8 +27,14 @@ export class GreenTechService {
     }
 
     // --- Bước 1: Thu thập số liệu đầu vào ---
-    // Giả lập khoảng cách nếu chưa có hệ thống ghi nhận GPS tự động.
-    const actualDistance = trip.totalDistance || 10 // km
+    // Trip.totalDistance là nguồn sự thật sau route optimization.
+    const actualDistance = Number(trip.totalDistance ?? 0)
+    if (!Number.isFinite(actualDistance) || actualDistance <= 0) {
+      throw new BadRequestException(
+        `Trip #${tripId} chưa có quãng đường hợp lệ. Hãy tối ưu tuyến đường trước khi tính Green Tech.`,
+      )
+    }
+
     const payloadWeight = trip.ordersOnBoard.reduce((sum, order) => sum + order.totalWeight, 0) || 1
 
     const emissionFactor = vehicle.emissionRatePerKm // G CO2/km
@@ -74,7 +80,7 @@ export class GreenTechService {
       baselineRate: this.BASELINE_DIESEL_EMISSION_RATE,
       vehicleType: vehicle.type,
       fuelType: vehicle.fuelType,
-      calculationMethod: trip.totalDistance ? 'HAVERSINE' : 'MANUAL', // Fallback
+      calculationMethod: 'TRIP_TOTAL_DISTANCE',
       ghgScope: 1, // Scope 1: Xe sở hữu
     }
 

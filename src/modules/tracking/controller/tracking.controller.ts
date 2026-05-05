@@ -21,8 +21,8 @@ export class TrackingController {
 
   @Get()
   @Auth(AuthType.Bearer)
-  getTimeline(@Query() query: GetTrackingTimelineQueryDto) {
-    return this.trackingService.getTimeline(query.orderId)
+  getTimeline(@Query() query: GetTrackingTimelineQueryDto, @ActiveUser() user: AccessTokenPayload) {
+    return this.trackingService.getTimeline(query.orderId, user)
   }
 
   @Get('public/:trackingCode')
