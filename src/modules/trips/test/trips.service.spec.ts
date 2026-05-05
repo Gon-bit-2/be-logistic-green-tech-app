@@ -49,6 +49,7 @@ describe('TripsService', () => {
         count: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
+        findUnique: jest.fn(),
         update: jest.fn(),
       },
       driverAssignmentRequest: {
@@ -67,6 +68,21 @@ describe('TripsService', () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
       },
+      $transaction: jest.fn(async (callback) =>
+        callback({
+          order: {
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          },
+          trip: {
+            findUnique: jest.fn(),
+            update: jest.fn(),
+          },
+          tripStop: {
+            createMany: jest.fn(),
+            findUnique: jest.fn(),
+          },
+        }),
+      ),
     }
 
     const queueFactoryMock = {
@@ -181,9 +197,9 @@ describe('TripsService', () => {
     it('gọi repo.findAll', async () => {
       tripRepo.findAll.mockResolvedValue({ data: [], totalItems: 0 } as any)
 
-      const res = await service.findAll({})
+      const res = await service.findAll({ hubId: 5 } as any, { roleName: 'ADMIN', userId: 1 } as any)
       expect(res).toEqual({ data: [], totalItems: 0 })
-      expect(tripRepo.findAll).toHaveBeenCalledWith({})
+      expect(tripRepo.findAll).toHaveBeenCalledWith({ hubId: 5 })
     })
   })
 
@@ -269,22 +285,34 @@ describe('TripsService', () => {
 
   describe('updateStatus', () => {
     it('chuyển trạng thái trip không cần tracking thành công', async () => {
-      tripRepo.findById.mockResolvedValue({ id: 1 } as any)
-      tripRepo.updateTripStatus.mockResolvedValue({ id: 1, status: 'CANCELLED' } as any)
+      prismaService.trip.findUnique.mockResolvedValue({
+        driverId: 9,
+        id: 1,
+        status: 'PENDING',
+        stops: [{ order: { id: 4, status: 'ASSIGNED' } }],
+      })
+      prismaService.$transaction = jest.fn(async (callback) =>
+        callback({
+          order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+          trip: { update: jest.fn().mockResolvedValue({ id: 1, status: 'CANCELLED' }) },
+        }),
+      )
 
-      const res = await service.updateStatus(1, 'CANCELLED' as any)
+      const res = await service.updateStatus(1, { status: 'CANCELLED' } as any, { roleName: 'DRIVER', userId: 9 } as any)
       expect(res).toEqual({ id: 1, status: 'CANCELLED' })
-      expect(tripRepo.updateTripStatus).toHaveBeenCalledWith(1, 'CANCELLED')
+      expect(prismaService.$transaction).toHaveBeenCalled()
     })
 
     it('văng NotFoundException nếu trip k tồn tại', async () => {
-      tripRepo.findById.mockResolvedValue(null)
+      prismaService.trip.findUnique.mockResolvedValue(null)
 
-      await expect(service.updateStatus(999, 'IN_PROGRESS' as any)).rejects.toThrow(NotFoundException)
+      await expect(
+        service.updateStatus(999, { status: 'IN_PROGRESS' } as any, { roleName: 'DRIVER', userId: 9 } as any),
+      ).rejects.toThrow(NotFoundException)
     })
 
     it('bắt đầu trip tạo tracking event cho order rồi chuyển trip IN_PROGRESS', async () => {
-      tripRepo.findById.mockResolvedValue({
+      prismaService.trip.findUnique.mockResolvedValue({
         id: 1,
         driverId: 9,
         status: 'PENDING',
@@ -299,20 +327,25 @@ describe('TripsService', () => {
           },
         ],
       } as any)
-      tripRepo.updateTripStatus.mockResolvedValue({ id: 1, status: 'IN_PROGRESS' } as any)
+      prismaService.$transaction = jest.fn(async (callback) =>
+        callback({
+          order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+          trip: { update: jest.fn().mockResolvedValue({ id: 1, status: 'IN_PROGRESS' }) },
+        }),
+      )
 
-      const res = await service.updateStatus(1, 'IN_PROGRESS' as any)
+      const res = await service.updateStatus(
+        1,
+        { status: 'IN_PROGRESS' } as any,
+        { roleName: 'DRIVER', userId: 9 } as any,
+      )
 
       expect(res).toEqual({ id: 1, status: 'IN_PROGRESS' })
-      expect(tripRepo.updateTripStatus).toHaveBeenCalledWith(
-        1,
-        'IN_PROGRESS',
-        expect.objectContaining({ startTime: expect.any(Date) }),
-      )
+      expect(prismaService.$transaction).toHaveBeenCalled()
     })
 
     it('chặn bắt đầu trip nếu đơn Stripe chưa thanh toán thành công', async () => {
-      tripRepo.findById.mockResolvedValue({
+      prismaService.trip.findUnique.mockResolvedValue({
         id: 1,
         driverId: 9,
         status: 'PENDING',
@@ -329,49 +362,47 @@ describe('TripsService', () => {
         ],
       } as any)
 
-      await expect(service.updateStatus(1, 'IN_PROGRESS' as any)).rejects.toThrow(
+      await expect(
+        service.updateStatus(1, { status: 'IN_PROGRESS' } as any, { roleName: 'DRIVER', userId: 9 } as any),
+      ).rejects.toThrow(
         'Đơn ORD-STRIPE-4 dùng Stripe và chưa thanh toán thành công nên chưa thể vận chuyển.',
       )
-      expect(tripRepo.updateTripStatus).not.toHaveBeenCalled()
+      expect(prismaService.$transaction).not.toHaveBeenCalled()
     })
 
     it('hoàn tất trip tạo tracking event giao hàng và cập nhật COMPLETED', async () => {
-      tripRepo.findById.mockResolvedValue({
+      prismaService.trip.findUnique.mockResolvedValue({
         id: 1,
         driverId: 9,
         status: 'IN_PROGRESS',
+        vehicle: { id: 2 },
         stops: [
           {
             orderId: 4,
             stopType: 'DROPOFF',
-            order: { id: 4, status: 'IN_TRANSIT', totalVolume: 1, receiverLat: 10, receiverLng: 106 },
+            order: {
+              id: 4,
+              receiverLat: 10,
+              receiverLng: 106,
+              senderLat: 10.1,
+              senderLng: 106.1,
+              status: 'DELIVERED',
+            },
           },
         ],
       } as any)
-      prismaService.order.findFirst.mockResolvedValue({
-        trackingCode: 'ORD4',
-        isCodCollected: false,
-        payment: { method: 'STRIPE', status: 'COMPLETED', amount: 1000 },
-      })
-      tripRepo.updateTripStatus.mockResolvedValue({ id: 1, status: 'COMPLETED' } as any)
+      prismaService.$transaction = jest.fn(async (callback) =>
+        callback({
+          trip: { update: jest.fn().mockResolvedValue({ id: 1, status: 'COMPLETED' }) },
+        }),
+      )
 
       const res = await service.updateStatus(1, {
         status: 'COMPLETED',
-        podByOrderId: {
-          4: {
-            receiverName: 'A',
-            packageCondition: 'INTACT',
-            images: [{ type: 'PACKAGE', url: 'https://example.com/pod.jpg' }],
-          },
-        },
-      } as any)
+      } as any, { roleName: 'DRIVER', userId: 9 } as any)
 
-      expect(tripRepo.updateTripStatus).toHaveBeenCalledWith(
-        1,
-        'COMPLETED',
-        expect.objectContaining({ endTime: expect.any(Date) }),
-      )
       expect(res).toEqual({ id: 1, status: 'COMPLETED' })
+      expect(gamificationServiceMock.processTripEmission).toHaveBeenCalledWith(1)
     })
   })
 
@@ -618,14 +649,17 @@ describe('TripsService', () => {
         vehicleId: 21,
       })
 
-      const result = await service.assignVehicleToTrip(88, {
-        driverId: 12,
-        vehicleId: 21,
-      } as any)
+      const result = await service.assignVehicleToTrip(
+        88,
+        {
+          driverId: 12,
+          vehicleId: 21,
+        } as any,
+        { roleName: 'ADMIN', userId: 1 } as any,
+      )
 
       expect(prismaService.trip.update).toHaveBeenCalledWith({
         data: { driverId: 12, vehicleId: 21 },
-        include: { stops: true },
         where: { id: 88 },
       })
       expect(result).toEqual({

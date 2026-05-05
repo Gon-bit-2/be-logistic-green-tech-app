@@ -13,9 +13,11 @@ import { DriverAssignmentService } from './service/driver-assignment.service'
 import { TripExecutionService } from './service/trip-execution.service'
 import { TripHubHelper } from './service/trip-hub.helper'
 import { DriverAssignmentHelper } from './service/driver-assignment.helper'
+import { SharedServicesModule } from 'src/common/services/shared-services.module'
 
 @Module({
   imports: [
+    SharedServicesModule,
     GreenTechModule,
     BullModule.registerQueue({
       name: AUTO_DISPATCH_QUEUE_NAME,

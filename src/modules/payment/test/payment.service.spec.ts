@@ -5,6 +5,7 @@ import { PrismaService } from 'src/database/prisma.service'
 import { BadRequestException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import * as StripeModule from 'stripe' // Import to mock
 import roleName from 'src/common/constants/role.constant'
+import { CodSettlementService } from 'src/common/services/cod-settlement.service'
 
 jest.mock('src/config/config', () => ({
   STRIPE_SECRET_KEY: 'test_sec_key',
@@ -43,7 +44,8 @@ describe('PaymentService', () => {
 
     prismaTransactionClient = {
       order: {
-        update: jest.fn(),
+        findUnique: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       payment: {
         create: jest.fn(),
@@ -68,6 +70,7 @@ describe('PaymentService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentService, // stripe instance will be initialised here
+        CodSettlementService,
         {
           provide: PaymentRepository,
           useValue: paymentRepoMock,
@@ -249,7 +252,7 @@ describe('PaymentService', () => {
 
   describe('confirmCOD', () => {
     it('nhập payment COD thành công khi chưa thanh toán lần nào', async () => {
-      prismaService.order.findUnique.mockResolvedValue({
+      prismaTransactionClient.order.findUnique.mockResolvedValue({
         id: 10,
         shippingFee: 20000,
         trackingCode: 'ORD010',
@@ -281,8 +284,8 @@ describe('PaymentService', () => {
           referenceId: 'ORDER_10',
         }),
       })
-      expect(prismaTransactionClient.order.update).toHaveBeenCalledWith({
-        where: { id: 10 },
+      expect(prismaTransactionClient.order.updateMany).toHaveBeenCalledWith({
+        where: { id: 10, isCodCollected: false },
         data: expect.objectContaining({
           codAmount: 20000,
           isCodCollected: true,
@@ -291,7 +294,7 @@ describe('PaymentService', () => {
     })
 
     it('làm tròn shipping fee thập phân khi xác nhận COD', async () => {
-      prismaService.order.findUnique.mockResolvedValue({
+      prismaTransactionClient.order.findUnique.mockResolvedValue({
         id: 10,
         shippingFee: 26089.8,
         trackingCode: 'ORD010',
@@ -308,7 +311,7 @@ describe('PaymentService', () => {
     })
 
     it('chỉ update driver COD khi payment COD đã được create hờ trc đó nhưng chưa thanh toán', async () => {
-      prismaService.order.findUnique.mockResolvedValue({
+      prismaTransactionClient.order.findUnique.mockResolvedValue({
         id: 10,
         shippingFee: 20000,
         trackingCode: 'ORD010',
@@ -326,7 +329,7 @@ describe('PaymentService', () => {
     })
 
     it('văng BadRequestException nếu hóa đơn đã đc thanh toán', async () => {
-      prismaService.order.findUnique.mockResolvedValue({
+      prismaTransactionClient.order.findUnique.mockResolvedValue({
         id: 10,
         isCodCollected: false,
         payment: { status: 'COMPLETED' },
@@ -335,14 +338,14 @@ describe('PaymentService', () => {
     })
 
     it('chặn confirmCOD trên đơn thanh toán online', async () => {
-      prismaService.order.findUnique.mockResolvedValue({
+      prismaTransactionClient.order.findUnique.mockResolvedValue({
         id: 10,
         isCodCollected: false,
         payment: { status: 'PENDING', method: 'STRIPE' },
       })
 
       await expect(service.confirmCOD(10, 99)).rejects.toThrow(BadRequestException)
-      expect(prismaService.$transaction).not.toHaveBeenCalled()
+      expect(prismaTransactionClient.payment.update).not.toHaveBeenCalled()
     })
   })
 

@@ -12,6 +12,7 @@ import { PaymentRepository } from '../repository/payment.repo'
 import { PrismaService } from 'src/database/prisma.service'
 import roleName from 'src/common/constants/role.constant'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
+import { CodSettlementService } from 'src/common/services/cod-settlement.service'
 
 type StripePaymentIntentEvent = {
   type: string
@@ -39,6 +40,7 @@ export class PaymentService {
   constructor(
     private readonly paymentRepo: PaymentRepository,
     private readonly prisma: PrismaService,
+    private readonly codSettlementService: CodSettlementService,
   ) {
     // Khởi tạo Stripe client — sử dụng apiVersion mặc định của SDK
     // (tránh hardcode version cũ + ép kiểu rộng bypass type safety)
@@ -125,87 +127,9 @@ export class PaymentService {
    * Tài xế xác nhận đã nhận tiền mặt từ khách hàng khi giao hàng
    */
   async confirmCOD(orderId: number, driverId: number) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { payment: true },
-    })
-
-    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng')
-    if (order.payment?.method === 'STRIPE') {
-      throw new BadRequestException('Đơn hàng thanh toán online không thể xác nhận COD.')
-    }
-    if (order.payment?.status === 'COMPLETED' || order.isCodCollected) {
-      throw new BadRequestException('Đơn hàng đã được thanh toán trước đó')
-    }
-
-    const amount = this.normalizeStripeAmount(order.shippingFee, 'vnd')
-
-    await this.prisma.$transaction(async (tx) => {
-      const now = new Date()
-
-      if (!order.payment) {
-        await tx.payment.create({
-          data: {
-            orderId: order.id,
-            amount,
-            method: 'COD',
-            status: 'COMPLETED',
-            paidAt: now,
-            createdById: driverId,
-            updatedById: driverId,
-          },
-        })
-      } else {
-        await tx.payment.update({
-          where: { orderId: order.id },
-          data: {
-            amount,
-            method: 'COD',
-            status: 'COMPLETED',
-            paidAt: now,
-            updatedById: driverId,
-          },
-        })
-      }
-
-      const wallet = await tx.wallet.upsert({
-        where: { userId: driverId },
-        create: { userId: driverId },
-        update: {},
-      })
-
-      await tx.transaction.create({
-        data: {
-          walletId: wallet.id,
-          amount,
-          type: 'COD_COLLECTION',
-          status: 'COMPLETED',
-          referenceId: `ORDER_${order.id}`,
-          description: `Thu hộ COD cho đơn hàng #${order.trackingCode || order.id}`,
-        },
-      })
-
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: {
-          codCollected: {
-            increment: amount,
-          },
-        },
-      })
-
-      await tx.order.update({
-        where: { id: order.id },
-        data: {
-          codAmount: amount,
-          isCodCollected: true,
-          codCollectedAt: now,
-        },
-      })
-    })
-
+    const result = await this.codSettlementService.collectCodForOrder(orderId, driverId)
     this.logger.log(`[PAYMENT] Tài xế #${driverId} xác nhận COD cho Order #${orderId}`)
-    return { success: true, message: 'Đã xác nhận thu hộ tiền mặt (COD) thành công' }
+    return result
   }
 
   /**

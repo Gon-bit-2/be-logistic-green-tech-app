@@ -7,6 +7,7 @@ import { TrackingGateway } from './gateway/tracking.gateway'
 import { BullModule } from '@nestjs/bullmq'
 import { GREEN_TECH_QUEUE_NAME } from '../../common/constants/queue.constant'
 import { WsJwtGuard } from '../../common/guards/ws-jwt.guard'
+import { SharedServicesModule } from 'src/common/services/shared-services.module'
 
 /**
  * Module quản lý tracking & real-time WebSocket.
@@ -16,6 +17,7 @@ import { WsJwtGuard } from '../../common/guards/ws-jwt.guard'
  */
 @Module({
   imports: [
+    SharedServicesModule,
     JwtModule.register({}),
     BullModule.registerQueue({
       name: GREEN_TECH_QUEUE_NAME,

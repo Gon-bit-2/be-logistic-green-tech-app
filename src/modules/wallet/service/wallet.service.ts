@@ -1,12 +1,14 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common'
+import { Injectable, BadRequestException } from '@nestjs/common'
 import { WalletRepository } from '@src/modules/wallet/repository/wallet.repo'
 import { PrismaService } from '@src/database/prisma.service'
+import { CodSettlementService } from '@src/common/services/cod-settlement.service'
 
 @Injectable()
 export class WalletService {
   constructor(
     private readonly walletRepo: WalletRepository,
     private readonly prisma: PrismaService,
+    private readonly codSettlementService: CodSettlementService,
   ) {}
 
   async getMyWallet(userId: number) {
@@ -14,32 +16,7 @@ export class WalletService {
   }
 
   async addCodToDriver(driverId: number, orderId: number, amount: number) {
-    // Check if order exists and valid
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-    })
-
-    if (!order) {
-      throw new NotFoundException('Order not found')
-    }
-
-    if (order.isCodCollected) {
-      throw new BadRequestException('COD already collected for this order')
-    }
-
-    const description = `Thu hộ COD cho đơn hàng #${order.trackingCode || order.id}`
-
-    const result = await this.walletRepo.addCodToWallet(driverId, amount, `ORDER_${orderId}`, description)
-
-    // Update order status
-    await this.prisma.order.update({
-      where: { id: orderId },
-      data: {
-        isCodCollected: true,
-      },
-    })
-
-    return result
+    return this.codSettlementService.collectCodForOrder(orderId, driverId, { amount })
   }
 
   async reconcileCodForDriver(
