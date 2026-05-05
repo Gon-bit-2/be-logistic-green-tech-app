@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common'
 import { TripRepository } from '../repository/trip.repository'
-import { PrismaService } from 'src/database/prisma.service'
 import {
   AddOrdersToTripType,
   ApproveDriverAssignmentRequestType,
@@ -17,14 +16,14 @@ import {
   RejectDriverAssignmentRequestType,
   UpdateTripStatusType,
 } from '../model/trip.model'
-import { TRIP_STATUS, STOP_TYPE } from 'src/common/constants/trip.constant'
+import { TRIP_STATUS } from 'src/common/constants/trip.constant'
 import { BadRequestException, NotFoundException } from '@nestjs/common'
-import { optimizeRouteWithOSRM, RouteCoordinate } from 'src/common/utils/routing.util'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import { DispatchService } from './dispatch.service'
 import { DispatchBoardService } from './dispatch-board.service'
 import { DriverAssignmentService } from './driver-assignment.service'
 import { TripExecutionService } from './trip-execution.service'
+import { TripRouteOptimizationService } from './trip-route-optimization.service'
 
 /**
  * Facade service giữ backward-compatibility cho Controller.
@@ -43,8 +42,8 @@ export class TripsService {
     private readonly dispatchBoardService: DispatchBoardService,
     private readonly driverAssignmentService: DriverAssignmentService,
     private readonly tripExecutionService: TripExecutionService,
+    private readonly tripRouteOptimizationService: TripRouteOptimizationService,
     private readonly tripRepo: TripRepository,
-    private readonly prismaService: PrismaService,
   ) {}
 
   // ========================
@@ -174,77 +173,7 @@ export class TripsService {
 
   /** Tối ưu tuyến đường bằng OSRM */
   async optimizeRouteForTrip(tripId: number) {
-    const trip = await this.prismaService.trip.findUnique({
-      where: { id: tripId },
-      include: {
-        stops: {
-          include: {
-            order: {
-              select: {
-                receiverLat: true,
-                receiverLng: true,
-                senderLat: true,
-                senderLng: true,
-              },
-            },
-          },
-          orderBy: { stopSequence: 'asc' },
-        },
-        vehicle: {
-          select: {
-            hub: { select: { latitude: true, longitude: true } },
-          },
-        },
-      },
-    })
-
-    if (!trip) throw new NotFoundException(`Không tìm thấy chuyến #${tripId}`)
-
-    const coordinates: RouteCoordinate[] = []
-
-    if (trip.vehicle?.hub) {
-      coordinates.push({ lng: trip.vehicle.hub.longitude, lat: trip.vehicle.hub.latitude })
-    }
-
-    for (const stop of trip.stops) {
-      if (!stop.order) continue
-      if (stop.stopType === STOP_TYPE.PICKUP) {
-        coordinates.push({ lng: stop.order.senderLng, lat: stop.order.senderLat })
-      } else {
-        coordinates.push({ lng: stop.order.receiverLng, lat: stop.order.receiverLat })
-      }
-    }
-
-    if (coordinates.length < 2) {
-      throw new BadRequestException('Không đủ điểm dừng để tối ưu tuyến đường.')
-    }
-
-    const optimizedRoute = await optimizeRouteWithOSRM(coordinates)
-
-    if (optimizedRoute.waypoints?.length) {
-      // optimizedRoute.waypoints đã được sort theo waypoint_index trong routing.util
-      // Offset: nếu có hub thì waypoint[0] là hub → stops bắt đầu từ index 1
-      const offset = trip.vehicle?.hub ? 1 : 0
-      const sortedStops = [...trip.stops].sort((a, b) => {
-        const indexA = trip.stops.indexOf(a) + offset
-        const indexB = trip.stops.indexOf(b) + offset
-        return indexA - indexB
-      })
-
-      await this.prismaService.$transaction(
-        sortedStops.map((stop, index) =>
-          this.prismaService.tripStop.update({
-            where: { id: stop.id },
-            data: { stopSequence: index + 1 },
-          }),
-        ),
-      )
-    }
-
-    return {
-      optimizedRoute,
-      tripId,
-    }
+    return this.tripRouteOptimizationService.optimizeRouteForTrip(tripId)
   }
 
   /** Thêm đơn vào chuyến PENDING */

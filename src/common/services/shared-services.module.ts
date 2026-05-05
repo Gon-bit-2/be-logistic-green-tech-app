@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common'
 import { NotificationEmitterService } from './notification-emitter.service'
 import { CodSettlementService } from './cod-settlement.service'
+import { OrderStateService } from './order-state.service'
 
 /**
  * Module global cung cấp NotificationEmitterService cho toàn bộ ứng dụng.
@@ -8,7 +9,7 @@ import { CodSettlementService } from './cod-settlement.service'
  */
 @Global()
 @Module({
-  providers: [NotificationEmitterService, CodSettlementService],
-  exports: [NotificationEmitterService, CodSettlementService],
+  providers: [NotificationEmitterService, CodSettlementService, OrderStateService],
+  exports: [NotificationEmitterService, CodSettlementService, OrderStateService],
 })
 export class SharedServicesModule {}

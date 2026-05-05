@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
 import { TripRepository } from '../repository/trip.repository'
@@ -10,6 +10,8 @@ import { DispatchApproveType } from '../model/trip.model'
 import { TripHubHelper } from './trip-hub.helper'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import roleName from 'src/common/constants/role.constant'
+import { TripCapacityService } from './trip-capacity.service'
+import { EVENT_SOURCE } from 'src/common/constants/tracking.constant'
 
 /**
  * Service xử lý logic điều phối tự động (Auto-Dispatch).
@@ -30,6 +32,7 @@ export class DispatchService {
     private readonly tripRepo: TripRepository,
     private readonly prismaService: PrismaService,
     private readonly hubHelper: TripHubHelper,
+    private readonly tripCapacityService: TripCapacityService,
   ) {}
 
   /**
@@ -201,11 +204,29 @@ export class DispatchService {
     const hubId = await this.hubHelper.resolveHubScope(dto.hubId, actor)
     await this.hubHelper.assertDispatchResourcesBelongToHub(hubId, dto.vehicleId, dto.driverId, dto.orderIds)
     await this.hubHelper.assertDriverAndVehicleAvailability(dto.vehicleId, dto.driverId)
+    await this.tripCapacityService.assertVehicleCapacityForOrders({
+      orderIds: dto.orderIds,
+      vehicleId: dto.vehicleId,
+    })
+
+    const stops = this.normalizeAndValidateApproveStops(dto)
 
     return this.tripRepo.createTripWithStops(
       dto.vehicleId,
       dto.driverId,
       dto.orderIds,
+      stops,
+      undefined,
+      {
+        stateCreatedById: actor.userId,
+        stateSource: actor.roleName === roleName.WAREHOUSE_STAFF ? EVENT_SOURCE.HUB_SCANNER : EVENT_SOURCE.ADMIN_PORTAL,
+      },
+    )
+  }
+
+  private normalizeAndValidateApproveStops(dto: DispatchApproveType) {
+    const orderIdSet = new Set(dto.orderIds)
+    const stops =
       dto.stops?.map((stop) => ({
         orderId: stop.orderId ?? null,
         hubId: stop.hubId ?? null,
@@ -214,14 +235,36 @@ export class DispatchService {
         expectedArrivalTime: stop.expectedArrivalTime ?? null,
         actualArrivalTime: stop.actualArrivalTime ?? null,
       })) ??
-        dto.orderIds.map((orderId, index) => ({
-          orderId,
-          hubId: null,
-          stopSequence: index + 1,
-          stopType: STOP_TYPE.DROPOFF,
-          expectedArrivalTime: null,
-          actualArrivalTime: null,
-        })),
+      dto.orderIds.map((orderId, index) => ({
+        orderId,
+        hubId: null,
+        stopSequence: index + 1,
+        stopType: STOP_TYPE.DROPOFF,
+        expectedArrivalTime: null,
+        actualArrivalTime: null,
+      }))
+
+    const invalidStopOrderIds = stops
+      .map((stop) => stop.orderId)
+      .filter((orderId): orderId is number => orderId != null && !orderIdSet.has(orderId))
+
+    if (invalidStopOrderIds.length) {
+      throw new BadRequestException(`Stop chứa đơn không thuộc dispatch: ${invalidStopOrderIds.join(', ')}`)
+    }
+
+    const stopsByOrderId = new Set(
+      stops.map((stop) => stop.orderId).filter((orderId): orderId is number => orderId != null),
     )
+    const missingStopOrderIds = dto.orderIds.filter((orderId) => !stopsByOrderId.has(orderId))
+    if (missingStopOrderIds.length) {
+      throw new BadRequestException(`Thiếu stop cho đơn hàng: ${missingStopOrderIds.join(', ')}`)
+    }
+
+    const invalidHubOnlyStops = stops.filter((stop) => stop.orderId == null && stop.hubId == null)
+    if (invalidHubOnlyStops.length) {
+      throw new BadRequestException('Stop không gắn đơn hàng phải gắn hub hợp lệ.')
+    }
+
+    return stops
   }
 }

@@ -16,8 +16,8 @@ import { AuthType } from 'src/common/constants/auth.constant'
 import { WsJwtGuard } from 'src/common/guards/ws-jwt.guard'
 import envConfig from 'src/config/config'
 import { parseCorsOrigins } from 'src/common/utils/cors.util'
-import { PrismaService } from 'src/database/prisma.service'
 import roleName from 'src/common/constants/role.constant'
+import { TrackingAccessService } from '../service/tracking-access.service'
 import z from 'zod'
 
 type AuthenticatedSocketData = {
@@ -69,7 +69,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   constructor(
     private readonly wsJwtGuard: WsJwtGuard,
-    private readonly prismaService: PrismaService,
+    private readonly trackingAccessService: TrackingAccessService,
   ) {}
 
   /**
@@ -129,16 +129,12 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   /**
    * Kiểm tra quyền truy cập Trip theo role:
-   * - ADMIN / WAREHOUSE_STAFF: Được xem tất cả trips (admin dashboard)
-   * - DRIVER: Chỉ xem trip mình đang lái (driverId phải trùng userId)
-   * - CUSTOMER: Chỉ xem trip chứa đơn hàng thuộc về mình (createdById)
+   * - ADMIN: được xem tất cả trips
+   * - WAREHOUSE_STAFF: chỉ xem trip thuộc hub của mình
+   * - DRIVER: chỉ xem trip mình đang lái
+   * - CUSTOMER: chỉ xem trip chứa đơn hàng của mình
    */
   private async verifyTripAccess(user: AccessTokenPayload, tripId: number): Promise<boolean> {
-    // Admin / Staff → toàn quyền
-    if (user.roleName === roleName.ADMIN || user.roleName === roleName.WAREHOUSE_STAFF) {
-      return true
-    }
-
     const cacheKey = `${user.userId}:${user.roleName}:${tripId}`
     const cached = this.tripAccessCache.get(cacheKey)
     const now = Date.now()
@@ -147,36 +143,14 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       return cached.hasAccess
     }
 
-    const trip = await this.prismaService.trip.findUnique({
-      where: { id: tripId },
-      select: {
-        driverId: true,
-        stops: {
-          select: {
-            order: {
-              select: { createdById: true },
-            },
-          },
-        },
-      },
-    })
-
-    if (!trip) {
+    try {
+      await this.trackingAccessService.assertCanJoinTripTracking(user, tripId)
+      this.tripAccessCache.set(cacheKey, { expiresAt: now + this.tripAccessCacheTtlMs, hasAccess: true })
+      return true
+    } catch {
       this.tripAccessCache.set(cacheKey, { expiresAt: now + this.tripAccessCacheTtlMs, hasAccess: false })
       return false
     }
-
-    // DRIVER: Chỉ track trip mình đang lái
-    if (user.roleName === roleName.DRIVER) {
-      const hasAccess = trip.driverId === user.userId
-      this.tripAccessCache.set(cacheKey, { expiresAt: now + this.tripAccessCacheTtlMs, hasAccess })
-      return hasAccess
-    }
-
-    // CUSTOMER: Chỉ track trip chứa đơn của mình
-    const hasAccess = trip.stops.some((stop) => stop.order?.createdById === user.userId)
-    this.tripAccessCache.set(cacheKey, { expiresAt: now + this.tripAccessCacheTtlMs, hasAccess })
-    return hasAccess
   }
 
   /**
@@ -216,13 +190,9 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       return { status: 'error', message: 'Chỉ tài xế mới được gửi vị trí.' }
     }
 
-    // Kiểm tra driver đúng là tài xế của chuyến này (ngăn Driver A giả mạo cho Driver B)
-    const trip = await this.prismaService.trip.findUnique({
-      where: { id: parsed.data.tripId },
-      select: { driverId: true },
-    })
-
-    if (!trip || trip.driverId !== user.userId) {
+    try {
+      await this.trackingAccessService.assertCanPublishTripLocation(user, parsed.data.tripId)
+    } catch {
       return { status: 'error', message: 'Bạn không phải tài xế của chuyến này.' }
     }
 

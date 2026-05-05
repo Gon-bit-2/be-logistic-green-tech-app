@@ -35,6 +35,7 @@ export const FleetPerformanceResSchema = z.array(
   z.object({
     vehicleId: z.string(),
     licensePlate: z.string(),
+    orderCount: z.number(),
     totalTrips: z.number(),
     totalDistance: z.number(),
     efficiency: z.number(),

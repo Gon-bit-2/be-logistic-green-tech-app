@@ -68,8 +68,9 @@ export class OrdersController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() payload: UpdateOrderStatusDto, // Define class DTO từ UpdateOrderStatusSchema
+    @ActiveUser() user: AccessTokenPayload,
   ) {
-    return this.ordersService.update(id, payload)
+    return this.ordersService.update(id, payload, user)
   }
 
   @Patch(':id/cancel')

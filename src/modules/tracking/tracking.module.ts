@@ -4,6 +4,7 @@ import { TrackingService } from './service/tracking.service'
 import { TrackingController } from './controller/tracking.controller'
 import { TrackingRepository } from './repository/tracking.repo'
 import { TrackingGateway } from './gateway/tracking.gateway'
+import { TrackingAccessService } from './service/tracking-access.service'
 import { BullModule } from '@nestjs/bullmq'
 import { GREEN_TECH_QUEUE_NAME } from '../../common/constants/queue.constant'
 import { WsJwtGuard } from '../../common/guards/ws-jwt.guard'
@@ -24,7 +25,7 @@ import { SharedServicesModule } from 'src/common/services/shared-services.module
     }),
   ],
   controllers: [TrackingController],
-  providers: [TrackingService, TrackingRepository, TrackingGateway, WsJwtGuard],
+  providers: [TrackingService, TrackingRepository, TrackingAccessService, TrackingGateway, WsJwtGuard],
   exports: [TrackingService, TrackingGateway],
 })
 export class TrackingModule {}

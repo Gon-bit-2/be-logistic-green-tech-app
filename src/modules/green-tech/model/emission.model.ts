@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const CalculationMethodSchema = z.enum(['HAVERSINE', 'GPS_ACTUAL', 'MANUAL'])
+export const CalculationMethodSchema = z.enum(['HAVERSINE', 'GPS_ACTUAL', 'MANUAL', 'TRIP_TOTAL_DISTANCE'])
 export const AllocationMethodSchema = z.enum(['WEIGHT_RATIO', 'DISTANCE_RATIO', 'EQUAL_SPLIT'])
 
 export const CalculateEmissionParamsSchema = z.object({

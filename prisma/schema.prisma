@@ -581,11 +581,11 @@ model OrderTrackingEvent {
   recordedAt DateTime @default(now()) // Khi ghi vào DB (server time — luôn chính xác)
   // Không có updatedAt — Event Sourcing là append-only, immutable
 
-  createdById Int
+  createdById Int?
 
   // ===== Relations =====
   order     Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  createdBy User             @relation("UserTrackingLogs", fields: [createdById], references: [id])
+  createdBy User?            @relation("UserTrackingLogs", fields: [createdById], references: [id])
   pod       ProofOfDelivery? // 1-1 optional — chỉ có khi giao thành công
 
   @@index([orderId])

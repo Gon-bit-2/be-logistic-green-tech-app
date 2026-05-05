@@ -14,6 +14,9 @@ import { TripExecutionService } from './service/trip-execution.service'
 import { TripHubHelper } from './service/trip-hub.helper'
 import { DriverAssignmentHelper } from './service/driver-assignment.helper'
 import { SharedServicesModule } from 'src/common/services/shared-services.module'
+import { TripCapacityService } from './service/trip-capacity.service'
+import { OsrmRoutingClient } from './service/osrm-routing.client'
+import { TripRouteOptimizationService } from './service/trip-route-optimization.service'
 
 @Module({
   imports: [
@@ -48,10 +51,13 @@ import { SharedServicesModule } from 'src/common/services/shared-services.module
     DispatchBoardService,     // Dispatch board cho Admin/Staff/Driver
     DriverAssignmentService,  // Driver assignment request CRUD
     TripExecutionService,     // Trip lifecycle (start, cancel, query)
+    TripRouteOptimizationService, // Route optimization + totalDistance source
 
     // === Shared helpers ===
     TripHubHelper,            // Hub scope resolution, resource validation
     DriverAssignmentHelper,   // Assignment request mapping helpers
+    TripCapacityService,      // Vehicle weight/volume capacity validation
+    OsrmRoutingClient,        // OSRM API client, fallback Haversine
 
     // === Repositories ===
     TripRepository,

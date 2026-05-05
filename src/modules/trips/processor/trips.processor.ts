@@ -294,15 +294,26 @@ export class TripsProcessor extends WorkerHost {
           hubId: node.hubId,
         }))
 
-        await this.tripRepository.createTripWithStops(
-          vehicle.id,
-          driverId,
-          assignedOrders.map((o) => o.id),
-          stopsData,
-          totalDistance, // Truyền tổng khoảng cách xuống Repository
-        )
+        try {
+          const createdTrip = await this.tripRepository.createTripWithStops(
+            vehicle.id,
+            driverId,
+            assignedOrders.map((o) => o.id),
+            stopsData,
+            totalDistance, // Truyền tổng khoảng cách xuống Repository
+            { allowPartial: true },
+          )
 
-        tripsCreated++
+          if (createdTrip) {
+            tripsCreated++
+          }
+        } catch (error) {
+          this.logger.warn(
+            `[BULLMQ] Skip dispatch group for vehicle #${vehicle.id}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          )
+        }
       }
     }
 

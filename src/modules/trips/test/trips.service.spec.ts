@@ -17,6 +17,9 @@ import { DriverAssignmentService } from '../service/driver-assignment.service'
 import { TripExecutionService } from '../service/trip-execution.service'
 import { TripHubHelper } from '../service/trip-hub.helper'
 import { DriverAssignmentHelper } from '../service/driver-assignment.helper'
+import { TripCapacityService } from '../service/trip-capacity.service'
+import { OrderStateService } from 'src/common/services/order-state.service'
+import { TripRouteOptimizationService } from '../service/trip-route-optimization.service'
 
 describe('TripsService', () => {
   let service: TripsService
@@ -24,6 +27,7 @@ describe('TripsService', () => {
   let prismaService: any
   let queueMock: jest.Mocked<Queue>
   let gamificationServiceMock: any
+  let tripRouteOptimizationServiceMock: any
 
   beforeEach(async () => {
     const stripRepoMock = {
@@ -51,6 +55,9 @@ describe('TripsService', () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
+      },
+      tripStop: {
+        findMany: jest.fn(),
       },
       driverAssignmentRequest: {
         create: jest.fn(),
@@ -101,8 +108,22 @@ describe('TripsService', () => {
     gamificationServiceMock = {
       processTripEmission: jest.fn().mockResolvedValue(undefined),
     }
+    tripRouteOptimizationServiceMock = {
+      optimizeRouteForTrip: jest.fn().mockResolvedValue({
+        fallbackUsed: false,
+        provider: 'OSRM',
+        stops: [],
+        totalDistance: 10,
+        totalDuration: 600,
+        tripId: 1,
+      }),
+    }
     const trackingRepoMock = {
       createEventWithStatusUpdate: jest.fn().mockResolvedValue({ id: 1 }),
+    }
+    const orderStateServiceMock = {
+      transitionOrdersInTransaction: jest.fn().mockResolvedValue({ count: 1 }),
+      transitionOrderStatus: jest.fn().mockResolvedValue({ event: { id: 1 }, order: { id: 1 } }),
     }
 
     const module: TestingModule = await Test.createTestingModule({
@@ -114,6 +135,7 @@ describe('TripsService', () => {
         TripExecutionService,
         TripHubHelper,
         DriverAssignmentHelper,
+        TripCapacityService,
         {
           provide: TripRepository,
           useValue: stripRepoMock,
@@ -141,6 +163,14 @@ describe('TripsService', () => {
         {
           provide: TrackingRepository,
           useValue: trackingRepoMock,
+        },
+        {
+          provide: OrderStateService,
+          useValue: orderStateServiceMock,
+        },
+        {
+          provide: TripRouteOptimizationService,
+          useValue: tripRouteOptimizationServiceMock,
         },
       ],
     }).compile()
@@ -406,9 +436,30 @@ describe('TripsService', () => {
     })
   })
 
+  describe('optimizeRouteForTrip', () => {
+    it('delegate route optimization sang TripRouteOptimizationService', async () => {
+      const result = await service.optimizeRouteForTrip(1)
+
+      expect(result).toEqual({
+        fallbackUsed: false,
+        provider: 'OSRM',
+        stops: [],
+        totalDistance: 10,
+        totalDuration: 600,
+        tripId: 1,
+      })
+      expect(tripRouteOptimizationServiceMock.optimizeRouteForTrip).toHaveBeenCalledWith(1)
+    })
+  })
+
   describe('createManualTrip', () => {
     it('chặn tạo chuyến khi xe đang bận ở chuyến khác', async () => {
-      prismaService.vehicle.findFirst.mockResolvedValue({ hubId: 5, id: 21 })
+      prismaService.vehicle.findFirst.mockResolvedValue({
+        capacityVolume: 10,
+        capacityWeight: 90,
+        hubId: 5,
+        id: 21,
+      })
       prismaService.user.findFirst.mockResolvedValue({ hubId: 5, id: 12 })
       prismaService.order.findMany.mockResolvedValue([{ currentHubId: 5, id: 1 }])
       prismaService.trip.findFirst.mockResolvedValueOnce({ id: 77 })
@@ -517,10 +568,12 @@ describe('TripsService', () => {
           id: 88,
           status: 'PENDING',
           stops: [],
-          vehicle: { capacityWeight: 50, hubId: 5, id: 21, licensePlate: '51A-88888' },
+          vehicle: { capacityVolume: 10, capacityWeight: 50, hubId: 5, id: 21, licensePlate: '51A-88888' },
         },
       ])
-      prismaService.order.findMany.mockResolvedValue([])
+      prismaService.vehicle.findFirst.mockResolvedValue({ capacityVolume: 10, capacityWeight: 50, id: 21 })
+      prismaService.order.findMany.mockResolvedValue([{ id: 101, totalVolume: 1, totalWeight: 12 }])
+      prismaService.tripStop.findMany.mockResolvedValue([])
       prismaService.$transaction = jest.fn().mockImplementation(async (callback) => {
         const tx = {
           driverAssignmentRequest: {
@@ -643,6 +696,12 @@ describe('TripsService', () => {
         .mockResolvedValueOnce([{ currentHubId: 5, id: 101 }])
         .mockResolvedValueOnce([{ id: 101, totalWeight: 12 }])
       prismaService.trip.findFirst.mockResolvedValue(null)
+      prismaService.tripStop.findMany.mockResolvedValue([
+        {
+          orderId: 101,
+          order: { status: 'ASSIGNED', totalVolume: 1, totalWeight: 12 },
+        },
+      ])
       prismaService.trip.update = jest.fn().mockResolvedValue({
         driverId: 12,
         id: 88,

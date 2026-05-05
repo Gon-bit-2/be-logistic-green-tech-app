@@ -10,8 +10,9 @@ import { TRACKING_EVENT_TYPE } from 'src/common/constants/tracking.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { Queue } from 'bullmq'
 import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
-import { NotificationEventName } from 'src/modules/notification/events/notification.event'
 import { ForbiddenException } from '@nestjs/common'
+import { OrderStateService } from 'src/common/services/order-state.service'
+import { TrackingAccessService } from '../service/tracking-access.service'
 
 describe('TrackingService', () => {
   let service: TrackingService
@@ -19,6 +20,8 @@ describe('TrackingService', () => {
   let prismaService: any
   let greenTechQueue: jest.Mocked<Queue>
   let notificationEmitter: jest.Mocked<NotificationEmitterService>
+  let orderStateService: jest.Mocked<OrderStateService>
+  let trackingAccessService: jest.Mocked<TrackingAccessService>
 
   beforeEach(async () => {
     const trackingRepoMock = {
@@ -47,6 +50,14 @@ describe('TrackingService', () => {
     const notificationEmitterMock = {
       emitSafe: jest.fn().mockResolvedValue(undefined),
     }
+    const orderStateServiceMock = {
+      recordTrackingEvent: jest.fn().mockResolvedValue({ id: 20 }),
+      transitionOrderStatus: jest.fn().mockResolvedValue({ event: { id: 10 }, order: { id: 1 } }),
+    }
+    const trackingAccessServiceMock = {
+      assertCanCreateTrackingEvent: jest.fn().mockResolvedValue(undefined),
+      assertCanViewOrderTimeline: jest.fn().mockResolvedValue(undefined),
+    }
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -67,6 +78,14 @@ describe('TrackingService', () => {
           provide: NotificationEmitterService,
           useValue: notificationEmitterMock,
         },
+        {
+          provide: OrderStateService,
+          useValue: orderStateServiceMock,
+        },
+        {
+          provide: TrackingAccessService,
+          useValue: trackingAccessServiceMock,
+        },
       ],
     }).compile()
 
@@ -75,6 +94,8 @@ describe('TrackingService', () => {
     prismaService = module.get(PrismaService)
     greenTechQueue = module.get(getQueueToken(GREEN_TECH_QUEUE_NAME))
     notificationEmitter = module.get(NotificationEmitterService)
+    orderStateService = module.get(OrderStateService)
+    trackingAccessService = module.get(TrackingAccessService)
   })
 
   afterEach(() => {
@@ -90,7 +111,6 @@ describe('TrackingService', () => {
         status: ORDER_STATUS.PENDING,
         currentHubId: 5,
       })
-      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 10 } as any)
 
       const payload = {
         orderId: 1,
@@ -101,9 +121,15 @@ describe('TrackingService', () => {
       const result = await service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, payload as any)
 
       expect(result).toEqual({ id: 10 })
-      expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(1, payload, true, {
-        codCollection: undefined,
-      })
+      expect(trackingAccessService.assertCanCreateTrackingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ roleName: 'ADMIN', userId: 1 }),
+        1,
+      )
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(expect.objectContaining({
+        createdById: 1,
+        orderId: 1,
+        status: ORDER_STATUS.ASSIGNED,
+      }))
       expect(notificationEmitter.emitSafe).not.toHaveBeenCalled()
     })
 
@@ -112,6 +138,7 @@ describe('TrackingService', () => {
       await expect(service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, { orderId: 1 } as any)).rejects.toThrow(
         NotFoundException,
       )
+      expect(trackingAccessService.assertCanCreateTrackingEvent).not.toHaveBeenCalled()
     })
 
     it('văng lỗi BadRequestException khi chuyển trạng thái sai logic (Vd: PENDING -> DELIVERED)', async () => {
@@ -124,6 +151,7 @@ describe('TrackingService', () => {
       })
 
       const payload = { orderId: 1, eventType: TRACKING_EVENT_TYPE.STATUS_CHANGE, status: ORDER_STATUS.DELIVERED }
+      orderStateService.transitionOrderStatus.mockRejectedValueOnce(new BadRequestException('invalid transition'))
       // PENDING không thể chuyển ngay sang DELIVERED (theo constant)
       await expect(service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, payload as any)).rejects.toThrow(
         BadRequestException,
@@ -160,7 +188,6 @@ describe('TrackingService', () => {
         currentTripId: 100,
         currentHubId: 5,
       })
-      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 10 } as any)
 
       // Giả lập trip đã hoàn tất tất cả đơn hàng
       prismaService.trip.findUnique.mockResolvedValue({
@@ -177,12 +204,10 @@ describe('TrackingService', () => {
 
       await service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, payload as any)
 
-      expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
-        userId: 7,
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(expect.objectContaining({
         orderId: 1,
-        trackingCode: 'ORD001',
         status: ORDER_STATUS.DELIVERED,
-      })
+      }))
 
       expect(prismaService.trip.update).toHaveBeenCalledWith({
         where: { id: 100 },
@@ -207,7 +232,6 @@ describe('TrackingService', () => {
           status: 'PENDING',
         },
       })
-      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 12 } as any)
       prismaService.trip.findUnique.mockResolvedValue({
         id: 88,
         status: 'IN_PROGRESS',
@@ -228,20 +252,17 @@ describe('TrackingService', () => {
         } as any,
       )
 
-      expect(trackingRepo.createEventWithStatusUpdate).toHaveBeenCalledWith(
-        22,
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(
         expect.objectContaining({
-          orderId: 4,
-          status: ORDER_STATUS.DELIVERED,
-        }),
-        true,
-        {
           codCollection: {
             amount: 42500,
             driverId: 22,
             orderReference: 'ORD004',
           },
-        },
+          createdById: 22,
+          orderId: 4,
+          status: ORDER_STATUS.DELIVERED,
+        }),
       )
     })
 
@@ -254,8 +275,6 @@ describe('TrackingService', () => {
         currentTripId: null,
         currentHubId: 5,
       })
-      trackingRepo.createEventWithStatusUpdate.mockResolvedValue({ id: 11 } as any)
-
       await service.createEvent(
         { userId: 1, roleName: 'ADMIN' } as any,
         {
@@ -265,12 +284,10 @@ describe('TrackingService', () => {
         } as any,
       )
 
-      expect(notificationEmitter.emitSafe).toHaveBeenCalledWith(NotificationEventName.ORDER_STATUS_UPDATED, {
-        userId: 9,
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(expect.objectContaining({
         orderId: 2,
-        trackingCode: 'ORD002',
         status: ORDER_STATUS.OUT_FOR_DELIVERY,
-      })
+      }))
     })
 
     it('chặn warehouse staff tạo event cho đơn ngoài hub của mình', async () => {
@@ -282,7 +299,9 @@ describe('TrackingService', () => {
         currentTripId: null,
         currentHubId: 9,
       })
-      prismaService.user.findFirst.mockResolvedValue({ hubId: 8 })
+      trackingAccessService.assertCanCreateTrackingEvent.mockRejectedValueOnce(
+        new ForbiddenException('Error.PermissionDenied.TrackingEventScope'),
+      )
 
       await expect(
         service.createEvent(
@@ -294,7 +313,7 @@ describe('TrackingService', () => {
           } as any,
         ),
       ).rejects.toThrow(ForbiddenException)
-      expect(trackingRepo.createEventWithStatusUpdate).not.toHaveBeenCalled()
+      expect(orderStateService.transitionOrderStatus).not.toHaveBeenCalled()
     })
   })
 
@@ -303,17 +322,20 @@ describe('TrackingService', () => {
       prismaService.order.findFirst.mockResolvedValue({ id: 1, trackingCode: 'CODE123', status: 'PENDING' })
       trackingRepo.findByOrderId.mockResolvedValue([{ id: 1 }] as any)
 
-      const res = await service.getTimeline(1)
+      const actor = { userId: 1, roleName: 'ADMIN' } as any
+      const res = await service.getTimeline(1, actor)
       expect(res).toEqual({
         trackingCode: 'CODE123',
         currentStatus: 'PENDING',
         events: [{ id: 1 }],
       })
+      expect(trackingAccessService.assertCanViewOrderTimeline).toHaveBeenCalledWith(actor, 1)
     })
 
     it('văng NotFoundException khi order k tồn tại', async () => {
+      trackingAccessService.assertCanViewOrderTimeline.mockResolvedValueOnce(undefined)
       prismaService.order.findFirst.mockResolvedValue(null)
-      await expect(service.getTimeline(1)).rejects.toThrow(NotFoundException)
+      await expect(service.getTimeline(1, { userId: 1, roleName: 'ADMIN' } as any)).rejects.toThrow(NotFoundException)
     })
   })
 

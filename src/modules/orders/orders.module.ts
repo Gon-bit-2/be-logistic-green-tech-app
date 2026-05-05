@@ -3,11 +3,11 @@ import { OrdersController } from './controller/orders.controller'
 import { OrdersService } from 'src/modules/orders/service/orders.service'
 import { OrderRepository } from './repository/order.repo'
 import { MapsModule } from 'src/modules/maps/maps.module'
-import { TrackingRepository } from 'src/modules/tracking/repository/tracking.repo'
+import { SharedServicesModule } from 'src/common/services/shared-services.module'
 
 @Module({
-  imports: [MapsModule],
+  imports: [MapsModule, SharedServicesModule],
   controllers: [OrdersController],
-  providers: [OrdersService, OrderRepository, TrackingRepository],
+  providers: [OrdersService, OrderRepository],
 })
 export class OrdersModule {}
