@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import { STOP_TYPE } from 'src/common/constants/trip.constant'
 import { PrismaService } from 'src/database/prisma.service'
-import { OsrmRoutingClient, RouteWaypoint } from './osrm-routing.client'
+import { OsrmRoutingClient } from './osrm-routing.client'
+import { RouteWaypoint } from '../types/osrm.type'
 
 type TripStopForRoute = {
   actualArrivalTime: Date | null

@@ -229,69 +229,93 @@ export class DispatchBoardService {
    */
   async getDriverDispatchBoard(actor: AccessTokenPayload): Promise<DriverDispatchBoardResType> {
     const driver = await this.hubHelper.getDriverScopeUser(actor)
+    const activeTripsPromise = this.prismaService.trip.findMany({
+      where: {
+        driverId: actor.userId,
+        status: {
+          in: [TRIP_STATUS.PENDING, TRIP_STATUS.IN_PROGRESS],
+        },
+      },
+      include: {
+        vehicle: {
+          select: {
+            id: true,
+            licensePlate: true,
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }],
+    })
+    const completedTripCountPromise = this.prismaService.trip.count({
+      where: {
+        driverId: actor.userId,
+        status: TRIP_STATUS.COMPLETED,
+      },
+    })
+
+    type AssignableOrder = {
+      id: number
+      preferredDeliveryTimeEnd: Date | null
+      preferredDeliveryTimeStart: Date | null
+      receiverAddress: string
+      receiverLat: number | null
+      receiverLng: number | null
+      receiverName: string
+      receiverPhone: string | null
+      senderAddress: string
+      senderLat: number | null
+      senderLng: number | null
+      status: string
+      totalVolume: number
+      totalWeight: number
+      trackingCode: string
+    }
+
+    const assignableOrdersPromise: Promise<AssignableOrder[]> = driver.hubId
+      ? this.prismaService.order.findMany({
+          where: {
+            currentHubId: driver.hubId,
+            currentTripId: null,
+            deletedAt: null,
+            status: {
+              in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
+            },
+            ...DISPATCHABLE_PAYMENT_FILTER,
+          },
+          orderBy: [{ preferredDeliveryTimeEnd: 'asc' }, { createdAt: 'asc' }],
+          select: {
+            id: true,
+            preferredDeliveryTimeEnd: true,
+            preferredDeliveryTimeStart: true,
+            receiverAddress: true,
+            receiverLat: true,
+            receiverLng: true,
+            receiverName: true,
+            receiverPhone: true,
+            senderAddress: true,
+            senderLat: true,
+            senderLng: true,
+            status: true,
+            totalVolume: true,
+            totalWeight: true,
+            trackingCode: true,
+          },
+        })
+      : Promise.resolve([] as never[])
+    const recentRequestsPromise = this.prismaService.driverAssignmentRequest.findMany({
+      where: {
+        driverId: actor.userId,
+      },
+      include: this.assignmentHelper.getDriverAssignmentRequestInclude(),
+      orderBy: [{ createdAt: 'desc' }],
+      take: 12,
+    })
+
     const [activeTrips, completedTripCount, assignableOrders, recentRequests] = await Promise.all([
-      this.prismaService.trip.findMany({
-        where: {
-          driverId: actor.userId,
-          status: {
-            in: [TRIP_STATUS.PENDING, TRIP_STATUS.IN_PROGRESS],
-          },
-        },
-        include: {
-          vehicle: {
-            select: {
-              id: true,
-              licensePlate: true,
-            },
-          },
-        },
-        orderBy: [{ createdAt: 'desc' }],
-      }),
-      this.prismaService.trip.count({
-        where: {
-          driverId: actor.userId,
-          status: TRIP_STATUS.COMPLETED,
-        },
-      }),
-      driver.hubId
-        ? this.prismaService.order.findMany({
-            where: {
-              currentHubId: driver.hubId,
-              currentTripId: null,
-              deletedAt: null,
-              status: {
-                in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
-              },
-              ...DISPATCHABLE_PAYMENT_FILTER,
-            },
-            orderBy: [{ preferredDeliveryTimeEnd: 'asc' }, { createdAt: 'asc' }],
-            select: {
-              id: true,
-              preferredDeliveryTimeEnd: true,
-              preferredDeliveryTimeStart: true,
-              receiverAddress: true,
-              receiverLat: true,
-              receiverLng: true,
-              receiverName: true,
-              receiverPhone: true,
-              senderAddress: true,
-              senderLat: true,
-              senderLng: true,
-              status: true,
-              totalVolume: true,
-              totalWeight: true,
-              trackingCode: true,
-            },
-          })
-        : Promise.resolve([]),
-      this.prismaService.driverAssignmentRequest.findMany({
-        where: {
-          driverId: actor.userId,
-        },
-        include: this.assignmentHelper.getDriverAssignmentRequestInclude(),
-        orderBy: [{ createdAt: 'desc' }],
-        take: 12,
-      }),
+      activeTripsPromise,
+      completedTripCountPromise,
+      assignableOrdersPromise,
+      recentRequestsPromise,
     ])
 
     const requestByOrderId = new Map<number, DriverAssignmentRequestResType>()

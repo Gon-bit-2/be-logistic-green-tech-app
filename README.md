@@ -1,143 +1,85 @@
 # Logistic Green Tech Backend
 
-Backend chính của hệ thống logistics xanh, xây bằng NestJS và Prisma. Service này chịu trách nhiệm cho toàn bộ luồng nghiệp vụ vận hành: xác thực, đơn hàng, chuyến xe, tracking, thanh toán, thông báo, green-tech emission, role request, upload và wallet.
+Backend chinh cua he thong logistics xanh, xay bang NestJS va Prisma. Service nay xu ly xac thuc, don hang, chuyen xe, dispatch, tracking, thanh toan, thong bao, emission, role request, upload, maps va wallet.
 
-## Mục tiêu
+## Stack
 
-- Cung cấp REST API cho frontend Next.js.
-- Quản lý vòng đời đơn hàng từ tạo đơn đến giao thành công hoặc chuyển hub.
-- Điều phối chuyến xe, tài xế và phương tiện.
-- Theo dõi tracking nội bộ/public, POD và vị trí realtime qua WebSocket.
-- Xử lý Stripe, COD và các nghiệp vụ liên quan đến wallet.
-
-## Stack chính
-
-- NestJS 11
-- Prisma + PostgreSQL
+- NestJS 11 + TypeScript
+- Prisma 7 + PostgreSQL
 - Zod / `nestjs-zod`
-- BullMQ + Redis
+- Redis cache + BullMQ
 - Socket.IO
 - Stripe
 - Cloudinary
 - Google OAuth2
 - Resend
+- Goong Maps
+- OSRM route optimization with Haversine fallback
 
-## Cấu trúc chính
+## Cau truc
 
 ```text
 backend/
-├── docs/                Tài liệu tích hợp và ghi chú kỹ thuật
-├── prisma/              Schema, migration, seed
+├── docs/                 Tai lieu API, onboarding, performance/error
+├── emails/               Email templates
+├── generated/            Prisma generated client
+├── inittalScript/        Permission/admin/backfill scripts
+├── prisma/               Schema, migrations, seed
 ├── src/
-│   ├── common/          Guard, decorator, constant, helper dùng chung
-│   ├── config/          Validate biến môi trường
-│   ├── database/        Prisma bootstrap
-│   └── modules/
-│       ├── analytics
-│       ├── auth
-│       ├── green-tech
-│       ├── hub
-│       ├── language
-│       ├── maps
-│       ├── notification
-│       ├── orders
-│       ├── payment
-│       ├── role
-│       ├── tracking
-│       ├── trips
-│       ├── upload
-│       ├── vehicle
-│       └── wallet
-├── test/                API / e2e config
-└── inittalScript/       Script seed permission
+│   ├── common/           Guard, decorator, filter, middleware, constants, shared services
+│   ├── config/           Env validation
+│   ├── database/         Prisma service
+│   └── modules/          Feature modules
+└── test/                 API/e2e specs
 ```
 
-## Module đang expose
+## Module API
 
-Các module API hiện có trong app:
+- `auth`: OTP, register/login, refresh/logout, Google OAuth, profile, address book.
+- `orders`: quote, create/list/detail, status, cancel/delete.
+- `payments`: Stripe PaymentIntent/webhook, COD confirm, payment status.
+- `trips`: dispatch board/preview/approve, manual trip, assignment request, auto-dispatch, route optimization.
+- `tracking-events`: internal/public tracking timeline, POD, order status events.
+- `tracking` Socket.IO namespace: realtime trip location.
+- `notifications`: inbox, unread count, mark read.
+- `analytics`: admin dashboard metrics.
+- `vehicles`, `hubs`, `maps`, `upload`, `wallet`, `green-tech`, `gamification`, `language`, `role-requests`.
 
-- `auth`
-- `vehicles`
-- `hubs`
-- `language`
-- `tracking-events`
-- `green-tech`
-- `payments`
-- `orders`
-- `trips`
-- `analytics`
-- `upload`
-- `wallet`
-- `notifications`
-- `role-requests`
+## Chay local
 
-## Yêu cầu môi trường
+Lam viec trong thu muc `backend`:
 
-Cần có các dịch vụ sau trước khi chạy local:
+```bash
+npm install
+npx prisma generate
+npx prisma migrate deploy
+npm run p
+npm run start:dev
+```
 
-- PostgreSQL
-- Redis
-- Tài khoản Stripe
-- Tài khoản Cloudinary
-- Tài khoản Google OAuth
-- Tài khoản Resend
+Port lay tu `PORT`, neu khong co thi `3000`. Backend khong dung global prefix `/api`.
 
-## Biến môi trường bắt buộc
+## Bien moi truong
 
-File `.env` của backend được validate ngay khi app boot. Nếu thiếu key, server sẽ dừng.
+File `.env` bat buoc ton tai trong `backend/`. `src/config/config.ts` validate khi app boot va dung process neu thieu key.
 
-Các nhóm biến chính:
+Nhom bien chinh:
 
 - Database: `DATABASE_URL`
 - JWT/Auth: `ACCESS_TOKEN_SECRET`, `ACCESS_TOKEN_EXPIRES_IN`, `REFRESH_TOKEN_SECRET`, `REFRESH_TOKEN_EXPIRES_IN`, `API_KEY_SECRET`
 - Admin seed: `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_PHONE_NUMBER`
 - OTP/Mail: `OTP_EXPIRES_IN`, `RESEND_API_KEY`
 - OAuth: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_CLIENT_REDIRECT_URI`
-- Redis/BullMQ: `REDIS_USERNAME`, `REDIS_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`; cache có thể dùng `REDIS_URL` để override connection string đầy đủ
-- CORS: `CORS_ORIGINS` dạng comma-separated, ví dụ `http://localhost:3000,http://localhost:8386`
-- Payment: `PAYMENT_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+- Redis/BullMQ: `REDIS_USERNAME`, `REDIS_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`; cache co the dung `REDIS_URL`
+- CORS: `CORS_ORIGINS` comma-separated
+- Payment: `PAYMENT_API_KEY`, `STRIPE_SECRET_KEY`, optional `STRIPE_WEBHOOK_SECRET`
 - Upload: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
-- Maps: `GOONG_MAPS_API_KEY`, `GOONG_BASE_URL`
+- Maps/routing: `GOONG_MAPS_API_KEY`, `GOONG_BASE_URL`, optional `OSRM_BASE_URL`
+- Runtime: optional `PORT`, `NODE_ENV`, `DB_POOL_MAX`, `DB_POOL_IDLE_TIMEOUT_MS`, `PRISMA_QUERY_LOG`, `SLOW_REQUEST_MS`, `TRACKING_ACCESS_CACHE_TTL_MS`
 
-Không đưa giá trị thật của `.env` lên Git.
+Khong commit gia tri that cua `.env`.
 
-## Chạy local
-
-### 1. Cài dependency
-
-```bash
-npm install
-```
-
-### 2. Chuẩn bị database
-
-Áp migration:
-
-```bash
-npx prisma migrate deploy
-```
-
-Nếu cần sinh Prisma client thủ công:
-
-```bash
-npx prisma generate
-```
-
-Nếu cần seed hoặc đồng bộ permission:
-
-```bash
-npm run p
-```
-
-### 3. Chạy development
-
-```bash
-npm run start:dev
-```
-
-Port thực tế phụ thuộc vào cấu hình `.env`. Trong môi trường hiện tại backend đang được frontend trỏ tới `http://localhost:8386`.
-
-## Scripts hay dùng
+## Scripts
 
 ```bash
 npm run start:dev
@@ -148,36 +90,31 @@ npm run test:unit
 npm run test:api
 npm run test:e2e
 npm run test:full
+npm run p
+npm run backfill:order-dimensions
 ```
 
 ## Testing
 
-- `npm run test:unit`: chạy unit test theo cấu hình Jest `--runInBand`
-- `npm run test:api`: chạy test API theo `test/jest-api.json`
-- `npm run test:e2e`: chạy e2e test theo `test/jest-e2e.json`
-- `npm run test:full`: chạy toàn bộ chuỗi test backend
+- `npm run test:unit`: unit tests trong `src`.
+- `npm run test:api`: API specs trong `test/*.api-spec.ts`.
+- `npm run test:e2e`: E2E specs trong `test/*.e2e-spec.ts`.
+- `npm run test:full`: unit + API + E2E.
 
-## Tài liệu liên quan
+## Ghi chu van hanh
+
+- `main.ts` bat `helmet()`, CORS va Zod validation/serialization.
+- `NestFactory.create(AppModule, { rawBody: true })` de Stripe webhook verify signature.
+- Default auth la Bearer token; route public dung `@isPublic()`.
+- Permission check theo `role + path + method`; sau khi them/sua route can chay `npm run p`.
+- `ResourceAccessGuard` bao ve owner-level va hub-level access.
+- Request log co `x-request-id`; error response co envelope on dinh.
+- Don `STRIPE` can payment thanh cong truoc khi van chuyen; don `COD` dispatch binh thuong va settle khi driver giao hang.
+- POD bat buoc khi order sang `DELIVERED`.
+- Route optimization dung OSRM, tu fallback Haversine khi OSRM loi.
+
+## Tai lieu
 
 - [docs/api-reference.md](docs/api-reference.md)
-- [docs/frontend-integration.md](docs/frontend-integration.md)
-- [docs/backend-goong-integration-requirements.md](docs/backend-goong-integration-requirements.md)
-- [docs/test-report.md](docs/test-report.md)
-
-## Ghi chú triển khai
-
-- Không dùng global prefix `/api`.
-- `main.ts` bật `helmet()` và `enableCors()`.
-- Auth dùng Bearer token và permission check theo `role + path + method`.
-- Có `ResourceAccessGuard` cho các luồng owner-level hoặc hub-level access.
-- Tracking realtime chạy qua namespace Socket.IO riêng.
-- Luồng role request và notification được phát qua `EventEmitter`.
-- Luồng payment hiện hỗ trợ cả Stripe lẫn COD.
-- Rule vận hành hiện tại: đơn `STRIPE` phải thanh toán thành công trước khi được đưa vào vận chuyển; đơn `COD` giữ luồng dispatch bình thường.
-
-## Troubleshooting
-
-- App báo thiếu env: kiểm tra lại `.env` vì `src/config/config.ts` validate cứng khi khởi động.
-- Frontend không gọi được API: kiểm tra `NEXT_PUBLIC_API_BASE_URL` ở frontend có trỏ đúng backend.
-- Lỗi quyền truy cập route: chạy lại script permission bằng `npm run p`.
-- Lỗi bảng notification / role request / enum mới: kiểm tra migration đã được apply đầy đủ.
+- [docs/onboarding.md](docs/onboarding.md)
+- [docs/performance-and-errors.md](docs/performance-and-errors.md)
