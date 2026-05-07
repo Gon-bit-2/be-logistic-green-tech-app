@@ -29,4 +29,9 @@ export class AnalyticsController {
   getFleetPerformance(@Query() query: GetAnalyticsQueryDto) {
     return this.analyticsService.getFleetPerformance(query)
   }
+
+  @Get('sla')
+  getSlaAnalytics(@Query() query: GetAnalyticsQueryDto) {
+    return this.analyticsService.getSlaAnalytics(query)
+  }
 }

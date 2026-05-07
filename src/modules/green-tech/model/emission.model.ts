@@ -32,8 +32,20 @@ export const OrderAllocationResponseSchema = z.object({
   weightRatio: z.number().nullable(),
 })
 
+export const GreenTechDashboardQuerySchema = z.object({
+  customerId: z.coerce.number().int().positive().optional(),
+  dateRange: z.enum(['7d', '30d', '90d', '1y']).default('30d'),
+  hubId: z.coerce.number().int().positive().optional(),
+})
+
+export const GreenTechExportQuerySchema = GreenTechDashboardQuerySchema.extend({
+  scope: z.enum(['orders', 'trips', 'customers']).default('trips'),
+})
+
 export type CalculateEmissionParamsType = z.infer<typeof CalculateEmissionParamsSchema>
 export type EmissionLogResponseType = z.infer<typeof EmissionLogResponseSchema>
+export type GreenTechDashboardQueryType = z.infer<typeof GreenTechDashboardQuerySchema>
+export type GreenTechExportQueryType = z.infer<typeof GreenTechExportQuerySchema>
 export type OrderAllocationResponseType = z.infer<typeof OrderAllocationResponseSchema>
 
 export interface EmissionLogInput {

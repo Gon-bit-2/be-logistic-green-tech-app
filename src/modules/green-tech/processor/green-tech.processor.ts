@@ -16,7 +16,9 @@ export class GreenTechProcessor extends WorkerHost {
     super()
   }
 
-  async process(job: Job<CalculateEmissionJobData, Awaited<ReturnType<GreenTechService['calculateTripEmission']>>, string>) {
+  async process(
+    job: Job<CalculateEmissionJobData, Awaited<ReturnType<GreenTechService['calculateTripEmission']>>, string>,
+  ) {
     this.logger.log(`🔄 Bắt đầu xử lý Job [${job.name}] (ID: ${job.id})`)
 
     try {

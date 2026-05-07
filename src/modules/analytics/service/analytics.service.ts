@@ -21,4 +21,8 @@ export class AnalyticsService {
   async getFleetPerformance(query: GetAnalyticsQueryType) {
     return this.analyticsRepository.getFleetPerformance(query)
   }
+
+  async getSlaAnalytics(query: GetAnalyticsQueryType) {
+    return this.analyticsRepository.getSlaAnalytics(query)
+  }
 }

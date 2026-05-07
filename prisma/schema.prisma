@@ -41,52 +41,55 @@ model User {
   wallet Wallet? // Liên kết ví điện tử (1-to-1)
 
   // Relations
-  createdBy               User?                @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  updatedBy               User?                @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  createdUsers            User[]               @relation("UserCreatedBy")
-  updatedUsers            User[]               @relation("UserUpdatedBy")
-  assignedHub             Hub?                 @relation("HubStaff", fields: [hubId], references: [id])
-  orders                  Order[]              @relation("CustomerOrders")
-  tripsDriven             Trip[]               @relation("DriverTrips")
-  trackingLogs            OrderTrackingEvent[] @relation("UserTrackingLogs")
-  createdPermissions      Permission[]         @relation("PermissionCreatedBy")
-  updatedPermissions      Permission[]         @relation("PermissionUpdatedBy")
-  deletedPermissions      Permission[]         @relation("PermissionDeletedBy")
-  createdTripEmissionLogs TripEmissionLog[]    @relation("TripEmissionLogCreatedBy")
-  updatedTripEmissionLogs TripEmissionLog[]    @relation("TripEmissionLogUpdatedBy")
-  deletedTripEmissionLogs TripEmissionLog[]    @relation("TripEmissionLogDeletedBy")
-  createdOrders           Order[]              @relation("OrderCreatedBy")
-  updatedOrders           Order[]              @relation("OrderUpdatedBy")
-  deletedOrders           Order[]              @relation("OrderDeletedBy")
-  refreshTokens           RefreshToken[]
-  notifications           Notification[]       @relation("UserNotifications")
-  requestedRoleChanges    RoleRequest[]        @relation("RoleRequestRequester")
-  reviewedRoleChanges     RoleRequest[]        @relation("RoleRequestReviewedBy")
-  driverAssignmentRequests DriverAssignmentRequest[] @relation("DriverAssignmentRequestDriver")
+  createdBy                        User?                     @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedBy                        User?                     @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdUsers                     User[]                    @relation("UserCreatedBy")
+  updatedUsers                     User[]                    @relation("UserUpdatedBy")
+  assignedHub                      Hub?                      @relation("HubStaff", fields: [hubId], references: [id])
+  orders                           Order[]                   @relation("CustomerOrders")
+  tripsDriven                      Trip[]                    @relation("DriverTrips")
+  trackingLogs                     OrderTrackingEvent[]      @relation("UserTrackingLogs")
+  createdPermissions               Permission[]              @relation("PermissionCreatedBy")
+  updatedPermissions               Permission[]              @relation("PermissionUpdatedBy")
+  deletedPermissions               Permission[]              @relation("PermissionDeletedBy")
+  createdTripEmissionLogs          TripEmissionLog[]         @relation("TripEmissionLogCreatedBy")
+  updatedTripEmissionLogs          TripEmissionLog[]         @relation("TripEmissionLogUpdatedBy")
+  deletedTripEmissionLogs          TripEmissionLog[]         @relation("TripEmissionLogDeletedBy")
+  createdOrders                    Order[]                   @relation("OrderCreatedBy")
+  updatedOrders                    Order[]                   @relation("OrderUpdatedBy")
+  deletedOrders                    Order[]                   @relation("OrderDeletedBy")
+  refreshTokens                    RefreshToken[]
+  notifications                    Notification[]            @relation("UserNotifications")
+  requestedRoleChanges             RoleRequest[]             @relation("RoleRequestRequester")
+  reviewedRoleChanges              RoleRequest[]             @relation("RoleRequestReviewedBy")
+  driverAssignmentRequests         DriverAssignmentRequest[] @relation("DriverAssignmentRequestDriver")
   reviewedDriverAssignmentRequests DriverAssignmentRequest[] @relation("DriverAssignmentRequestReviewedBy")
-  createdRoles            Role[]               @relation("RoleCreatedBy")
-  updatedRoles            Role[]               @relation("RoleUpdatedBy")
-  deletedRoles            Role[]               @relation("RoleDeletedBy")
-  devices                 Device[]
-  vehicleDeletedBy        Vehicle[]            @relation("VehicleDeletedBy")
-  vehicleCreatedBy        Vehicle[]            @relation("VehicleCreatedBy")
-  vehicleUpdatedBy        Vehicle[]            @relation("VehicleUpdatedBy")
-  userTranslationsCreated UserTranslation[]    @relation("UserTranslationCreatedBy")
-  userTranslationsUpdated UserTranslation[]    @relation("UserTranslationUpdatedBy")
-  userTranslationsDeleted UserTranslation[]    @relation("UserTranslationDeletedBy")
-  languagesCreated        Language[]           @relation("LanguageCreatedBy")
-  languagesUpdated        Language[]           @relation("LanguageUpdatedBy")
-  languagesDeleted        Language[]           @relation("LanguageDeletedBy")
-  userTranslations        UserTranslation[]
-  hubsCreated             Hub[]                @relation("HubCreatedBy")
-  hubsUpdated             Hub[]                @relation("HubUpdatedBy")
-  hubsDeleted             Hub[]                @relation("HubDeletedBy")
+  createdRoles                     Role[]                    @relation("RoleCreatedBy")
+  updatedRoles                     Role[]                    @relation("RoleUpdatedBy")
+  deletedRoles                     Role[]                    @relation("RoleDeletedBy")
+  devices                          Device[]
+  vehicleDeletedBy                 Vehicle[]                 @relation("VehicleDeletedBy")
+  vehicleCreatedBy                 Vehicle[]                 @relation("VehicleCreatedBy")
+  vehicleUpdatedBy                 Vehicle[]                 @relation("VehicleUpdatedBy")
+  userTranslationsCreated          UserTranslation[]         @relation("UserTranslationCreatedBy")
+  userTranslationsUpdated          UserTranslation[]         @relation("UserTranslationUpdatedBy")
+  userTranslationsDeleted          UserTranslation[]         @relation("UserTranslationDeletedBy")
+  languagesCreated                 Language[]                @relation("LanguageCreatedBy")
+  languagesUpdated                 Language[]                @relation("LanguageUpdatedBy")
+  languagesDeleted                 Language[]                @relation("LanguageDeletedBy")
+  userTranslations                 UserTranslation[]
+  hubsCreated                      Hub[]                     @relation("HubCreatedBy")
+  hubsUpdated                      Hub[]                     @relation("HubUpdatedBy")
+  hubsDeleted                      Hub[]                     @relation("HubDeletedBy")
   // Phase 4: Payment audit relations
-  createdPayments         Payment[]            @relation("PaymentCreatedBy")
-  updatedPayments         Payment[]            @relation("PaymentUpdatedBy")
+  createdPayments                  Payment[]                 @relation("PaymentCreatedBy")
+  updatedPayments                  Payment[]                 @relation("PaymentUpdatedBy")
+  codSettlementBatchesDriven       CodSettlementBatch[]      @relation("CodSettlementBatchDriver")
+  codSettlementBatchesCreated      CodSettlementBatch[]      @relation("CodSettlementBatchCreatedBy")
+  codSettlementBatchesCompleted    CodSettlementBatch[]      @relation("CodSettlementBatchCompletedBy")
   // V1.5 Gamification
-  greenProfile            UserGreenProfile?
-  addressBooks            AddressBook[]
+  greenProfile                     UserGreenProfile?
+  addressBooks                     AddressBook[]
 
   @@unique([email, isDeleted])
   @@index([roleId])
@@ -98,18 +101,18 @@ model User {
 }
 
 model AddressBook {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   userId      Int
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  label       String?  @db.VarChar(100)
-  contactName String   @db.VarChar(255)
-  phone       String   @db.VarChar(20)
-  address     String   @db.VarChar(500)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  label       String?   @db.VarChar(100)
+  contactName String    @db.VarChar(255)
+  phone       String    @db.VarChar(20)
+  address     String    @db.VarChar(500)
   latitude    Float?
   longitude   Float?
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isDefault   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
   @@index([userId, deletedAt])
@@ -163,17 +166,17 @@ model Language {
 }
 
 model Role {
-  id          Int          @id @default(autoincrement())
-  name        String       @unique
-  description String?
-  isActive    Boolean      @default(true)
+  id                  Int           @id @default(autoincrement())
+  name                String        @unique
+  description         String?
+  isActive            Boolean       @default(true)
   // Relations
-  users       User[]
-  permissions Permission[] @relation("RolePermissions")
-  createdById Int?
-  createdBy   User?        @relation("RoleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  updatedById Int?
-  updatedBy   User?        @relation("RoleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  users               User[]
+  permissions         Permission[]  @relation("RolePermissions")
+  createdById         Int?
+  createdBy           User?         @relation("RoleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById         Int?
+  updatedBy           User?         @relation("RoleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
   currentRoleRequests RoleRequest[] @relation("RoleRequestCurrentRole")
   targetRoleRequests  RoleRequest[] @relation("RoleRequestTargetRole")
 
@@ -365,21 +368,21 @@ model Hub {
   capacityVolume Float @default(10000) // Tổng thể tích kệ chứa hàng (m3)
 
   // Relations
-  staff               User[]     @relation("HubStaff")
-  tripStops           TripStop[]
-  ordersCurrentlyHere Order[]    @relation("OrdersAtHub") // Hàng đang tồn kho tại đây
-  vehicles            Vehicle[]  @relation("HubVehicles") // Xe biên chế tại kho
-  assignedRoleRequests RoleRequest[] @relation("RoleRequestAssignedHub")
+  staff                    User[]                    @relation("HubStaff")
+  tripStops                TripStop[]
+  ordersCurrentlyHere      Order[]                   @relation("OrdersAtHub") // Hàng đang tồn kho tại đây
+  vehicles                 Vehicle[]                 @relation("HubVehicles") // Xe biên chế tại kho
+  assignedRoleRequests     RoleRequest[]             @relation("RoleRequestAssignedHub")
   driverAssignmentRequests DriverAssignmentRequest[]
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
-  deletedAt           DateTime?
-  deletedById         Int?
-  deletedBy           User?      @relation("HubDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  createdById         Int?
-  createdBy           User?      @relation("HubCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  updatedById         Int?
-  updatedBy           User?      @relation("HubUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  deletedAt                DateTime?
+  deletedById              Int?
+  deletedBy                User?                     @relation("HubDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdById              Int?
+  createdBy                User?                     @relation("HubCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedById              Int?
+  updatedBy                User?                     @relation("HubUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@map("hubs")
 }
@@ -432,18 +435,20 @@ model Order {
   deletedById Int? // Ai hủy đơn hàng (Nhân viên hoặc khách hàng)
 
   // Relations
-  customer            User                      @relation("CustomerOrders", fields: [customerId], references: [id])
-  currentHub          Hub?                      @relation("OrdersAtHub", fields: [currentHubId], references: [id])
-  currentTrip         Trip?                     @relation("OrdersOnTrip", fields: [currentTripId], references: [id])
-  createdBy           User?                     @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  updatedBy           User?                     @relation("OrderUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  deletedBy           User?                     @relation("OrderDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
-  items               OrderItem[]
-  trackingEvents      OrderTrackingEvent[]
-  tripStops           TripStop[]
-  payment             Payment?
-  emissionAllocations OrderEmissionAllocation[] // Phase 4: Phân bổ CO₂ cho từng đơn
+  customer                 User                      @relation("CustomerOrders", fields: [customerId], references: [id])
+  currentHub               Hub?                      @relation("OrdersAtHub", fields: [currentHubId], references: [id])
+  currentTrip              Trip?                     @relation("OrdersOnTrip", fields: [currentTripId], references: [id])
+  createdBy                User?                     @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  updatedBy                User?                     @relation("OrderUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  deletedBy                User?                     @relation("OrderDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  items                    OrderItem[]
+  trackingEvents           OrderTrackingEvent[]
+  tripStops                TripStop[]
+  payment                  Payment?
+  emissionAllocations      OrderEmissionAllocation[] // Phase 4: Phân bổ CO₂ cho từng đơn
   driverAssignmentRequests DriverAssignmentRequest[]
+  codSettlementItems       CodSettlementItem[]
+  slaAlerts                SlaAlert[]
 
   @@index([trackingCode])
   @@index([customerId])
@@ -518,6 +523,7 @@ model Trip {
   ordersOnBoard Order[]           @relation("OrdersOnTrip") // Các đơn hàng ĐANG được chở trên chuyến xe này
   stops         TripStop[]
   emissionLogs  TripEmissionLog[] // Phase 4: 1-N cho versioning (tính lại nhiều lần)
+  slaAlerts     SlaAlert[]
 
   @@index([vehicleId])
   @@index([driverId])
@@ -883,13 +889,62 @@ model Transaction {
   referenceId String? // Reference ID (VD: Mã đơn hàng, PaymentIntent ID, Biên lai đối soát)
   description String?           @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  codSettlementItems CodSettlementItem[]
 
   @@index([walletId])
   @@index([type])
   @@index([status])
   @@map("transactions")
+}
+
+model CodSettlementBatch {
+  id            Int                      @id @default(autoincrement())
+  batchCode     String                   @unique @db.VarChar(64)
+  driverId      Int
+  driver        User                     @relation("CodSettlementBatchDriver", fields: [driverId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdById   Int
+  createdBy     User                     @relation("CodSettlementBatchCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  completedById Int?
+  completedBy   User?                    @relation("CodSettlementBatchCompletedBy", fields: [completedById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  status        CodSettlementBatchStatus @default(DRAFT)
+  totalAmount   Decimal                  @db.Decimal(18, 2)
+  orderCount    Int
+  note          String?                  @db.VarChar(1000)
+  submittedAt   DateTime?
+  completedAt   DateTime?
+  disputedAt    DateTime?
+  cancelledAt   DateTime?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  items         CodSettlementItem[]
+
+  @@index([driverId, status])
+  @@index([status, createdAt])
+  @@index([createdById])
+  @@map("cod_settlement_batches")
+}
+
+model CodSettlementItem {
+  id            Int                     @id @default(autoincrement())
+  batchId       Int
+  batch         CodSettlementBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  orderId       Int
+  order         Order                   @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  transactionId Int?
+  transaction   Transaction?            @relation(fields: [transactionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  amount        Decimal                 @db.Decimal(18, 2)
+  status        CodSettlementItemStatus @default(PENDING)
+  disputeReason String?                 @db.VarChar(1000)
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@unique([batchId, orderId])
+  @@index([orderId])
+  @@index([transactionId])
+  @@index([status])
+  @@map("cod_settlement_items")
 }
 
 enum WalletStatus {
@@ -911,6 +966,61 @@ enum TransactionStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+enum CodSettlementBatchStatus {
+  DRAFT
+  SUBMITTED
+  COMPLETED
+  DISPUTED
+  CANCELLED
+}
+
+enum CodSettlementItemStatus {
+  PENDING
+  COMPLETED
+  DISPUTED
+  CANCELLED
+}
+
+model SlaAlert {
+  id         Int              @id @default(autoincrement())
+  orderId    Int
+  order      Order            @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tripId     Int?
+  trip       Trip?            @relation(fields: [tripId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  alertType  SlaAlertType
+  severity   SlaAlertSeverity @default(WARNING)
+  status     SlaAlertStatus   @default(ACTIVE)
+  etaAt      DateTime?
+  deadlineAt DateTime?
+  message    String?          @db.VarChar(1000)
+  resolvedAt DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@index([orderId, status])
+  @@index([tripId, status])
+  @@index([alertType, status])
+  @@index([createdAt])
+  @@map("sla_alerts")
+}
+
+enum SlaAlertType {
+  DELIVERY_WINDOW_BREACH
+  ETA_DELAY
+}
+
+enum SlaAlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum SlaAlertStatus {
+  ACTIVE
+  RESOLVED
+  DISMISSED
 }
 
 // -------------------------------------------------------------

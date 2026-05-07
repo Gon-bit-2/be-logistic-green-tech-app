@@ -4,11 +4,7 @@ import { CreateTrackingEventType } from '../model/tracking.model'
 import { PrismaService } from 'src/database/prisma.service'
 import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
-import {
-  EVENT_SOURCE,
-  TRACKING_EVENT_TYPE,
-  MAX_DELIVERY_ATTEMPTS,
-} from 'src/common/constants/tracking.constant'
+import { EVENT_SOURCE, TRACKING_EVENT_TYPE, MAX_DELIVERY_ATTEMPTS } from 'src/common/constants/tracking.constant'
 import { GREEN_TECH_QUEUE_NAME, CALCULATE_EMISSION_JOB_NAME } from 'src/common/constants/queue.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import roleName from 'src/common/constants/role.constant'
@@ -196,10 +192,12 @@ export class TrackingService {
     }
 
     const events = await this.trackingRepo.findByOrderId(orderId)
+    const eta = await this.getOrderEta(orderId)
 
     return {
       trackingCode: order.trackingCode,
       currentStatus: order.status,
+      eta,
       events,
     }
   }
@@ -219,6 +217,7 @@ export class TrackingService {
     }
 
     const events = await this.trackingRepo.findByOrderId(order.id)
+    const eta = await this.getOrderEta(order.id)
 
     // Ẩn thông tin nhạy cảm cho public API
     const sanitizedEvents = events.map((event) => ({
@@ -242,7 +241,32 @@ export class TrackingService {
     return {
       trackingCode: order.trackingCode,
       currentStatus: order.status,
+      eta,
       events: sanitizedEvents,
+    }
+  }
+
+  private async getOrderEta(orderId: number) {
+    const stop = await this.prismaService.tripStop.findFirst({
+      where: {
+        orderId,
+        expectedArrivalTime: { not: null },
+      },
+      orderBy: [{ trip: { createdAt: 'desc' } }, { stopSequence: 'desc' }],
+      select: {
+        actualArrivalTime: true,
+        expectedArrivalTime: true,
+        tripId: true,
+      },
+    })
+
+    if (!stop) return null
+
+    // Timeline chỉ cần ETA tổng quát cho order; thông tin tripId giúp frontend join room realtime nếu có quyền.
+    return {
+      actualArrivalTime: stop.actualArrivalTime,
+      expectedArrivalTime: stop.expectedArrivalTime,
+      tripId: stop.tripId,
     }
   }
 
@@ -252,5 +276,4 @@ export class TrackingService {
     if (actor.roleName === roleName.CUSTOMER) return EVENT_SOURCE.CUSTOMER_APP
     return EVENT_SOURCE.ADMIN_PORTAL
   }
-
 }
