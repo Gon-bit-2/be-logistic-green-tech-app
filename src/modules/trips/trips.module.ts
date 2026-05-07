@@ -18,6 +18,7 @@ import { TripCapacityService } from './service/trip-capacity.service'
 import { OsrmRoutingClient } from './service/osrm-routing.client'
 import { TripRouteOptimizationService } from './service/trip-route-optimization.service'
 import { DatabaseModule } from 'src/database/database.module'
+import { EtaService } from './service/eta.service'
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { DatabaseModule } from 'src/database/database.module'
     DriverAssignmentService, // Driver assignment request CRUD
     TripExecutionService, // Trip lifecycle (start, cancel, query)
     TripRouteOptimizationService, // Route optimization + totalDistance source
+    EtaService, // ETA/SLA calculation based on optimized route duration
 
     // === Shared helpers ===
     TripHubHelper, // Hub scope resolution, resource validation
@@ -66,6 +68,13 @@ import { DatabaseModule } from 'src/database/database.module'
     TrackingRepository,
     TripsProcessor,
   ],
-  exports: [TripsService, DispatchService, DispatchBoardService, DriverAssignmentService, TripExecutionService],
+  exports: [
+    TripsService,
+    DispatchService,
+    DispatchBoardService,
+    DriverAssignmentService,
+    TripExecutionService,
+    EtaService,
+  ],
 })
 export class TripsModule {}

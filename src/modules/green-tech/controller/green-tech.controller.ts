@@ -1,9 +1,13 @@
-import { Controller, Post, Param, Get, ParseIntPipe } from '@nestjs/common'
+import { Controller, Post, Param, Get, ParseIntPipe, Query, Res } from '@nestjs/common'
+import type { Response } from 'express'
 import { GreenTechService } from '../service/green-tech.service'
 import { Auth } from 'src/common/decorators/auth.decorator'
 import { Roles } from 'src/common/decorators/roles.decorator'
 import roleName from 'src/common/constants/role.constant'
 import { AuthType } from 'src/common/constants/auth.constant'
+import { ActiveUser } from 'src/common/decorators/active-user.decorator'
+import type { AccessTokenPayload } from 'src/common/types/jwt.type'
+import { GreenTechDashboardQuerySchema, GreenTechExportQuerySchema } from '../model/emission.model'
 
 @Controller('green-tech')
 export class GreenTechController {
@@ -28,5 +32,42 @@ export class GreenTechController {
   @Roles(roleName.ADMIN, roleName.DRIVER)
   getTripLogs(@Param('tripId', ParseIntPipe) tripId: number) {
     return this.greenTechService.getTripEmissionHistory(tripId)
+  }
+
+  @Get('dashboard')
+  @Auth(AuthType.Bearer)
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  getDashboard(@Query() rawQuery: Record<string, unknown>) {
+    // Query được parse tại controller vì ZodValidationPipe custom hiện chỉ xử lý body.
+    // Cách này giữ contract rõ ràng mà chưa cần thay đổi behavior global pipe.
+    const query = GreenTechDashboardQuerySchema.parse(rawQuery)
+    return this.greenTechService.getDashboard(query)
+  }
+
+  @Get('orders/:orderId/footprint')
+  @Auth(AuthType.Bearer)
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.CUSTOMER)
+  getOrderFootprint(@ActiveUser() user: AccessTokenPayload, @Param('orderId', ParseIntPipe) orderId: number) {
+    return this.greenTechService.getOrderFootprint(user, orderId)
+  }
+
+  @Get('customers/me/summary')
+  @Auth(AuthType.Bearer)
+  @Roles(roleName.CUSTOMER)
+  getMyGreenSummary(@ActiveUser() user: AccessTokenPayload, @Query() rawQuery: Record<string, unknown>) {
+    const query = GreenTechDashboardQuerySchema.pick({ dateRange: true }).parse(rawQuery)
+    return this.greenTechService.getMyCustomerSummary(user, query)
+  }
+
+  @Get('reports/export')
+  @Auth(AuthType.Bearer)
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  async exportReport(@Query() rawQuery: Record<string, unknown>, @Res() response: Response) {
+    const query = GreenTechExportQuerySchema.parse(rawQuery)
+    const csv = await this.greenTechService.exportReportCsv(query)
+
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    response.setHeader('Content-Disposition', `attachment; filename="green-tech-${query.scope}-${query.dateRange}.csv"`)
+    response.send(csv)
   }
 }

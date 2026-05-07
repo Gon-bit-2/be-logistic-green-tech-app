@@ -263,4 +263,38 @@ export class AnalyticsRepository {
       co2Saved: row.co2Saved,
     }))
   }
+
+  async getSlaAnalytics(query: GetAnalyticsQueryType) {
+    const { startDate, endDate } = this.getDateRangeCondition(query.dateRange || '30d')
+
+    const [metrics] = await this.prismaService.$queryRaw<
+      {
+        activeAlerts: number
+        avgDelayMinutes: number
+        breachedOrders: number
+        resolvedAlerts: number
+      }[]
+    >`
+      SELECT
+        COUNT(*) FILTER (WHERE "status" = 'ACTIVE')::int AS "activeAlerts",
+        COUNT(DISTINCT "orderId")::int AS "breachedOrders",
+        COUNT(*) FILTER (WHERE "status" = 'RESOLVED')::int AS "resolvedAlerts",
+        COALESCE(
+          AVG(EXTRACT(EPOCH FROM ("etaAt" - "deadlineAt")) / 60)
+            FILTER (WHERE "etaAt" IS NOT NULL AND "deadlineAt" IS NOT NULL AND "etaAt" > "deadlineAt"),
+          0
+        )::float AS "avgDelayMinutes"
+      FROM "sla_alerts"
+      WHERE "createdAt" >= ${startDate}
+        AND "createdAt" <= ${endDate}
+    `
+
+    // SLA dashboard đọc từ bảng alert đã chuẩn hóa để không phải scan toàn bộ timeline tracking.
+    return {
+      activeAlerts: metrics?.activeAlerts ?? 0,
+      avgDelayMinutes: this.roundMetric(metrics?.avgDelayMinutes),
+      breachedOrders: metrics?.breachedOrders ?? 0,
+      resolvedAlerts: metrics?.resolvedAlerts ?? 0,
+    }
+  }
 }

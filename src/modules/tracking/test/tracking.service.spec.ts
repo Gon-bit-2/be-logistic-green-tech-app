@@ -34,6 +34,9 @@ describe('TrackingService', () => {
       order: {
         findFirst: jest.fn(),
       },
+      tripStop: {
+        findFirst: jest.fn(),
+      },
       user: {
         findFirst: jest.fn(),
       },
@@ -125,11 +128,13 @@ describe('TrackingService', () => {
         expect.objectContaining({ roleName: 'ADMIN', userId: 1 }),
         1,
       )
-      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(expect.objectContaining({
-        createdById: 1,
-        orderId: 1,
-        status: ORDER_STATUS.ASSIGNED,
-      }))
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createdById: 1,
+          orderId: 1,
+          status: ORDER_STATUS.ASSIGNED,
+        }),
+      )
       expect(notificationEmitter.emitSafe).not.toHaveBeenCalled()
     })
 
@@ -204,10 +209,12 @@ describe('TrackingService', () => {
 
       await service.createEvent({ userId: 1, roleName: 'ADMIN' } as any, payload as any)
 
-      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(expect.objectContaining({
-        orderId: 1,
-        status: ORDER_STATUS.DELIVERED,
-      }))
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 1,
+          status: ORDER_STATUS.DELIVERED,
+        }),
+      )
 
       expect(prismaService.trip.update).toHaveBeenCalledWith({
         where: { id: 100 },
@@ -284,10 +291,12 @@ describe('TrackingService', () => {
         } as any,
       )
 
-      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(expect.objectContaining({
-        orderId: 2,
-        status: ORDER_STATUS.OUT_FOR_DELIVERY,
-      }))
+      expect(orderStateService.transitionOrderStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 2,
+          status: ORDER_STATUS.OUT_FOR_DELIVERY,
+        }),
+      )
     })
 
     it('chặn warehouse staff tạo event cho đơn ngoài hub của mình', async () => {
@@ -323,10 +332,12 @@ describe('TrackingService', () => {
       trackingRepo.findByOrderId.mockResolvedValue([{ id: 1 }] as any)
 
       const actor = { userId: 1, roleName: 'ADMIN' } as any
+      prismaService.tripStop.findFirst.mockResolvedValue(null)
       const res = await service.getTimeline(1, actor)
       expect(res).toEqual({
         trackingCode: 'CODE123',
         currentStatus: 'PENDING',
+        eta: null,
         events: [{ id: 1 }],
       })
       expect(trackingAccessService.assertCanViewOrderTimeline).toHaveBeenCalledWith(actor, 1)
@@ -362,6 +373,7 @@ describe('TrackingService', () => {
         },
       ]
       trackingRepo.findByOrderId.mockResolvedValue(events as any)
+      prismaService.tripStop.findFirst.mockResolvedValue(null)
 
       const res = await service.getPublicTimeline('CODE123')
 

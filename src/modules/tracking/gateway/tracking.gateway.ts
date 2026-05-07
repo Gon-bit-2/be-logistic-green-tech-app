@@ -243,7 +243,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
 
     // Cho phép socket tham gia vào Room riêng biệt
-    client.join(`trip_${parsed.data.tripId}`)
+    void client.join(`trip_${parsed.data.tripId}`)
     this.logger.log(`👥 Client ${client.id} (userId=${user.userId}) joined tracking room: trip_${parsed.data.tripId}`)
 
     return { event: 'joined', message: `Successfully joined trip_${parsed.data.tripId}` }
@@ -265,7 +265,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       return { event: 'error', message: 'tripId không hợp lệ' }
     }
 
-    client.leave(`trip_${parsed.data.tripId}`)
+    void client.leave(`trip_${parsed.data.tripId}`)
     this.logger.log(`🚶‍♂️ Client ${client.id} (userId=${user.userId}) left tracking room: trip_${parsed.data.tripId}`)
 
     return { event: 'left', message: `Successfully left trip_${parsed.data.tripId}` }
@@ -275,5 +275,21 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   handleTripCreatedEvent(payload: { trip: { id: number; [key: string]: unknown } }) {
     this.logger.log(`🚀 Chuyến xe mới được tạo: Trip ID #${payload.trip?.id}. Đang broadcast tới dashboard...`)
     this.server.emit('dashboard.tripCreated', payload.trip)
+  }
+
+  @OnEvent('eta.updated')
+  handleEtaUpdatedEvent(payload: {
+    stops: { eta: Date; orderId: number | null; stopId: number; stopSequence: number }[]
+    tripId: number
+  }) {
+    // ETA update được publish vào room trip hiện có để admin/customer đang theo dõi không cần polling timeline.
+    this.server.to(`trip_${payload.tripId}`).emit('eta.updated', {
+      stops: payload.stops.map((stop) => ({
+        ...stop,
+        eta: stop.eta.toISOString(),
+      })),
+      timestamp: new Date().toISOString(),
+      tripId: payload.tripId,
+    })
   }
 }

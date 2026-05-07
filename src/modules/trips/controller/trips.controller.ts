@@ -14,6 +14,7 @@ import {
   UpdateTripStatusDto,
 } from '../dto/trip.dto'
 import { TripsService } from '../service/trips.service'
+import { EtaService } from '../service/eta.service'
 import { Roles } from 'src/common/decorators/roles.decorator'
 import { ResourceAccess } from 'src/common/decorators/resource-access.decorator'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
@@ -22,7 +23,10 @@ import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 
 @Controller('trips')
 export class TripsController {
-  constructor(private readonly tripsService: TripsService) {}
+  constructor(
+    private readonly tripsService: TripsService,
+    private readonly etaService: EtaService,
+  ) {}
 
   @Post('manual')
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
@@ -140,6 +144,23 @@ export class TripsController {
   })
   optimizeRoute(@Param('id', ParseIntPipe) id: number) {
     return this.tripsService.optimizeRouteForTrip(id)
+  }
+
+  @Post(':id/recalculate-eta')
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
+  @ResourceAccess({
+    model: 'trip',
+    paramName: 'id',
+    ownerField: 'driverId',
+  })
+  recalculateEta(@Param('id', ParseIntPipe) id: number) {
+    return this.etaService.recalculateTripEta(id)
+  }
+
+  @Get(':id/eta')
+  @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER, roleName.CUSTOMER)
+  getTripEta(@Param('id', ParseIntPipe) id: number, @ActiveUser() user: AccessTokenPayload) {
+    return this.etaService.getTripEta(user, id)
   }
 
   @Get()
