@@ -18,9 +18,10 @@ import { AppAccessGuard } from 'src/common/guards/app-access.guard'
 import { RolesGuard } from 'src/common/guards/roles.guard'
 import { ResourceAccessGuard } from 'src/common/guards/resource-access.guard'
 import { RoleRepository } from 'src/modules/role/repository/role.repo'
+import { DatabaseModule } from 'src/database/database.module'
 
 @Module({
-  imports: [JwtModule.register({})],
+  imports: [DatabaseModule, JwtModule.register({})],
   controllers: [AuthController],
   providers: [
     AuthService,

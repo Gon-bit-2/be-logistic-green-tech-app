@@ -9,6 +9,7 @@ import { BullModule } from '@nestjs/bullmq'
 import { GREEN_TECH_QUEUE_NAME } from '../../common/constants/queue.constant'
 import { WsJwtGuard } from '../../common/guards/ws-jwt.guard'
 import { SharedServicesModule } from 'src/common/services/shared-services.module'
+import { DatabaseModule } from 'src/database/database.module'
 
 /**
  * Module quản lý tracking & real-time WebSocket.
@@ -18,6 +19,7 @@ import { SharedServicesModule } from 'src/common/services/shared-services.module
  */
 @Module({
   imports: [
+    DatabaseModule,
     SharedServicesModule,
     JwtModule.register({}),
     BullModule.registerQueue({
