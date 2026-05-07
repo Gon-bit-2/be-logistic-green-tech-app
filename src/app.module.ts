@@ -26,16 +26,12 @@ import { NotificationModule } from './modules/notification/notification.module'
 import { RoleModule } from './modules/role/role.module'
 import { MapsModule } from './modules/maps/maps.module'
 import { EventEmitterModule } from '@nestjs/event-emitter'
-import { DatabaseModule } from './database/database.module'
 import { LoggingMiddleware } from './common/middlewares/logging.middleware'
 import { RequestIdMiddleware } from './common/middlewares/request-id.middleware'
-import { SharedServicesModule } from './common/services/shared-services.module'
 import { buildRedisUrl } from './common/utils/buildRedisUrl.util'
 
 @Module({
   imports: [
-    DatabaseModule,
-    SharedServicesModule,
     AuthModule,
     VehicleModule,
     HubModule,

@@ -1,16 +1,8 @@
 import z from 'zod'
-import fs from 'fs'
-import path from 'path'
 import 'dotenv/config'
 import { Logger } from '@nestjs/common'
 
 const logger = new Logger('Config')
-//check exists file env
-
-if (!fs.existsSync(path.resolve('.env'))) {
-  logger.error('Không tìm thấy file .env')
-  process.exit(1)
-}
 const ConfigSchema = z.object({
   DATABASE_URL: z.string(),
   ACCESS_TOKEN_SECRET: z.string(),

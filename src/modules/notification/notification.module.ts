@@ -3,8 +3,10 @@ import { NotificationService } from './service/notification.service'
 import { NotificationController } from './controller/notification.controller'
 import { NotificationRepository } from './repository/notification.repo'
 import { NotificationEventListener } from './listener/notification.event.listener'
+import { DatabaseModule } from 'src/database/database.module'
 
 @Module({
+  imports: [DatabaseModule],
   controllers: [NotificationController],
   providers: [NotificationService, NotificationRepository, NotificationEventListener],
 })

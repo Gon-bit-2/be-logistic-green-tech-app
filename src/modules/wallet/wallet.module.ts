@@ -3,9 +3,10 @@ import { WalletController } from './controller/wallet.controller'
 import { WalletService } from './service/wallet.service'
 import { WalletRepository } from './repository/wallet.repo'
 import { SharedServicesModule } from 'src/common/services/shared-services.module'
+import { DatabaseModule } from '@src/database/database.module'
 
 @Module({
-  imports: [SharedServicesModule],
+  imports: [DatabaseModule, SharedServicesModule],
   controllers: [WalletController],
   providers: [WalletService, WalletRepository],
   exports: [WalletService],
