@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common'
 import { Prisma } from 'generated/prisma'
 import { PrismaService } from 'src/database/prisma.service'
 import { GetNotificationsQueryType, NotificationPayloadType } from '../model/notification.model'
-import { NotificationTypeValue } from 'src/common/constants/notification.constant'
+import {
+  NotificationDeliveryChannel,
+  NotificationDeliveryStatus,
+  NotificationTypeValue,
+} from 'src/common/constants/notification.constant'
 
 type PrismaExecutor = PrismaService | Prisma.TransactionClient
 
@@ -36,6 +40,136 @@ export class NotificationRepository {
         message: input.message,
         payload: input.payload ? (input.payload as Prisma.InputJsonValue) : Prisma.JsonNull,
       })),
+    })
+  }
+
+  async findPreference(userId: number, type: NotificationTypeValue, client?: PrismaExecutor) {
+    return await this.getClient(client).notificationPreference.findUnique({
+      where: {
+        userId_type: {
+          type,
+          userId,
+        },
+      },
+    })
+  }
+
+  async listPreferences(userId: number) {
+    return await this.prisma.notificationPreference.findMany({
+      where: { userId },
+      orderBy: { type: 'asc' },
+    })
+  }
+
+  async upsertPreferences(
+    userId: number,
+    preferences: { inAppEnabled: boolean; type: NotificationTypeValue }[],
+  ) {
+    return await this.prisma.$transaction(
+      preferences.map((preference) =>
+        this.prisma.notificationPreference.upsert({
+          where: {
+            userId_type: {
+              type: preference.type,
+              userId,
+            },
+          },
+          create: {
+            inAppEnabled: preference.inAppEnabled,
+            type: preference.type,
+            userId,
+          },
+          update: {
+            inAppEnabled: preference.inAppEnabled,
+          },
+        }),
+      ),
+    )
+  }
+
+  async createForUserIdempotent(
+    userId: number,
+    input: {
+      dedupeKey?: string
+      message: string
+      payload?: NotificationPayloadType | Record<string, unknown>
+      title: string
+      type: NotificationTypeValue
+    },
+    client?: PrismaExecutor,
+  ) {
+    const data = {
+      dedupeKey: input.dedupeKey,
+      message: input.message,
+      payload: input.payload ? (input.payload as Prisma.InputJsonValue) : Prisma.JsonNull,
+      title: input.title,
+      type: input.type,
+      userId,
+    }
+
+    if (!input.dedupeKey) {
+      return await this.getClient(client).notification.create({ data })
+    }
+
+    return await this.getClient(client).notification.upsert({
+      where: {
+        userId_dedupeKey: {
+          dedupeKey: input.dedupeKey,
+          userId,
+        },
+      },
+      create: data,
+      update: {
+        message: input.message,
+        payload: data.payload,
+        title: input.title,
+        type: input.type,
+      },
+    })
+  }
+
+  async createDelivery(
+    input: {
+      attemptCount?: number
+      lastError?: string | null
+      nextRetryAt?: Date | null
+      notificationId?: number | null
+      status?: keyof typeof NotificationDeliveryStatus
+      userId: number
+    },
+    client?: PrismaExecutor,
+  ) {
+    return await this.getClient(client).notificationDelivery.create({
+      data: {
+        attemptCount: input.attemptCount ?? 0,
+        channel: NotificationDeliveryChannel.IN_APP,
+        lastError: input.lastError ?? null,
+        nextRetryAt: input.nextRetryAt ?? null,
+        notificationId: input.notificationId ?? null,
+        status: input.status ?? NotificationDeliveryStatus.PENDING,
+        userId: input.userId,
+      },
+    })
+  }
+
+  async markDeliverySent(deliveryId: number) {
+    return await this.prisma.notificationDelivery.update({
+      where: { id: deliveryId },
+      data: {
+        deliveredAt: new Date(),
+        status: NotificationDeliveryStatus.SENT,
+      },
+    })
+  }
+
+  async markDeliveryFailed(deliveryId: number, error: string, nextRetryAt?: Date) {
+    return await this.prisma.notificationDelivery.update({
+      where: { id: deliveryId },
+      data: {
+        lastError: error,
+        nextRetryAt: nextRetryAt ?? null,
+        status: NotificationDeliveryStatus.FAILED,
+      },
     })
   }
 

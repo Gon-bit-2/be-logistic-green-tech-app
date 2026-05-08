@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { EVENT_SOURCE, TRACKING_EVENT_TYPE } from 'src/common/constants/tracking.constant'
 import roleName from 'src/common/constants/role.constant'
+import { NotificationEventName } from 'src/modules/notification/events/notification.event'
 import { PrismaService } from 'src/database/prisma.service'
 import { Prisma, SlaAlertSeverity, SlaAlertStatus, SlaAlertType } from 'generated/prisma'
 import { TripRouteOptimizationService } from './trip-route-optimization.service'
@@ -32,6 +33,7 @@ export class EtaService {
       select: {
         id: true,
         startTime: true,
+        vehicle: { select: { hubId: true } },
         stops: {
           orderBy: { stopSequence: 'asc' },
           select: {
@@ -39,8 +41,10 @@ export class EtaService {
             id: true,
             order: {
               select: {
+                customerId: true,
                 id: true,
                 preferredDeliveryTimeEnd: true,
+                trackingCode: true,
               },
             },
             orderId: true,
@@ -65,6 +69,7 @@ export class EtaService {
     }
 
     const updates: EtaStopUpdate[] = []
+    const slaNotificationEvents: { eventName: string; payload: Record<string, unknown> }[] = []
     await this.prismaService.$transaction(async (tx) => {
       for (const stop of trip.stops) {
         const eta = etaByStopId.get(stop.id)!
@@ -100,17 +105,39 @@ export class EtaService {
       for (const stop of trip.stops) {
         if (!stop.orderId || !stop.order?.preferredDeliveryTimeEnd) continue
         const eta = etaByStopId.get(stop.id)!
-        await this.syncSlaAlert(tx, {
+        const alertChange = await this.syncSlaAlert(tx, {
           deadlineAt: stop.order.preferredDeliveryTimeEnd,
           etaAt: eta,
           orderId: stop.orderId,
           tripId,
         })
+
+        if (alertChange) {
+          const recipientUserIds = await this.resolveSlaRecipients(stop.order.customerId, trip.vehicle?.hubId ?? null)
+          slaNotificationEvents.push({
+            eventName:
+              alertChange.action === 'resolved'
+                ? NotificationEventName.SLA_ALERT_RESOLVED
+                : NotificationEventName.SLA_ALERT_CREATED,
+            payload: {
+              alertId: alertChange.alert.id,
+              deadlineAt: alertChange.alert.deadlineAt,
+              etaAt: alertChange.alert.etaAt,
+              orderId: stop.orderId,
+              recipientUserIds,
+              trackingCode: stop.order.trackingCode,
+              tripId,
+            },
+          })
+        }
       }
     })
 
     if (updates.length) {
       this.eventEmitter.emit('eta.updated', { stops: updates, tripId })
+    }
+    for (const event of slaNotificationEvents) {
+      this.eventEmitter.emit(event.eventName, event.payload)
     }
 
     return {
@@ -200,7 +227,7 @@ export class EtaService {
   private async syncSlaAlert(
     tx: Prisma.TransactionClient,
     input: { deadlineAt: Date; etaAt: Date; orderId: number; tripId: number },
-  ) {
+  ): Promise<{ action: 'created' | 'resolved'; alert: { deadlineAt: Date | null; etaAt: Date | null; id: number } } | null> {
     const activeAlert = await tx.slaAlert.findFirst({
       where: {
         alertType: SlaAlertType.DELIVERY_WINDOW_BREACH,
@@ -217,7 +244,7 @@ export class EtaService {
           data: { etaAt: input.etaAt, message, tripId: input.tripId },
         })
       } else {
-        await tx.slaAlert.create({
+        const alert = await tx.slaAlert.create({
           data: {
             alertType: SlaAlertType.DELIVERY_WINDOW_BREACH,
             deadlineAt: input.deadlineAt,
@@ -229,18 +256,39 @@ export class EtaService {
             tripId: input.tripId,
           },
         })
+        return { action: 'created', alert }
       }
-      return
+      return null
     }
 
     if (activeAlert) {
-      await tx.slaAlert.update({
+      const alert = await tx.slaAlert.update({
         where: { id: activeAlert.id },
         data: {
           resolvedAt: new Date(),
           status: SlaAlertStatus.RESOLVED,
         },
       })
+      return { action: 'resolved', alert }
     }
+
+    return null
+  }
+
+  private async resolveSlaRecipients(customerId: number, hubId: number | null) {
+    const users = await this.prismaService.user.findMany({
+      where: {
+        deletedAt: null,
+        isDeleted: false,
+        OR: [
+          { id: customerId },
+          { role: { name: roleName.ADMIN } },
+          ...(hubId ? [{ hubId, role: { name: roleName.WAREHOUSE_STAFF } }] : []),
+        ],
+      },
+      select: { id: true },
+    })
+
+    return users.map((user) => user.id)
   }
 }

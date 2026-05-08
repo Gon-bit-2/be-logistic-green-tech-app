@@ -9,9 +9,29 @@ export const NotificationType = {
   ORDER_OUT_FOR_DELIVERY: 'ORDER_OUT_FOR_DELIVERY',
   ORDER_DELIVERED: 'ORDER_DELIVERED',
   ORDER_CANCELLED: 'ORDER_CANCELLED',
+  SLA_ALERT_CREATED: 'SLA_ALERT_CREATED',
+  SLA_ALERT_RESOLVED: 'SLA_ALERT_RESOLVED',
+  COD_COLLECTED: 'COD_COLLECTED',
+  COD_SETTLEMENT_SUBMITTED: 'COD_SETTLEMENT_SUBMITTED',
+  COD_SETTLEMENT_COMPLETED: 'COD_SETTLEMENT_COMPLETED',
+  COD_SETTLEMENT_DISPUTED: 'COD_SETTLEMENT_DISPUTED',
 } as const
 
 export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType]
+
+export const NotificationDeliveryStatus = {
+  PENDING: 'PENDING',
+  SENT: 'SENT',
+  SKIPPED: 'SKIPPED',
+  FAILED: 'FAILED',
+} as const
+
+export const NotificationDeliveryChannel = {
+  IN_APP: 'IN_APP',
+  EMAIL: 'EMAIL',
+  PUSH: 'PUSH',
+  SMS: 'SMS',
+} as const
 
 /**
  * Danh sách trạng thái đơn hàng cần phát notification cho Customer.

@@ -1,9 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common'
 import { NotificationEmitterService } from 'src/common/services/notification-emitter.service'
 import roleName from 'src/common/constants/role.constant'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
 import { AuthRepository } from 'src/modules/auth/repository/auth.repository'
 import { PrismaService } from 'src/database/prisma.service'
+import { AuditLogService } from 'src/common/services/audit-log.service'
 import {
   ApproveRoleRequestBodyType,
   CreateRoleRequestBodyType,
@@ -26,6 +27,7 @@ export class RoleService {
     private readonly authRepository: AuthRepository,
     private readonly notificationEmitter: NotificationEmitterService,
     private readonly prismaService: PrismaService,
+    @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
   async create(userId: number, body: CreateRoleRequestBodyType) {
@@ -114,7 +116,7 @@ export class RoleService {
         tx,
       )
 
-      return await this.roleRepository.updateRoleRequest(
+      const updated = await this.roleRepository.updateRoleRequest(
         id,
         {
           status: RoleRequestStatus.APPROVED,
@@ -125,6 +127,19 @@ export class RoleService {
         },
         tx,
       )
+      await this.auditLogService?.record(
+        {
+          action: 'ROLE_REQUEST_APPROVED',
+          actorUserId: adminId,
+          after: { assignedHubId, status: RoleRequestStatus.APPROVED, targetRoleName: roleRequest.targetRole.name },
+          before: { assignedHubId: roleRequest.assignedHubId, status: roleRequest.status },
+          entityId: id,
+          entityType: 'ROLE_REQUEST',
+          metadata: { requesterId: roleRequest.requesterId },
+        },
+        tx,
+      )
+      return updated
     })
 
     await this.notificationEmitter.emitSafe(NotificationEventName.ROLE_REQUEST_REVIEWED, {
@@ -149,7 +164,7 @@ export class RoleService {
         throw new BadRequestException('Yêu cầu này đã được xử lý')
       }
 
-      return await this.roleRepository.updateRoleRequest(
+      const updated = await this.roleRepository.updateRoleRequest(
         id,
         {
           status: RoleRequestStatus.REJECTED,
@@ -160,6 +175,19 @@ export class RoleService {
         },
         tx,
       )
+      await this.auditLogService?.record(
+        {
+          action: 'ROLE_REQUEST_REJECTED',
+          actorUserId: adminId,
+          after: { reviewNote: body.reviewNote, status: RoleRequestStatus.REJECTED },
+          before: { assignedHubId: roleRequest.assignedHubId, status: roleRequest.status },
+          entityId: id,
+          entityType: 'ROLE_REQUEST',
+          metadata: { requesterId: roleRequest.requesterId },
+        },
+        tx,
+      )
+      return updated
     })
 
     await this.notificationEmitter.emitSafe(NotificationEventName.ROLE_REQUEST_REVIEWED, {
