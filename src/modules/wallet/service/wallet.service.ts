@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common'
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException, Optional } from '@nestjs/common'
 import { WalletRepository } from '@src/modules/wallet/repository/wallet.repo'
 import { PrismaService } from '@src/database/prisma.service'
 import { CodSettlementService } from '@src/common/services/cod-settlement.service'
@@ -13,6 +13,9 @@ import type {
   OutstandingCodQueryDto,
 } from '../dto/wallet.dto'
 import { CodSettlementBatchStatus } from 'generated/prisma'
+import { NotificationEmitterService } from '@src/common/services/notification-emitter.service'
+import { NotificationEventName } from '@src/modules/notification/events/notification.event'
+import { AuditLogService } from '@src/common/services/audit-log.service'
 
 @Injectable()
 export class WalletService {
@@ -20,6 +23,8 @@ export class WalletService {
     private readonly walletRepo: WalletRepository,
     private readonly prisma: PrismaService,
     private readonly codSettlementService: CodSettlementService,
+    private readonly notificationEmitter: NotificationEmitterService,
+    @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
   async getMyWallet(userId: number) {
@@ -27,7 +32,28 @@ export class WalletService {
   }
 
   async addCodToDriver(driverId: number, orderId: number, amount: number) {
-    return this.codSettlementService.collectCodForOrder(orderId, driverId, { amount })
+    const result = await this.codSettlementService.collectCodForOrder(orderId, driverId, { amount })
+    await this.auditLogService?.record({
+      action: 'COD_COLLECTED',
+      actorUserId: driverId,
+      after: { amount, isCodCollected: true },
+      entityId: orderId,
+      entityType: 'ORDER',
+    })
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { customerId: true, trackingCode: true },
+    })
+    if (order) {
+      await this.notificationEmitter.emitSafe(NotificationEventName.COD_COLLECTED, {
+        amount,
+        driverId,
+        orderId,
+        recipientUserIds: await this.resolveCodRecipients(driverId, order.customerId),
+        trackingCode: order.trackingCode,
+      })
+    }
+    return result
   }
 
   async reconcileCodForDriver(
@@ -96,13 +122,34 @@ export class WalletService {
       throw new BadRequestException('Một hoặc nhiều đơn không còn khả dụng để đối soát COD.')
     }
 
-    return this.walletRepo.createSettlementBatch({
+    const batch = await this.walletRepo.createSettlementBatch({
       batchCode: this.buildSettlementBatchCode(payload.driverId),
       createdById: actor.userId,
       driverId: payload.driverId,
       note: payload.note,
       orders: selectedOrders,
     })
+
+    if (batch) {
+      await this.auditLogService?.record({
+        action: 'COD_SETTLEMENT_CREATED',
+        actorUserId: actor.userId,
+        after: { driverId: batch.driverId, status: batch.status, totalAmount: Number(batch.totalAmount) },
+        entityId: batch.id,
+        entityType: 'COD_SETTLEMENT_BATCH',
+        metadata: { batchCode: batch.batchCode },
+      })
+      await this.notificationEmitter.emitSafe(NotificationEventName.COD_SETTLEMENT_SUBMITTED, {
+        batchCode: batch.batchCode,
+        batchId: batch.id,
+        driverId: batch.driverId,
+        recipientUserIds: await this.resolveCodRecipients(batch.driverId),
+        status: 'SUBMITTED',
+        totalAmount: Number(batch.totalAmount),
+      })
+    }
+
+    return batch
   }
 
   async listSettlementBatches(actor: AccessTokenPayload, query: ListSettlementBatchesQueryDto) {
@@ -146,6 +193,23 @@ export class WalletService {
         note: payload.note,
       })
       if (!completed) throw new NotFoundException('Không tìm thấy batch đối soát COD.')
+      await this.auditLogService?.record({
+        action: 'COD_SETTLEMENT_COMPLETED',
+        actorUserId: actor.userId,
+        after: { status: completed.status, totalAmount: Number(completed.totalAmount) },
+        before: { status: batch.status },
+        entityId: completed.id,
+        entityType: 'COD_SETTLEMENT_BATCH',
+        metadata: { batchCode: completed.batchCode },
+      })
+      await this.notificationEmitter.emitSafe(NotificationEventName.COD_SETTLEMENT_COMPLETED, {
+        batchCode: completed.batchCode,
+        batchId: completed.id,
+        driverId: completed.driverId,
+        recipientUserIds: await this.resolveCodRecipients(completed.driverId),
+        status: 'COMPLETED',
+        totalAmount: Number(completed.totalAmount),
+      })
       return this.walletRepo.findSettlementBatchById(batchId)
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Lỗi hoàn tất batch đối soát COD'
@@ -165,6 +229,22 @@ export class WalletService {
       reason: payload.reason,
     })
     if (!disputed) throw new NotFoundException('Không tìm thấy batch đối soát COD.')
+    await this.auditLogService?.record({
+      action: 'COD_SETTLEMENT_DISPUTED',
+      actorUserId: actor.userId,
+      after: { status: disputed.status },
+      entityId: disputed.id,
+      entityType: 'COD_SETTLEMENT_BATCH',
+      metadata: { batchCode: disputed.batchCode, itemIds: payload.itemIds ?? null, reason: payload.reason },
+    })
+    await this.notificationEmitter.emitSafe(NotificationEventName.COD_SETTLEMENT_DISPUTED, {
+      batchCode: disputed.batchCode,
+      batchId: disputed.id,
+      driverId: disputed.driverId,
+      recipientUserIds: await this.resolveCodRecipients(disputed.driverId),
+      status: 'DISPUTED',
+      totalAmount: Number(disputed.totalAmount),
+    })
     return this.walletRepo.findSettlementBatchById(batchId)
   }
 
@@ -230,6 +310,28 @@ export class WalletService {
   private buildSettlementBatchCode(driverId: number) {
     const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '')
     return `COD-${datePart}-D${driverId}-${randomUUID().slice(0, 8).toUpperCase()}`
+  }
+
+  private async resolveCodRecipients(driverId: number, customerId?: number) {
+    const driver = await this.prisma.user.findUnique({
+      where: { id: driverId },
+      select: { hubId: true },
+    })
+    const users = await this.prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        isDeleted: false,
+        OR: [
+          { id: driverId },
+          ...(customerId ? [{ id: customerId }] : []),
+          { role: { name: roleName.ADMIN } },
+          ...(driver?.hubId ? [{ hubId: driver.hubId, role: { name: roleName.WAREHOUSE_STAFF } }] : []),
+        ],
+      },
+      select: { id: true },
+    })
+
+    return users.map((user) => user.id)
   }
 
   private escapeCsvCell(value: string) {

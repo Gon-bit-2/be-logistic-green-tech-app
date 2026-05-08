@@ -113,7 +113,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = exception.issues.map((err) => err.message).join(', ')
       errors = exception.issues
     } else if (exception instanceof Error) {
-      message = exception.message
+      message = process.env.NODE_ENV === 'production' ? 'Internal server error' : exception.message
     }
 
     return { errorCode, httpStatus, message, errors }

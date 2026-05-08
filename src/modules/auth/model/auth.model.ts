@@ -5,7 +5,14 @@ import { PermissionSchema, RoleSchema } from 'src/modules/role/model/role.model'
 export const UserSchema = z.object({
   id: z.number(),
   email: z.string().email().nonempty(),
-  password: z.string().min(6).max(100).nonempty(),
+  password: z
+    .string()
+    .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
+    .max(100, 'Mật khẩu không được vượt quá 100 ký tự')
+    .regex(/[A-Z]/, 'Mật khẩu phải chứa ít nhất một chữ cái in hoa')
+    .regex(/[a-z]/, 'Mật khẩu phải chứa ít nhất một chữ cái in thường')
+    .regex(/[0-9]/, 'Mật khẩu phải chứa ít nhất một chữ số')
+    .regex(/[^A-Za-z0-9]/, 'Mật khẩu phải chứa ít nhất một ký tự đặc biệt'),
   fullName: z.string().min(1).max(100).nonempty(),
   phone: z.string().min(10).max(15).or(z.null()),
   avatar: z.string().nullable(),
@@ -28,7 +35,14 @@ export const RegisterBodySchema = UserSchema.pick({
   phone: true,
 })
   .extend({
-    confirmPassword: z.string().min(6).max(100).nonempty(),
+    confirmPassword: z
+      .string()
+      .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
+      .max(100, 'Mật khẩu không được vượt quá 100 ký tự')
+      .regex(/[A-Z]/, 'Mật khẩu phải chứa ít nhất một chữ cái in hoa')
+      .regex(/[a-z]/, 'Mật khẩu phải chứa ít nhất một chữ cái in thường')
+      .regex(/[0-9]/, 'Mật khẩu phải chứa ít nhất một chữ số')
+      .regex(/[^A-Za-z0-9]/, 'Mật khẩu phải chứa ít nhất một ký tự đặc biệt'),
     code: z.string().length(6),
   })
   .strict()
@@ -168,8 +182,22 @@ export const ForgotPasswordBodySchema = z
   .object({
     email: z.string().email(),
     code: z.string().length(6),
-    newPassword: z.string().min(6).max(100).nonempty(),
-    confirmNewPassword: z.string().min(6).max(100).nonempty(),
+    newPassword: z
+      .string()
+      .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
+      .max(100, 'Mật khẩu không được vượt quá 100 ký tự')
+      .regex(/[A-Z]/, 'Mật khẩu phải chứa ít nhất một chữ cái in hoa')
+      .regex(/[a-z]/, 'Mật khẩu phải chứa ít nhất một chữ cái in thường')
+      .regex(/[0-9]/, 'Mật khẩu phải chứa ít nhất một chữ số')
+      .regex(/[^A-Za-z0-9]/, 'Mật khẩu phải chứa ít nhất một ký tự đặc biệt'),
+    confirmNewPassword: z
+      .string()
+      .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
+      .max(100, 'Mật khẩu không được vượt quá 100 ký tự')
+      .regex(/[A-Z]/, 'Mật khẩu phải chứa ít nhất một chữ cái in hoa')
+      .regex(/[a-z]/, 'Mật khẩu phải chứa ít nhất một chữ cái in thường')
+      .regex(/[0-9]/, 'Mật khẩu phải chứa ít nhất một chữ số')
+      .regex(/[^A-Za-z0-9]/, 'Mật khẩu phải chứa ít nhất một ký tự đặc biệt'),
   })
   .strict()
   .superRefine(({ confirmNewPassword, newPassword }, ctx) => {

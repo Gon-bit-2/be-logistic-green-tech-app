@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common'
 import { Prisma } from 'generated/prisma'
 import { ORDER_STATUS, OrderStatusType } from 'src/common/constants/order.constant'
 import {
@@ -15,6 +15,7 @@ import { NotificationEventName, OrderStatusUpdatedEvent } from 'src/modules/noti
 import { ProofOfDeliveryInputType } from 'src/modules/tracking/model/tracking.model'
 import { CodSettlementService } from './cod-settlement.service'
 import { NotificationEmitterService } from './notification-emitter.service'
+import { AuditLogService } from './audit-log.service'
 
 type OrderStateTransaction = Prisma.TransactionClient
 type TransitionValidationMode = 'strict' | 'system' | 'none'
@@ -79,6 +80,7 @@ export class OrderStateService {
     private readonly prismaService: PrismaService,
     private readonly codSettlementService: CodSettlementService,
     private readonly notificationEmitter: NotificationEmitterService,
+    @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
   async transitionOrderStatus(input: TransitionOrderStatusInput) {
@@ -156,6 +158,21 @@ export class OrderStateService {
       })),
     })
 
+    for (const order of orders) {
+      await this.auditLogService?.record(
+        {
+          action: 'ORDER_STATUS_CHANGED',
+          actorUserId: input.createdById ?? null,
+          after: { status: input.status },
+          before: { currentHubId: order.currentHubId, currentTripId: order.currentTripId, status: order.status },
+          entityId: order.id,
+          entityType: 'ORDER',
+          metadata: { source: input.source, trackingCode: order.trackingCode },
+        },
+        input.tx,
+      )
+    }
+
     return { count: orderUpdate.count }
   }
 
@@ -230,6 +247,19 @@ export class OrderStateService {
         trackingCode: true,
       },
     })
+
+    await this.auditLogService?.record(
+      {
+        action: 'ORDER_STATUS_CHANGED',
+        actorUserId: input.createdById ?? null,
+        after: { status: updatedOrder.status },
+        before: { currentHubId: order.currentHubId, currentTripId: order.currentTripId, status: order.status },
+        entityId: order.id,
+        entityType: 'ORDER',
+        metadata: { source: input.source, trackingCode: order.trackingCode },
+      },
+      tx,
+    )
 
     const shouldCollectCod =
       input.status === ORDER_STATUS.DELIVERED &&

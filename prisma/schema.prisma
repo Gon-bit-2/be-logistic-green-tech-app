@@ -60,6 +60,10 @@ model User {
   deletedOrders                    Order[]                   @relation("OrderDeletedBy")
   refreshTokens                    RefreshToken[]
   notifications                    Notification[]            @relation("UserNotifications")
+  notificationPreferences          NotificationPreference[]   @relation("UserNotificationPreferences")
+  notificationDeliveries           NotificationDelivery[]     @relation("UserNotificationDeliveries")
+  auditLogs                        AuditLog[]                 @relation("AuditLogActor")
+  slowRequestLogs                  SlowRequestLog[]           @relation("SlowRequestLogActor")
   requestedRoleChanges             RoleRequest[]             @relation("RoleRequestRequester")
   reviewedRoleChanges              RoleRequest[]             @relation("RoleRequestReviewedBy")
   driverAssignmentRequests         DriverAssignmentRequest[] @relation("DriverAssignmentRequestDriver")
@@ -284,19 +288,98 @@ model Notification {
   userId    Int
   user      User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   type      NotificationType
+  dedupeKey String?          @db.VarChar(255)
   title     String           @db.VarChar(255)
   message   String           @db.VarChar(1000)
   payload   Json?
   isRead    Boolean          @default(false)
   readAt    DateTime?
   createdAt DateTime         @default(now())
+  deliveries NotificationDelivery[]
 
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
   @@index([userId, isRead])
   @@index([userId, isRead, createdAt])
+  @@unique([userId, dedupeKey])
   @@map("notifications")
+}
+
+model NotificationPreference {
+  id           Int              @id @default(autoincrement())
+  userId       Int
+  user         User             @relation("UserNotificationPreferences", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  type         NotificationType
+  inAppEnabled Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([userId, type])
+  @@index([userId])
+  @@index([type])
+  @@map("notification_preferences")
+}
+
+model NotificationDelivery {
+  id             Int                         @id @default(autoincrement())
+  notificationId Int?
+  notification   Notification?               @relation(fields: [notificationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId         Int
+  user           User                        @relation("UserNotificationDeliveries", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  channel        NotificationDeliveryChannel @default(IN_APP)
+  status         NotificationDeliveryStatus  @default(PENDING)
+  attemptCount   Int                         @default(0)
+  lastError      String?                     @db.VarChar(1000)
+  deliveredAt    DateTime?
+  nextRetryAt    DateTime?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  @@index([notificationId])
+  @@index([userId, status])
+  @@index([channel, status])
+  @@index([createdAt])
+  @@map("notification_deliveries")
+}
+
+model SlowRequestLog {
+  id            Int       @id @default(autoincrement())
+  requestId     String?   @db.VarChar(64)
+  method        String    @db.VarChar(16)
+  path          String    @db.VarChar(500)
+  statusCode    Int
+  durationMs    Int
+  contentLength String?   @db.VarChar(64)
+  userId        Int?
+  user          User?     @relation("SlowRequestLogActor", fields: [userId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  userAgent     String?   @db.VarChar(255)
+  createdAt     DateTime  @default(now())
+
+  @@index([durationMs])
+  @@index([statusCode])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@map("slow_request_logs")
+}
+
+model AuditLog {
+  id           Int       @id @default(autoincrement())
+  actorUserId  Int?
+  actor        User?     @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  action       String    @db.VarChar(100)
+  entityType   String    @db.VarChar(64)
+  entityId     String    @db.VarChar(64)
+  before       Json?
+  after        Json?
+  metadata     Json?
+  createdAt    DateTime  @default(now())
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([actorUserId])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
 
 model DriverAssignmentRequest {
@@ -735,6 +818,26 @@ enum NotificationType {
   ORDER_OUT_FOR_DELIVERY
   ORDER_DELIVERED
   ORDER_CANCELLED
+  SLA_ALERT_CREATED
+  SLA_ALERT_RESOLVED
+  COD_COLLECTED
+  COD_SETTLEMENT_SUBMITTED
+  COD_SETTLEMENT_COMPLETED
+  COD_SETTLEMENT_DISPUTED
+}
+
+enum NotificationDeliveryChannel {
+  IN_APP
+  EMAIL
+  PUSH
+  SMS
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENT
+  SKIPPED
+  FAILED
 }
 
 enum OrderStatus {

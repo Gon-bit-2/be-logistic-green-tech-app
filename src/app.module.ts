@@ -25,6 +25,7 @@ import { UploadModule } from './modules/upload/upload.module'
 import { NotificationModule } from './modules/notification/notification.module'
 import { RoleModule } from './modules/role/role.module'
 import { MapsModule } from './modules/maps/maps.module'
+import { ObservabilityModule } from './modules/observability/observability.module'
 import { EventEmitterModule } from '@nestjs/event-emitter'
 import { LoggingMiddleware } from './common/middlewares/logging.middleware'
 import { RequestIdMiddleware } from './common/middlewares/request-id.middleware'
@@ -47,6 +48,7 @@ import { buildRedisUrl } from './common/utils/buildRedisUrl.util'
     NotificationModule,
     RoleModule,
     MapsModule,
+    ObservabilityModule,
     EventEmitterModule.forRoot(),
     ThrottlerModule.forRoot({
       throttlers: [

@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common'
 import { TripRepository } from '../repository/trip.repository'
 import { PrismaService } from 'src/database/prisma.service'
 import {
@@ -19,6 +19,7 @@ import { DISPATCHABLE_PAYMENT_FILTER } from 'src/common/constants/order-query.co
 import { TripCapacityService } from './trip-capacity.service'
 import { EVENT_SOURCE } from 'src/common/constants/tracking.constant'
 import { OrderStateService } from 'src/common/services/order-state.service'
+import { AuditLogService } from 'src/common/services/audit-log.service'
 
 /**
  * Service xử lý vòng đời (lifecycle) của Trip:
@@ -38,6 +39,7 @@ export class TripExecutionService {
     private readonly gamificationService: GamificationService,
     private readonly tripCapacityService: TripCapacityService,
     private readonly orderStateService: OrderStateService,
+    @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
   /** Lấy danh sách chuyến (phân trang, filter) */
@@ -146,6 +148,15 @@ export class TripExecutionService {
       },
     })
 
+    await this.auditLogService?.record({
+      action: 'TRIP_REASSIGNED',
+      actorUserId: actor.userId,
+      after: { driverId: updatedTrip.driverId, vehicleId: updatedTrip.vehicleId },
+      before: { driverId: trip.driverId, vehicleId: trip.vehicleId },
+      entityId: tripId,
+      entityType: 'TRIP',
+    })
+
     return updatedTrip
   }
 
@@ -202,10 +213,22 @@ export class TripExecutionService {
         })
       }
 
-      return tx.trip.update({
+      const updated = await tx.trip.update({
         where: { id: tripId },
         data: { startTime: new Date(), status: TRIP_STATUS.IN_PROGRESS },
       })
+      await this.auditLogService?.record(
+        {
+          action: 'TRIP_STATUS_CHANGED',
+          actorUserId: actor.userId,
+          after: { status: TRIP_STATUS.IN_PROGRESS },
+          before: { status: trip.status },
+          entityId: tripId,
+          entityType: 'TRIP',
+        },
+        tx,
+      )
+      return updated
     })
 
     return updatedTrip
@@ -251,12 +274,25 @@ export class TripExecutionService {
         })
       }
 
-      return tx.trip.update({
+      const updated = await tx.trip.update({
         where: { id: tripId },
         data: {
           status: TRIP_STATUS.CANCELLED,
         },
       })
+      await this.auditLogService?.record(
+        {
+          action: 'TRIP_STATUS_CHANGED',
+          actorUserId: actor.userId,
+          after: { status: TRIP_STATUS.CANCELLED },
+          before: { status: trip.status },
+          entityId: tripId,
+          entityType: 'TRIP',
+          metadata: { reason: dto.reason ?? null },
+        },
+        tx,
+      )
+      return updated
     })
 
     return cancelledTrip
@@ -312,16 +348,28 @@ export class TripExecutionService {
       )
     }, 0)
 
-    const completedTrip = await this.prismaService.$transaction(async (tx) =>
-      tx.trip.update({
+    const completedTrip = await this.prismaService.$transaction(async (tx) => {
+      const updated = await tx.trip.update({
         where: { id: tripId },
         data: {
           endTime: new Date(),
           status: TRIP_STATUS.COMPLETED,
           ...(totalDistance > 0 ? { totalDistance } : {}),
         },
-      }),
-    )
+      })
+      await this.auditLogService?.record(
+        {
+          action: 'TRIP_STATUS_CHANGED',
+          actorUserId: actor.userId,
+          after: { status: TRIP_STATUS.COMPLETED, totalDistance: updated.totalDistance },
+          before: { status: trip.status, totalDistance: trip.totalDistance },
+          entityId: tripId,
+          entityType: 'TRIP',
+        },
+        tx,
+      )
+      return updated
+    })
 
     try {
       if (trip.vehicle) {

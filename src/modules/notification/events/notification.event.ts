@@ -10,6 +10,12 @@ export const NotificationEventName = {
   DRIVER_ASSIGNMENT_REQUEST_REVIEWED: 'notification.driver-assignment-request.reviewed',
   ORDER_CREATED: 'notification.order.created',
   ORDER_STATUS_UPDATED: 'notification.order.status-updated',
+  SLA_ALERT_CREATED: 'notification.sla-alert.created',
+  SLA_ALERT_RESOLVED: 'notification.sla-alert.resolved',
+  COD_COLLECTED: 'notification.cod.collected',
+  COD_SETTLEMENT_SUBMITTED: 'notification.cod-settlement.submitted',
+  COD_SETTLEMENT_COMPLETED: 'notification.cod-settlement.completed',
+  COD_SETTLEMENT_DISPUTED: 'notification.cod-settlement.disputed',
 } as const
 
 export type RoleRequestTargetRoleName = typeof roleName.DRIVER | typeof roleName.WAREHOUSE_STAFF
@@ -68,3 +74,41 @@ export type OrderStatusUpdatedEvent = {
   trackingCode: string
   status: OrderNotifiableStatus
 }
+
+export type SlaAlertNotificationEvent = {
+  alertId: number
+  deadlineAt?: Date | string | null
+  etaAt?: Date | string | null
+  orderId: number
+  recipientUserIds: number[]
+  trackingCode: string
+  tripId?: number | null
+}
+
+export type CodCollectedEvent = {
+  amount: number
+  driverId: number
+  orderId: number
+  recipientUserIds: number[]
+  trackingCode: string
+}
+
+export type CodSettlementEvent = {
+  batchCode: string
+  batchId: number
+  driverId: number
+  recipientUserIds: number[]
+  status: 'SUBMITTED' | 'COMPLETED' | 'DISPUTED'
+  totalAmount: number
+}
+
+export type NotificationDomainEvent =
+  | RoleRequestSubmittedEvent
+  | RoleRequestReviewedEvent
+  | DriverAssignmentRequestSubmittedEvent
+  | DriverAssignmentRequestReviewedEvent
+  | OrderCreatedEvent
+  | OrderStatusUpdatedEvent
+  | SlaAlertNotificationEvent
+  | CodCollectedEvent
+  | CodSettlementEvent

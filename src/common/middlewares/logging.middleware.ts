@@ -1,6 +1,7 @@
 import { Injectable, Logger, NestMiddleware } from '@nestjs/common'
 import { NextFunction, Response } from 'express'
 import { RequestWithId } from './request-id.middleware'
+import { PrismaService } from 'src/database/prisma.service'
 
 /**
  * Middleware ghi log structured cho mỗi HTTP request.
@@ -14,6 +15,8 @@ import { RequestWithId } from './request-id.middleware'
 export class LoggingMiddleware implements NestMiddleware {
   private readonly logger = new Logger(LoggingMiddleware.name)
   private readonly slowRequestMs = Number(process.env.SLOW_REQUEST_MS ?? 1_000)
+
+  constructor(private readonly prisma: PrismaService) {}
 
   use(req: RequestWithId, res: Response, next: NextFunction) {
     const startedAt = Date.now()
@@ -43,6 +46,25 @@ export class LoggingMiddleware implements NestMiddleware {
         this.logger.warn(message)
       } else {
         this.logger.log(message)
+      }
+
+      if (isSlow) {
+        void this.prisma.slowRequestLog
+          .create({
+            data: {
+              contentLength: String(contentLength),
+              durationMs,
+              method: req.method,
+              path: req.originalUrl,
+              requestId,
+              statusCode: res.statusCode,
+              userAgent,
+              userId: typeof userId === 'number' ? userId : null,
+            },
+          })
+          .catch((error) => {
+            this.logger.warn(`Failed to persist slow request log: ${error instanceof Error ? error.message : String(error)}`)
+          })
       }
     })
 
