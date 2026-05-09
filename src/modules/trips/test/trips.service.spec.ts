@@ -35,6 +35,7 @@ describe('TripsService', () => {
       findById: jest.fn(),
       updateTripStatus: jest.fn(),
       findAvailableVehicles: jest.fn(),
+      countPendingOrders: jest.fn(),
       findPendingOrders: jest.fn(),
       findAvailableDrivers: jest.fn(),
       createTripWithStops: jest.fn(),
@@ -60,6 +61,7 @@ describe('TripsService', () => {
         findMany: jest.fn(),
       },
       driverAssignmentRequest: {
+        count: jest.fn(),
         create: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
@@ -67,10 +69,12 @@ describe('TripsService', () => {
         update: jest.fn(),
       },
       user: {
+        count: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
       },
       vehicle: {
+        count: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn(),
         findUnique: jest.fn(),
@@ -248,6 +252,7 @@ describe('TripsService', () => {
           trackingCode: 'ORD-101',
         },
       ] as any)
+      tripRepo.countPendingOrders.mockResolvedValue(1)
       prismaService.user.findMany.mockResolvedValue([
         {
           fullName: 'Nguyen Van A',
@@ -256,6 +261,7 @@ describe('TripsService', () => {
           tripsDriven: [],
         },
       ])
+      prismaService.user.count.mockResolvedValue(1)
       prismaService.vehicle.findMany.mockResolvedValue([
         {
           capacityVolume: 6,
@@ -266,6 +272,7 @@ describe('TripsService', () => {
           type: 'TRUCK',
         },
       ])
+      prismaService.vehicle.count.mockResolvedValue(1)
       prismaService.trip.findMany.mockResolvedValue([
         {
           driver: { fullName: 'Tran Van B', id: 12 },
@@ -280,6 +287,7 @@ describe('TripsService', () => {
           },
         },
       ])
+      prismaService.trip.count.mockResolvedValue(1)
 
       const result = await service.getDispatchBoard(undefined, {
         roleName: 'WAREHOUSE_STAFF',
@@ -294,7 +302,7 @@ describe('TripsService', () => {
         id: 11,
         isAvailable: true,
       })
-      expect(tripRepo.findPendingOrders).toHaveBeenCalledWith(5)
+      expect(tripRepo.findPendingOrders).toHaveBeenCalledWith(5, 101)
     })
   })
 
@@ -328,7 +336,11 @@ describe('TripsService', () => {
         }),
       )
 
-      const res = await service.updateStatus(1, { status: 'CANCELLED' } as any, { roleName: 'DRIVER', userId: 9 } as any)
+      const res = await service.updateStatus(
+        1,
+        { status: 'CANCELLED' } as any,
+        { roleName: 'DRIVER', userId: 9 } as any,
+      )
       expect(res).toEqual({ id: 1, status: 'CANCELLED' })
       expect(prismaService.$transaction).toHaveBeenCalled()
     })
@@ -394,9 +406,7 @@ describe('TripsService', () => {
 
       await expect(
         service.updateStatus(1, { status: 'IN_PROGRESS' } as any, { roleName: 'DRIVER', userId: 9 } as any),
-      ).rejects.toThrow(
-        'Đơn ORD-STRIPE-4 dùng Stripe và chưa thanh toán thành công nên chưa thể vận chuyển.',
-      )
+      ).rejects.toThrow('Đơn ORD-STRIPE-4 dùng Stripe và chưa thanh toán thành công nên chưa thể vận chuyển.')
       expect(prismaService.$transaction).not.toHaveBeenCalled()
     })
 
@@ -427,9 +437,13 @@ describe('TripsService', () => {
         }),
       )
 
-      const res = await service.updateStatus(1, {
-        status: 'COMPLETED',
-      } as any, { roleName: 'DRIVER', userId: 9 } as any)
+      const res = await service.updateStatus(
+        1,
+        {
+          status: 'COMPLETED',
+        } as any,
+        { roleName: 'DRIVER', userId: 9 } as any,
+      )
 
       expect(res).toEqual({ id: 1, status: 'COMPLETED' })
       expect(gamificationServiceMock.processTripEmission).toHaveBeenCalledWith(1)

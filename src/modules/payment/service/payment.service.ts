@@ -192,7 +192,12 @@ export class PaymentService {
       }
     }
 
-    return this.paymentRepo.findByOrderId(orderId)
+    const payment = await this.paymentRepo.findByOrderId(orderId)
+    if (!payment) {
+      throw new NotFoundException('Không tìm thấy thanh toán')
+    }
+
+    return payment
   }
 
   private async getReusablePaymentIntent(transactionId: string) {

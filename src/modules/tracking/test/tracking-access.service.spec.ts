@@ -1,10 +1,10 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common'
-import roleName from 'src/common/constants/role.constant'
+import roleName, { RoleNameType } from 'src/common/constants/role.constant'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import { PrismaService } from 'src/database/prisma.service'
 import { TrackingAccessService } from '../service/tracking-access.service'
 
-const actor = (userId: number, role: string, hubId?: number | null): AccessTokenPayload => ({
+const actor = (userId: number, role: RoleNameType, hubId?: number | null): AccessTokenPayload => ({
   deviceId: 1,
   exp: 0,
   hubId,
@@ -54,9 +54,7 @@ describe('TrackingAccessService', () => {
     await expect(service.assertCanViewOrderTimeline(actor(7, roleName.CUSTOMER), 1)).resolves.toBeUndefined()
 
     prismaService.order.findFirst.mockResolvedValue(orderAccessContext({ customerId: 8 }))
-    await expect(service.assertCanViewOrderTimeline(actor(7, roleName.CUSTOMER), 1)).rejects.toThrow(
-      ForbiddenException,
-    )
+    await expect(service.assertCanViewOrderTimeline(actor(7, roleName.CUSTOMER), 1)).rejects.toThrow(ForbiddenException)
   })
 
   it('cho driver xem/tạo event cho order thuộc trip mình lái', async () => {
@@ -116,9 +114,7 @@ describe('TrackingAccessService', () => {
         stops: [{ order: { customerId: 8 } }],
       }),
     )
-    await expect(service.assertCanJoinTripTracking(actor(7, roleName.CUSTOMER), 10)).rejects.toThrow(
-      ForbiddenException,
-    )
+    await expect(service.assertCanJoinTripTracking(actor(7, roleName.CUSTOMER), 10)).rejects.toThrow(ForbiddenException)
   })
 
   it('warehouse chỉ join trip thuộc hub của mình', async () => {

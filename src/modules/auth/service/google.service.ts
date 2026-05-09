@@ -9,6 +9,7 @@ import { HashingService } from 'src/common/services/hashing.service'
 import { v4 as uuidv4 } from 'uuid'
 import { AuthService } from 'src/modules/auth/service/auth.service'
 import { RoleRepository } from 'src/modules/role/repository/role.repo'
+import type { RoleNameType } from 'src/common/constants/role.constant'
 
 @Injectable()
 export class GoogleService {
@@ -123,7 +124,7 @@ export class GoogleService {
         userId: user.id,
         deviceId: device.id,
         roleId: user.roleId,
-        roleName: user.role.name,
+        roleName: user.role.name as RoleNameType,
       })
 
       const sessionToken = uuidv4()

@@ -6,17 +6,17 @@ Tai lieu nay ghi cac quy uoc runtime, logging, error contract va nhung diem can 
 
 ## Runtime knobs
 
-| Bien | Mac dinh | Tac dung |
-| --- | --- | --- |
-| `PORT` | `3000` | Port listen neu `process.env.PORT`/`envConfig.PORT` co gia tri. |
-| `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins. |
-| `DB_POOL_MAX` | `10` | So connection toi da cua PostgreSQL pool. |
-| `DB_POOL_IDLE_TIMEOUT_MS` | `30000` | Thoi gian dong idle connection. |
-| `PRISMA_QUERY_LOG` | off | Set `1` de log query Prisma o local. Production chi log `warn`, `error`. |
-| `SLOW_REQUEST_MS` | `1000` | Nguong request cham de logging middleware gan `slow=yes`. |
-| `TRACKING_ACCESS_CACHE_TTL_MS` | `15000` | TTL cache quyen join tracking room. |
-| `OSRM_BASE_URL` | `http://router.project-osrm.org` | OSRM server cho route optimization. |
-| `REDIS_URL` | none | Override Redis URL cho cache store. |
+| Bien                           | Mac dinh                         | Tac dung                                                                 |
+| ------------------------------ | -------------------------------- | ------------------------------------------------------------------------ |
+| `PORT`                         | `3000`                           | Port listen neu `process.env.PORT`/`envConfig.PORT` co gia tri.          |
+| `CORS_ORIGINS`                 | `http://localhost:3000`          | Comma-separated allowed origins.                                         |
+| `DB_POOL_MAX`                  | `10`                             | So connection toi da cua PostgreSQL pool.                                |
+| `DB_POOL_IDLE_TIMEOUT_MS`      | `30000`                          | Thoi gian dong idle connection.                                          |
+| `PRISMA_QUERY_LOG`             | off                              | Set `1` de log query Prisma o local. Production chi log `warn`, `error`. |
+| `SLOW_REQUEST_MS`              | `1000`                           | Nguong request cham de logging middleware gan `slow=yes`.                |
+| `TRACKING_ACCESS_CACHE_TTL_MS` | `15000`                          | TTL cache quyen join tracking room.                                      |
+| `OSRM_BASE_URL`                | `http://router.project-osrm.org` | OSRM server cho route optimization.                                      |
+| `REDIS_URL`                    | none                             | Override Redis URL cho cache store.                                      |
 
 ## Request id va log
 
@@ -88,14 +88,14 @@ npm run p
 
 Global throttler: 100 requests / 60 giay. Endpoint throttling rieng:
 
-| Endpoint | Limit |
-| --- | --- |
-| `POST /auth/otp` | 1 request / 60 giay |
-| `POST /auth/login` | 5 requests / 60 giay |
-| `POST /auth/forgot-password` | 3 requests / 15 phut |
-| `POST /orders/quote` | 10 requests / 60 giay |
-| `POST /orders` | 5 requests / 60 giay |
-| `POST /payments/create-intent/:orderId` | 3 requests / 60 giay |
+| Endpoint                                | Limit                 |
+| --------------------------------------- | --------------------- |
+| `POST /auth/otp`                        | 1 request / 60 giay   |
+| `POST /auth/login`                      | 5 requests / 60 giay  |
+| `POST /auth/forgot-password`            | 3 requests / 15 phut  |
+| `POST /orders/quote`                    | 10 requests / 60 giay |
+| `POST /orders`                          | 5 requests / 60 giay  |
+| `POST /payments/create-intent/:orderId` | 3 requests / 60 giay  |
 
 ## Query va response performance
 
@@ -105,8 +105,13 @@ Quy uoc API:
 - Detail endpoint moi tra nested data.
 - Orders list khong keo receiver detail day du nhu detail response.
 - Trips list tra trip/stops summary; dispatch board co shape rieng de dashboard scan nhanh.
+- Dispatch board hot path co query limit mac dinh de tranh payload/query runaway:
+  `ordersLimit=100`, `pendingTripsLimit=50`, `driversLimit=200`, `vehiclesLimit=200`.
+  Driver board dung `assignableOrdersLimit=100`, `requestsLimit=12`.
+  Response co `limits` va `hasMore` de client biet danh sach da bi cat.
 - Notifications list filter theo current user va co `isRead`.
 - Analytics endpoint chi danh cho admin va nen co date range ro rang.
+- Observability list endpoints validate `page`/`limit` bang DTO; `limit=abc`, `page=0`, `limit>100` fail tai boundary thay vi truyen `NaN` xuong Prisma.
 
 Indexes lien quan den list/dashboard duoc them trong migrations gan day, gom order/notification/role request/driver assignment request/trip tracking use cases. Neu query cham bat thuong sau deploy, kiem tra migration da apply.
 

@@ -63,31 +63,31 @@ Role names: `ADMIN`, `CUSTOMER`, `DRIVER`, `WAREHOUSE_STAFF`.
 
 ## Health
 
-| Method | Path | Auth | Notes |
-| --- | --- | --- | --- |
-| GET | `/` | Public | App hello string. |
-| GET | `/health` | Public | `status`, `timestamp`, `uptime`, memory usage. |
+| Method | Path      | Auth   | Notes                                          |
+| ------ | --------- | ------ | ---------------------------------------------- |
+| GET    | `/`       | Public | App hello string.                              |
+| GET    | `/health` | Public | `status`, `timestamp`, `uptime`, memory usage. |
 
 ## Auth
 
-| Method | Path | Auth | Body / query |
-| --- | --- | --- | --- |
-| GET | `/auth/profile` | Bearer | Current user profile with role and permissions. |
-| PATCH | `/auth/profile` | Bearer | `fullName?`, `phone?`, `avatar?`; at least one field. |
-| GET | `/auth/address-book` | Bearer | Current user's address book. |
-| POST | `/auth/address-book` | Bearer | `contactName`, `phone`, `address`, optional `label`, `latitude`, `longitude`, `isDefault`. |
-| PATCH | `/auth/address-book/:id` | Bearer | Partial address book body; owner only. |
-| DELETE | `/auth/address-book/:id` | Bearer | Delete current user's address. |
-| POST | `/auth/otp` | Public | `email`, `type` = `REGISTER` \| `FORGOT_PASSWORD` \| `LOGIN`; throttled 1/min. |
-| POST | `/auth/verify-otp` | Public | `email`, `code`, `type`. |
-| POST | `/auth/register` | Public | `email`, `password`, `confirmPassword`, `fullName`, `phone`, `code`. |
-| POST | `/auth/login` | Public | `email`, `password`, optional OTP `code`; throttled 5/min. |
-| POST | `/auth/refresh-token` | Public | `refreshToken`. |
-| POST | `/auth/logout` | Public | `refreshToken`. |
-| GET | `/auth/google-link` | Public | Returns Google authorization URL. |
-| GET | `/auth/google/callback` | Public | Google redirects here with `state`, `code`, optional `error`. |
-| POST | `/auth/google/session` | Public | `sessionToken` UUID returned through client redirect. |
-| POST | `/auth/forgot-password` | Public | `email`, `code`, `newPassword`, `confirmNewPassword`; throttled 3/15min. |
+| Method | Path                     | Auth   | Body / query                                                                               |
+| ------ | ------------------------ | ------ | ------------------------------------------------------------------------------------------ |
+| GET    | `/auth/profile`          | Bearer | Current user profile with role and permissions.                                            |
+| PATCH  | `/auth/profile`          | Bearer | `fullName?`, `phone?`, `avatar?`; at least one field.                                      |
+| GET    | `/auth/address-book`     | Bearer | Current user's address book.                                                               |
+| POST   | `/auth/address-book`     | Bearer | `contactName`, `phone`, `address`, optional `label`, `latitude`, `longitude`, `isDefault`. |
+| PATCH  | `/auth/address-book/:id` | Bearer | Partial address book body; owner only.                                                     |
+| DELETE | `/auth/address-book/:id` | Bearer | Delete current user's address.                                                             |
+| POST   | `/auth/otp`              | Public | `email`, `type` = `REGISTER` \| `FORGOT_PASSWORD` \| `LOGIN`; throttled 1/min.             |
+| POST   | `/auth/verify-otp`       | Public | `email`, `code`, `type`.                                                                   |
+| POST   | `/auth/register`         | Public | `email`, `password`, `confirmPassword`, `fullName`, `phone`, `code`.                       |
+| POST   | `/auth/login`            | Public | `email`, `password`, optional OTP `code`; throttled 5/min.                                 |
+| POST   | `/auth/refresh-token`    | Public | `refreshToken`.                                                                            |
+| POST   | `/auth/logout`           | Public | `refreshToken`.                                                                            |
+| GET    | `/auth/google-link`      | Public | Returns Google authorization URL.                                                          |
+| GET    | `/auth/google/callback`  | Public | Google redirects here with `state`, `code`, optional `error`.                              |
+| POST   | `/auth/google/session`   | Public | `sessionToken` UUID returned through client redirect.                                      |
+| POST   | `/auth/forgot-password`  | Public | `email`, `code`, `newPassword`, `confirmNewPassword`; throttled 3/15min.                   |
 
 Auth token response:
 
@@ -104,15 +104,15 @@ Order status: `PENDING`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `ARRIVED_AT_HUB`
 
 Service type: `EXPRESS`, `STANDARD`, `ECO_GREEN`. Payment method: `STRIPE`, `COD`.
 
-| Method | Path | Roles | Body / query |
-| --- | --- | --- | --- |
-| POST | `/orders/quote` | Customer, Admin, Warehouse | Quote only; same fields as create order except `customerId`, `paymentMethod`; throttled 10/min. |
-| POST | `/orders` | Customer, Admin, Warehouse | Create order; throttled 5/min. |
-| GET | `/orders` | Customer, Admin, Warehouse | `page`, `limit`, `search?`, `trackingCode?`, `status?`, `currentHubId?`. Customer is forced to own orders. |
-| GET | `/orders/:id` | Customer, Admin, Warehouse | Detail. Customer owner scope; warehouse `currentHubId` scope. |
-| PUT | `/orders/:id/status` | Customer, Admin, Warehouse | `{ "status": "..." }`; owner/hub scoped. |
-| PATCH | `/orders/:id/cancel` | Customer, Admin, Warehouse | Cancel order; owner scoped. |
-| DELETE | `/orders/:id` | Customer, Admin, Warehouse | Soft delete; owner/hub scoped. |
+| Method | Path                 | Roles                      | Body / query                                                                                                                     |
+| ------ | -------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/orders/quote`      | Customer, Admin, Warehouse | Command endpoint; returns `200`. Quote only; same fields as create order except `customerId`, `paymentMethod`; throttled 10/min. |
+| POST   | `/orders`            | Customer, Admin, Warehouse | Create order; throttled 5/min.                                                                                                   |
+| GET    | `/orders`            | Customer, Admin, Warehouse | `page`, `limit`, `search?`, `trackingCode?`, `status?`, `currentHubId?`. Customer is forced to own orders.                       |
+| GET    | `/orders/:id`        | Customer, Admin, Warehouse | Detail. Customer owner scope; warehouse `currentHubId` scope.                                                                    |
+| PUT    | `/orders/:id/status` | Customer, Admin, Warehouse | `{ "status": "..." }`; owner/hub scoped.                                                                                         |
+| PATCH  | `/orders/:id/cancel` | Customer, Admin, Warehouse | Cancel order; owner scoped.                                                                                                      |
+| DELETE | `/orders/:id`        | Customer, Admin, Warehouse | Soft delete; owner/hub scoped.                                                                                                   |
 
 Create order body:
 
@@ -152,38 +152,39 @@ Quote response includes `distanceMeters`, `durationSeconds`, `shippingFee`, `cur
 
 Payment status: `PENDING`, `COMPLETED`, `FAILED`, `REFUNDED`.
 
-| Method | Path | Auth / roles | Notes |
-| --- | --- | --- | --- |
-| POST | `/payments/create-intent/:orderId` | Customer | Creates Stripe PaymentIntent; throttled 3/min. |
-| POST | `/payments/cod-confirm/:orderId` | Driver | Driver confirms COD collection. |
-| GET | `/payments/order/:orderId` | Customer, Driver, Admin, Warehouse | Payment status for order, permission scoped by service. |
-| POST | `/payments/webhook` | Public + Stripe signature | Requires `stripe-signature`; uses raw body from `NestFactory.create(..., { rawBody: true })`. |
+| Method | Path                               | Auth / roles                       | Notes                                                                                                                          |
+| ------ | ---------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| POST   | `/payments/create-intent/:orderId` | Customer                           | Creates Stripe PaymentIntent; throttled 3/min.                                                                                 |
+| POST   | `/payments/cod-confirm/:orderId`   | Driver                             | Driver confirms COD collection.                                                                                                |
+| GET    | `/payments/order/:orderId`         | Customer, Driver, Admin, Warehouse | Payment status for order, permission scoped by service.                                                                        |
+| POST   | `/payments/webhook`                | Public + Stripe signature          | Command endpoint; returns `200`. Requires `stripe-signature`; uses raw body from `NestFactory.create(..., { rawBody: true })`. |
 
 ## Trips and dispatch
 
 Trip status: `PENDING`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`. Stop type: `PICKUP`, `DROPOFF`, `HUB_TRANSFER`.
 
-| Method | Path | Roles | Body / query |
-| --- | --- | --- | --- |
-| POST | `/trips/manual` | Admin, Warehouse | `hubId?`, `vehicleId`, `driverId`, `orderIds[]`. |
-| GET | `/trips/dispatch-preview` | Admin, Warehouse | Query `hubId?`. |
-| GET | `/trips/dispatch-board` | Admin, Warehouse | Query `hubId?`; returns dispatchable orders, drivers, vehicles, pending trips, summary. |
-| GET | `/trips/driver-dispatch-board` | Driver | Driver view of assignable orders and requests. |
-| GET | `/trips/driver-assignment-requests` | Driver | Driver's requests. |
-| POST | `/trips/driver-assignment-requests` | Driver | `{ "orderId": 1 }`. |
-| GET | `/trips/assignment-requests` | Warehouse | Warehouse inbox for driver assignment requests. |
-| PATCH | `/trips/assignment-requests/:id/approve` | Warehouse | `{ "tripId": 1 }` or `{ "vehicleId": 1 }`. |
-| PATCH | `/trips/assignment-requests/:id/reject` | Warehouse | `{ "reviewNote": "..." }`. |
-| POST | `/trips/dispatch-approve` | Admin, Warehouse | Approve dispatch plan. |
-| PATCH | `/trips/:id/vehicle` | Admin, Warehouse | `{ "vehicleId": 1, "driverId": 2? }`. |
-| POST | `/trips/:id/orders` | Admin, Warehouse | `{ "orderIds": [1, 2] }`. |
-| POST | `/trips/auto-dispatch` | Admin, Warehouse | Query `hubId?`; enqueues local or global task. |
-| POST | `/trips/auto-dispatch/all` | Admin | Enqueues global task. |
-| POST | `/trips/:id/optimize-route` | Admin, Warehouse, Driver | Optimizes stop sequence; driver owner scoped. |
-| GET | `/trips` | Admin, Warehouse, Driver | `page`, `limit`, `status?`, `vehicleId?`, `driverId?`, `hubId?`; driver is forced to own trips. |
-| GET | `/trips/:id` | Admin, Warehouse, Driver | Detail; driver owner scoped. |
-| PATCH | `/trips/:id/status` | Admin, Warehouse, Driver | `{ "status": "...", "podByOrderId": { "1": <POD> }? }`; driver owner scoped. |
-| PATCH | `/trips/:id/cancel-order/:orderId` | Admin, Warehouse | Cancel/remove order from trip. |
+| Method | Path                                     | Roles                    | Body / query                                                                                                                                                        |
+| ------ | ---------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/trips/manual`                          | Admin, Warehouse         | `hubId?`, `vehicleId`, `driverId`, `orderIds[]`.                                                                                                                    |
+| GET    | `/trips/dispatch-preview`                | Admin, Warehouse         | Query `hubId?`.                                                                                                                                                     |
+| GET    | `/trips/dispatch-board`                  | Admin, Warehouse         | Query `hubId?`, `ordersLimit` default 100 max 500, `pendingTripsLimit` default 50 max 200, `driversLimit` default 200 max 500, `vehiclesLimit` default 200 max 500. |
+| GET    | `/trips/driver-dispatch-board`           | Driver                   | Query `assignableOrdersLimit` default 100 max 500, `requestsLimit` default 12 max 100.                                                                              |
+| GET    | `/trips/driver-assignment-requests`      | Driver                   | Driver's requests.                                                                                                                                                  |
+| POST   | `/trips/driver-assignment-requests`      | Driver                   | `{ "orderId": 1 }`.                                                                                                                                                 |
+| GET    | `/trips/assignment-requests`             | Warehouse                | Warehouse inbox for driver assignment requests.                                                                                                                     |
+| PATCH  | `/trips/assignment-requests/:id/approve` | Warehouse                | `{ "tripId": 1 }` or `{ "vehicleId": 1 }`.                                                                                                                          |
+| PATCH  | `/trips/assignment-requests/:id/reject`  | Warehouse                | `{ "reviewNote": "..." }`.                                                                                                                                          |
+| POST   | `/trips/dispatch-approve`                | Admin, Warehouse         | Approve dispatch plan.                                                                                                                                              |
+| PATCH  | `/trips/:id/vehicle`                     | Admin, Warehouse         | `{ "vehicleId": 1, "driverId": 2? }`.                                                                                                                               |
+| POST   | `/trips/:id/orders`                      | Admin, Warehouse         | `{ "orderIds": [1, 2] }`.                                                                                                                                           |
+| POST   | `/trips/auto-dispatch`                   | Admin, Warehouse         | Async command endpoint; returns `202`. Query `hubId?`; enqueues local or global task.                                                                               |
+| POST   | `/trips/auto-dispatch/all`               | Admin                    | Async command endpoint; returns `202`. Enqueues global task.                                                                                                        |
+| POST   | `/trips/:id/optimize-route`              | Admin, Warehouse, Driver | Command endpoint; returns `200`. Optimizes stop sequence; driver owner scoped.                                                                                      |
+| POST   | `/trips/:id/recalculate-eta`             | Admin, Warehouse, Driver | Command endpoint; returns `200`. Recalculates ETA from optimized route.                                                                                             |
+| GET    | `/trips`                                 | Admin, Warehouse, Driver | `page`, `limit`, `status?`, `vehicleId?`, `driverId?`, `hubId?`; driver is forced to own trips.                                                                     |
+| GET    | `/trips/:id`                             | Admin, Warehouse, Driver | Detail; driver owner scoped.                                                                                                                                        |
+| PATCH  | `/trips/:id/status`                      | Admin, Warehouse, Driver | `{ "status": "...", "podByOrderId": { "1": <POD> }? }`; driver owner scoped.                                                                                        |
+| PATCH  | `/trips/:id/cancel-order/:orderId`       | Admin, Warehouse         | Cancel/remove order from trip.                                                                                                                                      |
 
 Dispatch approve body:
 
@@ -216,11 +217,11 @@ Failure reason: `CUSTOMER_NOT_AVAILABLE`, `INCORRECT_ADDRESS`, `REFUSED_BY_CUSTO
 
 Package condition: `INTACT`, `DAMAGED`, `PARTIAL`. Proof image type: `PACKAGE`, `SIGNATURE`, `DELIVERY_LOCATION`, `DAMAGE_EVIDENCE`, `FAILED_ATTEMPT`.
 
-| Method | Path | Auth / roles | Body / query |
-| --- | --- | --- | --- |
-| POST | `/tracking-events` | Driver, Warehouse, Admin | Create tracking event. |
-| GET | `/tracking-events` | Bearer | Query `orderId`. Service enforces access. |
-| GET | `/tracking-events/public/:trackingCode` | Public | Public timeline by tracking code. |
+| Method | Path                                    | Auth / roles             | Body / query                              |
+| ------ | --------------------------------------- | ------------------------ | ----------------------------------------- |
+| POST   | `/tracking-events`                      | Driver, Warehouse, Admin | Create tracking event.                    |
+| GET    | `/tracking-events`                      | Bearer                   | Query `orderId`. Service enforces access. |
+| GET    | `/tracking-events/public/:trackingCode` | Public                   | Public timeline by tracking code.         |
 
 Create tracking event body:
 
@@ -247,14 +248,14 @@ Rules:
 
 Allowed customer-facing transitions:
 
-| From | To |
-| --- | --- |
-| `PENDING` | `ASSIGNED`, `CANCELLED` |
-| `ASSIGNED` | `PICKED_UP`, `CANCELLED` |
-| `PICKED_UP` | `IN_TRANSIT` |
-| `IN_TRANSIT` | `ARRIVED_AT_HUB`, `OUT_FOR_DELIVERY` |
-| `ARRIVED_AT_HUB` | `IN_TRANSIT` |
-| `OUT_FOR_DELIVERY` | `DELIVERED`, `CANCELLED` |
+| From               | To                                   |
+| ------------------ | ------------------------------------ |
+| `PENDING`          | `ASSIGNED`, `CANCELLED`              |
+| `ASSIGNED`         | `PICKED_UP`, `CANCELLED`             |
+| `PICKED_UP`        | `IN_TRANSIT`                         |
+| `IN_TRANSIT`       | `ARRIVED_AT_HUB`, `OUT_FOR_DELIVERY` |
+| `ARRIVED_AT_HUB`   | `IN_TRANSIT`                         |
+| `OUT_FOR_DELIVERY` | `DELIVERED`, `CANCELLED`             |
 
 POD body:
 
@@ -303,14 +304,25 @@ Tracking access cache TTL is controlled by `TRACKING_ACCESS_CACHE_TTL_MS` and de
 
 All maps endpoints allow `CUSTOMER`, `ADMIN`, `WAREHOUSE_STAFF`, `DRIVER`.
 
-| Method | Path | Body / query |
-| --- | --- | --- |
-| GET | `/maps/places/autocomplete` | `input`, optional `sessionToken`, `lat`, `lng`, `limit` max 20 default 10. |
-| GET | `/maps/places/detail` | `placeId`, optional `sessionToken`. |
-| GET | `/maps/geocode` | `address`. |
-| POST | `/maps/directions` | `origin { lat, lng }`, `destination { lat, lng }`, optional `vehicle`: `car`, `bike`, `taxi`, `truck`, `hd`. |
+| Method | Path                        | Body / query                                                                                                                                  |
+| ------ | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/maps/places/autocomplete` | `input`, optional `sessionToken`, `lat`, `lng`, `limit` max 20 default 10.                                                                    |
+| GET    | `/maps/places/detail`       | `placeId`, optional `sessionToken`.                                                                                                           |
+| GET    | `/maps/geocode`             | `address`.                                                                                                                                    |
+| POST   | `/maps/directions`          | Command endpoint; returns `200`. `origin { lat, lng }`, `destination { lat, lng }`, optional `vehicle`: `car`, `bike`, `taxi`, `truck`, `hd`. |
 
-Maps service calls Goong API through `GOONG_BASE_URL` and `GOONG_MAPS_API_KEY`.
+Maps service calls Goong API through `GOONG_BASE_URL` and `GOONG_MAPS_API_KEY`. Goong responses are runtime-validated before nested fields are read.
+
+## Observability
+
+All observability endpoints require `ADMIN`.
+
+| Method | Path                                            | Body / query                                                               |
+| ------ | ----------------------------------------------- | -------------------------------------------------------------------------- |
+| GET    | `/admin/observability/queues`                   | Queue health summary.                                                      |
+| GET    | `/admin/observability/queues/:name/failed-jobs` | Query `limit` default 25 max 100. Invalid values fail validation.          |
+| GET    | `/admin/observability/slow-endpoints`           | Query `page` default 1, `limit` default 25 max 100.                        |
+| GET    | `/admin/observability/audit-logs`               | Query `page` default 1, `limit` default 25 max 100, optional `entityType`. |
 
 ## Vehicles
 
@@ -318,28 +330,28 @@ Vehicle type: `VAN`, `TRUCK`, `ELECTRIC_VAN`, `MOTORCYCLE`. Fuel type: `DIESEL`,
 
 All vehicle endpoints require `ADMIN`.
 
-| Method | Path | Body / query |
-| --- | --- | --- |
-| POST | `/vehicles` | `licensePlate`, `type`, `fuelType`, `capacityWeight`, `capacityVolume`, `emissionRatePerKm`, `hubId`, optional `imageUrl`. |
-| GET | `/vehicles` | `page`, `limit`, `type?`, `fuelType?`, `isActive?`, `search?`. |
-| GET | `/vehicles/:id` | Vehicle detail. |
-| PATCH | `/vehicles/:id` | Partial create body plus optional `isActive`. |
-| DELETE | `/vehicles/:id` | Soft delete. |
+| Method | Path            | Body / query                                                                                                               |
+| ------ | --------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/vehicles`     | `licensePlate`, `type`, `fuelType`, `capacityWeight`, `capacityVolume`, `emissionRatePerKm`, `hubId`, optional `imageUrl`. |
+| GET    | `/vehicles`     | `page`, `limit`, `type?`, `fuelType?`, `isActive?`, `search?`.                                                             |
+| GET    | `/vehicles/:id` | Vehicle detail.                                                                                                            |
+| PATCH  | `/vehicles/:id` | Partial create body plus optional `isActive`.                                                                              |
+| DELETE | `/vehicles/:id` | Soft delete.                                                                                                               |
 
 ## Hubs
 
-| Method | Path | Auth / roles | Body / query |
-| --- | --- | --- | --- |
-| POST | `/hubs` | Admin | `code`, `name`, `address`, `latitude`, `longitude`, optional `imageUrl`. |
-| GET | `/hubs` | Bearer + permission | `page`, `limit`, `search?`. |
-| GET | `/hubs/:id/assignable-users` | Admin | Query `role` = `WAREHOUSE_STAFF` \| `DRIVER`, optional `search`. |
-| GET | `/hubs/:id` | Bearer + permission | Hub detail. |
-| PATCH | `/hubs/:id` | Admin | Partial hub body. |
-| DELETE | `/hubs/:id` | Admin | Soft delete. |
-| POST | `/hubs/:id/staff` | Admin | `{ "userId": 1 }`. |
-| DELETE | `/hubs/:id/staff/:userId` | Admin | Remove staff from hub. |
-| POST | `/hubs/:id/drivers` | Admin | `{ "userId": 1 }`. |
-| DELETE | `/hubs/:id/drivers/:userId` | Admin | Remove driver from hub. |
+| Method | Path                         | Auth / roles        | Body / query                                                             |
+| ------ | ---------------------------- | ------------------- | ------------------------------------------------------------------------ |
+| POST   | `/hubs`                      | Admin               | `code`, `name`, `address`, `latitude`, `longitude`, optional `imageUrl`. |
+| GET    | `/hubs`                      | Bearer + permission | `page`, `limit`, `search?`.                                              |
+| GET    | `/hubs/:id/assignable-users` | Admin               | Query `role` = `WAREHOUSE_STAFF` \| `DRIVER`, optional `search`.         |
+| GET    | `/hubs/:id`                  | Bearer + permission | Hub detail.                                                              |
+| PATCH  | `/hubs/:id`                  | Admin               | Partial hub body.                                                        |
+| DELETE | `/hubs/:id`                  | Admin               | Soft delete.                                                             |
+| POST   | `/hubs/:id/staff`            | Admin               | `{ "userId": 1 }`.                                                       |
+| DELETE | `/hubs/:id/staff/:userId`    | Admin               | Remove staff from hub.                                                   |
+| POST   | `/hubs/:id/drivers`          | Admin               | `{ "userId": 1 }`.                                                       |
+| DELETE | `/hubs/:id/drivers/:userId`  | Admin               | Remove driver from hub.                                                  |
 
 Hub `code` must be uppercase letters/numbers/hyphen, for example `SGN-HUB-01`.
 
@@ -347,11 +359,11 @@ Hub `code` must be uppercase letters/numbers/hyphen, for example `SGN-HUB-01`.
 
 All upload endpoints require Bearer token and permission.
 
-| Method | Path | Form data |
-| --- | --- | --- |
-| POST | `/upload/image` | `file`; optional query `folder` in `logistic_vehicles`, `logistic_hubs`, `logistic_general`. |
-| POST | `/upload/pod` | `file`; uploads to `logistic_pod`. |
-| POST | `/upload/multiple-pod` | `files`; max count from `MAX_UPLOAD_FILE_COUNT` (currently 5). |
+| Method | Path                   | Form data                                                                                    |
+| ------ | ---------------------- | -------------------------------------------------------------------------------------------- |
+| POST   | `/upload/image`        | `file`; optional query `folder` in `logistic_vehicles`, `logistic_hubs`, `logistic_general`. |
+| POST   | `/upload/pod`          | `file`; uploads to `logistic_pod`.                                                           |
+| POST   | `/upload/multiple-pod` | `files`; max count from `MAX_UPLOAD_FILE_COUNT` (currently 5).                               |
 
 Response includes Cloudinary `url`, `public_id`, `format`, `bytes` where applicable.
 
@@ -359,24 +371,24 @@ Response includes Cloudinary `url`, `public_id`, `format`, `bytes` where applica
 
 Notification types include role request, driver assignment request, and order status notifications.
 
-| Method | Path | Auth | Body / query |
-| --- | --- | --- | --- |
-| GET | `/notifications` | Bearer | `page`, `limit`, optional `isRead=true|false`. |
-| GET | `/notifications/unread-count` | Bearer | Returns `{ "totalUnread": number }`. |
-| PATCH | `/notifications/read-all` | Bearer | Mark all current user's notifications as read. |
-| PATCH | `/notifications/:id/read` | Bearer | Mark one notification as read. |
+| Method | Path                          | Auth   | Body / query                                   |
+| ------ | ----------------------------- | ------ | ---------------------------------------------- | ------- |
+| GET    | `/notifications`              | Bearer | `page`, `limit`, optional `isRead=true         | false`. |
+| GET    | `/notifications/unread-count` | Bearer | Returns `{ "totalUnread": number }`.           |
+| PATCH  | `/notifications/read-all`     | Bearer | Mark all current user's notifications as read. |
+| PATCH  | `/notifications/:id/read`     | Bearer | Mark one notification as read.                 |
 
 ## Role requests
 
 Target role can be `DRIVER` or `WAREHOUSE_STAFF`.
 
-| Method | Path | Roles | Body / query |
-| --- | --- | --- | --- |
-| POST | `/role-requests` | Customer, Driver, Warehouse | `targetRoleName`, `reason`, `hubId`. |
-| GET | `/role-requests/me` | Customer, Driver, Warehouse | `page`, `limit`, optional `status`, `targetRoleName`. |
-| GET | `/role-requests` | Admin | `page`, `limit`, optional `status`, `targetRoleName`. |
-| PATCH | `/role-requests/:id/approve` | Admin | Optional `reviewNote`, optional `hubId`. |
-| PATCH | `/role-requests/:id/reject` | Admin | Required `reviewNote`. |
+| Method | Path                         | Roles                       | Body / query                                          |
+| ------ | ---------------------------- | --------------------------- | ----------------------------------------------------- |
+| POST   | `/role-requests`             | Customer, Driver, Warehouse | `targetRoleName`, `reason`, `hubId`.                  |
+| GET    | `/role-requests/me`          | Customer, Driver, Warehouse | `page`, `limit`, optional `status`, `targetRoleName`. |
+| GET    | `/role-requests`             | Admin                       | `page`, `limit`, optional `status`, `targetRoleName`. |
+| PATCH  | `/role-requests/:id/approve` | Admin                       | Optional `reviewNote`, optional `hubId`.              |
+| PATCH  | `/role-requests/:id/reject`  | Admin                       | Required `reviewNote`.                                |
 
 ## Analytics
 
@@ -384,43 +396,43 @@ All analytics endpoints require `ADMIN`.
 
 Query `dateRange`: `7d`, `30d`, `90d`, `1y`; default `30d`.
 
-| Method | Path | Response focus |
-| --- | --- | --- |
-| GET | `/analytics/dashboard` | Totals: orders, revenue, distance, CO2 saved, delivery time, on-time rate. |
-| GET | `/analytics/orders` | Periodic order counts, revenue, avg delivery time. |
-| GET | `/analytics/emissions` | Periodic emitted/saved CO2 and green trip count. |
-| GET | `/analytics/fleet-performance` | Vehicle-level orders, trips, distance, efficiency, CO2 saved. |
+| Method | Path                           | Response focus                                                             |
+| ------ | ------------------------------ | -------------------------------------------------------------------------- |
+| GET    | `/analytics/dashboard`         | Totals: orders, revenue, distance, CO2 saved, delivery time, on-time rate. |
+| GET    | `/analytics/orders`            | Periodic order counts, revenue, avg delivery time.                         |
+| GET    | `/analytics/emissions`         | Periodic emitted/saved CO2 and green trip count.                           |
+| GET    | `/analytics/fleet-performance` | Vehicle-level orders, trips, distance, efficiency, CO2 saved.              |
 
 ## Green tech and gamification
 
-| Method | Path | Auth / roles | Notes |
-| --- | --- | --- | --- |
-| POST | `/green-tech/calculate/:tripId` | Admin | Force emission calculation for a trip. |
-| GET | `/green-tech/trips/:tripId` | Admin, Driver | Emission audit history for a trip. |
-| GET | `/gamification/profile` | Bearer | Current user's green profile. |
-| GET | `/gamification/leaderboard` | Bearer | Optional `limit`; default 10. |
+| Method | Path                            | Auth / roles  | Notes                                                                   |
+| ------ | ------------------------------- | ------------- | ----------------------------------------------------------------------- |
+| POST   | `/green-tech/calculate/:tripId` | Admin         | Command endpoint; returns `200`. Force emission calculation for a trip. |
+| GET    | `/green-tech/trips/:tripId`     | Admin, Driver | Emission audit history for a trip.                                      |
+| GET    | `/gamification/profile`         | Bearer        | Current user's green profile.                                           |
+| GET    | `/gamification/leaderboard`     | Bearer        | Optional `limit`; default 10.                                           |
 
 Emission methods: `HAVERSINE`, `GPS_ACTUAL`, `MANUAL`, `TRIP_TOTAL_DISTANCE`. Allocation methods: `WEIGHT_RATIO`, `DISTANCE_RATIO`, `EQUAL_SPLIT`.
 
 ## Wallet
 
-| Method | Path | Roles | Body |
-| --- | --- | --- | --- |
-| GET | `/wallet/my-wallet` | Driver | Driver wallet summary. |
-| POST | `/wallet/add-cod` | Driver | `orderId`, `amount`; driver adds COD received for an order. |
-| POST | `/wallet/reconcile-cod` | Admin, Warehouse | `driverId`, `amount`, `referenceId`, optional `description`. |
+| Method | Path                    | Roles            | Body                                                                                          |
+| ------ | ----------------------- | ---------------- | --------------------------------------------------------------------------------------------- |
+| GET    | `/wallet/my-wallet`     | Driver           | Driver wallet summary.                                                                        |
+| POST   | `/wallet/add-cod`       | Driver           | Command endpoint; returns `200`. `orderId`, `amount`; driver adds COD received for an order.  |
+| POST   | `/wallet/reconcile-cod` | Admin, Warehouse | Command endpoint; returns `200`. `driverId`, `amount`, `referenceId`, optional `description`. |
 
 ## Language
 
 All language endpoints require Bearer token and permission.
 
-| Method | Path | Body / query |
-| --- | --- | --- |
-| POST | `/language` | `id`, `name`, `code`. |
-| GET | `/language` | List languages. |
-| GET | `/language/:languageId` | Detail; `languageId` max 10 chars. |
-| PUT | `/language/:languageId` | `name`, `code`. |
-| DELETE | `/language/:languageId` | Soft delete. |
+| Method | Path                    | Body / query                       |
+| ------ | ----------------------- | ---------------------------------- |
+| POST   | `/language`             | `id`, `name`, `code`.              |
+| GET    | `/language`             | List languages.                    |
+| GET    | `/language/:languageId` | Detail; `languageId` max 10 chars. |
+| PUT    | `/language/:languageId` | `name`, `code`.                    |
+| DELETE | `/language/:languageId` | Soft delete.                       |
 
 ## Business flow chinh
 

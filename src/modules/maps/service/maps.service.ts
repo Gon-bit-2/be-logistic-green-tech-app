@@ -1,13 +1,28 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common'
+import type { ZodSchema } from 'zod'
 import { AutocompleteQueryDTO, DirectionsBodyDTO, GeocodeQueryDTO, PlaceDetailQueryDTO } from '../dto/map.dto'
 import envConfig from 'src/config/config'
-import { GeocodeResult, PlaceResult, Prediction, RouteResult } from '../types/map.type'
+import {
+  GoongAutocompleteResponseSchema,
+  GoongDirectionsResponseSchema,
+  GoongGeocodeResponseSchema,
+  GoongPlaceDetailResponseSchema,
+} from '../model/map.model'
 
 @Injectable()
 export class MapsService {
   private readonly logger = new Logger(MapsService.name)
   private readonly baseUrl = envConfig.GOONG_BASE_URL || 'https://rsapi.goong.io'
   private readonly apiKey = envConfig.GOONG_MAPS_API_KEY
+
+  private parseGoongResponse<T>(schema: ZodSchema<T>, data: unknown): T {
+    const result = schema.safeParse(data)
+    if (!result.success) {
+      this.logger.warn('Goong API response schema mismatch')
+      throw new BadRequestException('Dữ liệu trả về từ Maps API không hợp lệ')
+    }
+    return result.data
+  }
 
   /**
    * 1. Gợi ý địa chỉ từ từ khóa (Autocomplete)
@@ -25,11 +40,7 @@ export class MapsService {
     try {
       const response = await fetch(`${this.baseUrl}/Place/AutoComplete?${params.toString()}`)
 
-      const data = (await response.json()) as {
-        error?: { message: string }
-        status?: string
-        predictions?: Prediction[]
-      }
+      const data = this.parseGoongResponse(GoongAutocompleteResponseSchema, await response.json())
 
       if (data.error || data.status === 'ERROR') {
         throw new BadRequestException(data.error?.message || 'Lỗi từ Goong API')
@@ -66,11 +77,7 @@ export class MapsService {
     try {
       const response = await fetch(`${this.baseUrl}/Place/Detail?${params.toString()}`)
 
-      const data = (await response.json()) as {
-        error?: { message: string }
-        status?: string
-        result?: PlaceResult
-      }
+      const data = this.parseGoongResponse(GoongPlaceDetailResponseSchema, await response.json())
 
       if (data.error || data.status === 'ERROR') {
         throw new BadRequestException(data.error?.message || 'Lỗi từ Goong API')
@@ -105,11 +112,7 @@ export class MapsService {
     try {
       const response = await fetch(`${this.baseUrl}/Geocode?${params.toString()}`)
 
-      const data = (await response.json()) as {
-        error?: { message: string }
-        status?: string
-        results?: GeocodeResult[]
-      }
+      const data = this.parseGoongResponse(GoongGeocodeResponseSchema, await response.json())
 
       if (data.error || data.status === 'ERROR') {
         throw new BadRequestException(data.error?.message || 'Lỗi từ Goong API')
@@ -146,11 +149,7 @@ export class MapsService {
     try {
       const response = await fetch(`${this.baseUrl}/Direction?${params.toString()}`)
 
-      const data = (await response.json()) as {
-        error?: { message: string }
-        status?: string
-        routes?: RouteResult[]
-      }
+      const data = this.parseGoongResponse(GoongDirectionsResponseSchema, await response.json())
 
       if (data.error || data.status === 'ERROR' || !data.routes || data.routes.length === 0) {
         throw new BadRequestException(data.error?.message || 'Lỗi từ Goong API hoặc không tìm thấy tuyến đường')

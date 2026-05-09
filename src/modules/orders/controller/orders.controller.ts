@@ -1,12 +1,36 @@
-import { Controller, Get, Post, Body, Param, Delete, ParseIntPipe, Put, Query, Patch } from '@nestjs/common'
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Delete,
+  ParseIntPipe,
+  Put,
+  Query,
+  Patch,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common'
 import { Throttle } from '@nestjs/throttler'
 import { OrdersService } from '../service/orders.service'
-import { CreateOrderDto, GetOrderListDto, UpdateOrderStatusDto, OrderQuoteBodyDto } from '../dto/order.dto'
+import {
+  CancelOrderResDto,
+  CreateOrderDto,
+  CreateOrderResDto,
+  GetOrderDetailDto,
+  GetOrderListDto,
+  GetOrderListResDto,
+  OrderQuoteBodyDto,
+  OrderQuoteResDto,
+  UpdateOrderStatusDto,
+} from '../dto/order.dto'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import { ResourceAccess } from 'src/common/decorators/resource-access.decorator'
 import { Roles } from 'src/common/decorators/roles.decorator'
 import roleName from 'src/common/constants/role.constant'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
+import { ZodSerializerDto } from 'nestjs-zod'
 
 @Controller('orders')
 export class OrdersController {
@@ -17,8 +41,10 @@ export class OrdersController {
    * Rate limit: 10 request / 60 giây — ngăn chặn spam request liên tục.
    */
   @Post('quote')
+  @HttpCode(HttpStatus.OK)
   @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  @ZodSerializerDto(OrderQuoteResDto)
   quote(@Body() payload: OrderQuoteBodyDto) {
     return this.ordersService.quote(payload)
   }
@@ -31,6 +57,7 @@ export class OrdersController {
   @Post()
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  @ZodSerializerDto(CreateOrderResDto)
   create(@Body() createOrderDto: CreateOrderDto, @ActiveUser('userId') userId: number) {
     const customerId = createOrderDto.customerId || userId
     return this.ordersService.create(userId, customerId, createOrderDto)
@@ -38,6 +65,7 @@ export class OrdersController {
 
   @Get()
   @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  @ZodSerializerDto(GetOrderListResDto)
   findAll(@Query() query: GetOrderListDto, @ActiveUser() user: AccessTokenPayload) {
     let customerId: number | undefined
     if (user.roleName === roleName.CUSTOMER) {
@@ -48,6 +76,7 @@ export class OrdersController {
 
   @Get(':id')
   @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  @ZodSerializerDto(GetOrderDetailDto)
   @ResourceAccess({
     model: 'order',
     paramName: 'id',
@@ -59,6 +88,7 @@ export class OrdersController {
   }
   @Put(':id/status')
   @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  @ZodSerializerDto(GetOrderDetailDto)
   @ResourceAccess({
     model: 'order',
     paramName: 'id',
@@ -75,6 +105,7 @@ export class OrdersController {
 
   @Patch(':id/cancel')
   @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  @ZodSerializerDto(CancelOrderResDto)
   @ResourceAccess({
     model: 'order',
     paramName: 'id',
@@ -86,6 +117,7 @@ export class OrdersController {
 
   @Delete(':id')
   @Roles(roleName.CUSTOMER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  @ZodSerializerDto(CancelOrderResDto)
   @ResourceAccess({
     model: 'order',
     paramName: 'id',

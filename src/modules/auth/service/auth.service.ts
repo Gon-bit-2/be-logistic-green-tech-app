@@ -32,6 +32,7 @@ import { generateOTP } from 'src/common/utils/helpers'
 import envConfig from 'src/config/config'
 import { EmailService } from 'src/common/services/email.service'
 import { IAccessTokenPayload } from 'src/common/types/jwt.type'
+import type { RoleNameType } from 'src/common/constants/role.constant'
 import { RoleRepository } from 'src/modules/role/repository/role.repo'
 @Injectable()
 export class AuthService {
@@ -353,7 +354,7 @@ export class AuthService {
       userId: user.id,
       deviceId: device.id,
       roleId: user.roleId,
-      roleName: user.role.name,
+      roleName: user.role.name as RoleNameType,
       hubId: user.hubId ?? null,
     })
     return tokens
@@ -398,7 +399,13 @@ export class AuthService {
     } = tokenInDB
     // 3. Chuẩn bị token mới (chỉ xử lý logic JWT, không ghi CSDL)
     const [newAccessToken, newRefreshTokenStr] = await Promise.all([
-      this.tokenService.signAccessToken({ userId, deviceId, roleId, roleName, hubId: hubId ?? null }),
+      this.tokenService.signAccessToken({
+        userId,
+        deviceId,
+        roleId,
+        roleName: roleName as RoleNameType,
+        hubId: hubId ?? null,
+      }),
       this.tokenService.signRefreshToken({ userId }),
     ])
     const decodedRefreshToken = await this.tokenService.verifyRefreshToken(newRefreshTokenStr)

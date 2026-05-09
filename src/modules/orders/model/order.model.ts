@@ -1,5 +1,6 @@
 import { ORDER_STATUS, SERVICE_TYPE } from 'src/common/constants/order.constant'
 import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
+import { DecimalNumberSchema } from 'src/common/utils/decimal.util'
 import z from 'zod'
 
 export const OrderStatusSchema = z.enum([
@@ -15,6 +16,7 @@ export const OrderStatusSchema = z.enum([
 
 export const ServiceTypeSchema = z.enum([SERVICE_TYPE.EXPRESS, SERVICE_TYPE.STANDARD, SERVICE_TYPE.ECO_GREEN])
 export const PaymentMethodSchema = z.enum(['STRIPE', 'COD'])
+export const PaymentStatusSchema = z.enum(['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED'])
 
 export const OrderItemSchema = z.object({
   id: z.number().optional(),
@@ -45,8 +47,8 @@ export const OrderSchema = z.object({
   serviceType: ServiceTypeSchema,
   totalWeight: z.number(),
   totalVolume: z.number(),
-  shippingFee: z.number(),
-  estimatedCo2Saved: z.number().nullable().optional(),
+  shippingFee: DecimalNumberSchema,
+  estimatedCo2Saved: DecimalNumberSchema.nullable().optional(),
   currentHubId: z.number().nullable().optional(),
   currentTripId: z.number().nullable().optional(),
   preferredDeliveryTimeStart: z.coerce.date().nullable().optional(),
@@ -67,6 +69,17 @@ export const OrderResponseSchema = OrderSchema.omit({
   updatedById: true,
 }).extend({
   items: z.array(OrderItemSchema).optional(),
+  payment: z
+    .object({
+      amount: DecimalNumberSchema,
+      method: PaymentMethodSchema,
+      orderId: z.number().int().positive(),
+      paidAt: z.date().nullable().optional(),
+      status: PaymentStatusSchema,
+      transactionId: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
 })
 
 export const GetOrderListResSchema = z.object({
@@ -141,10 +154,10 @@ export const OrderQuoteBodySchema = CreateOrderBodySchema.omit({ customerId: tru
 export const OrderQuoteResSchema = z.object({
   distanceMeters: z.number(),
   durationSeconds: z.number(),
-  shippingFee: z.number(),
+  shippingFee: DecimalNumberSchema,
   currency: z.string().default('VND'),
   serviceType: ServiceTypeSchema,
-  estimatedCo2Saved: z.number(),
+  estimatedCo2Saved: DecimalNumberSchema,
   polyline: z.string(),
 })
 

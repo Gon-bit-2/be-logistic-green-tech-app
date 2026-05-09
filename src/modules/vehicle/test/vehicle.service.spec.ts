@@ -1,16 +1,50 @@
-// @ts-nocheck
 import { Test, TestingModule } from '@nestjs/testing'
 import { VehicleService } from '../service/vehicle.service'
 import { VehicleRepository } from '../repository/vehicle.repo'
 import { ConflictException, NotFoundException } from '@nestjs/common'
 import { FuelType, VehicleType } from 'src/common/constants/vehicle.constant'
+import type { CreateVehicleBodyType, GetAllVehiclesResType, VehicleSchemaType } from '../model/vehicle.model'
+
+type VehicleRepoMock = jest.Mocked<
+  Pick<VehicleRepository, 'create' | 'delete' | 'findAll' | 'findById' | 'findByLicensePlate' | 'update'>
+>
+
+const vehicleFixture = (overrides: Partial<VehicleSchemaType> = {}): VehicleSchemaType => ({
+  capacityVolume: 12,
+  capacityWeight: 1000,
+  createdAt: new Date('2026-05-08T00:00:00.000Z'),
+  createdById: 1,
+  deletedAt: null,
+  deletedById: null,
+  emissionRatePerKm: 1,
+  fuelType: FuelType.DIESEL,
+  hubId: 1,
+  id: 1,
+  imageUrl: null,
+  isActive: true,
+  licensePlate: '29A-12345',
+  type: VehicleType.TRUCK,
+  updatedAt: new Date('2026-05-08T00:00:00.000Z'),
+  updatedById: null,
+  ...overrides,
+})
+
+const createPayload: CreateVehicleBodyType = {
+  capacityVolume: 12,
+  capacityWeight: 1000,
+  emissionRatePerKm: 1,
+  fuelType: FuelType.DIESEL,
+  hubId: 1,
+  licensePlate: '29A-12345',
+  type: VehicleType.TRUCK,
+}
 
 describe('VehicleService', () => {
   let service: VehicleService
-  let repo: jest.Mocked<VehicleRepository>
+  let repo: VehicleRepoMock
 
   beforeEach(async () => {
-    const repoMock = {
+    const repoMock: VehicleRepoMock = {
       findByLicensePlate: jest.fn(),
       create: jest.fn(),
       findAll: jest.fn(),
@@ -41,54 +75,39 @@ describe('VehicleService', () => {
     it('thêm mới thành công nếu biển số chưa tồn tại', async () => {
       repo.findByLicensePlate.mockResolvedValue(null)
 
-      const payload = {
-        licensePlate: '29A-12345',
-        type: VehicleType.TRUCK,
-        fuelType: FuelType.DIESEL,
-        capacityIndex: 1,
-        emissionRatePerKm: 1,
-        hubId: 1,
-      }
-      const createdObj = { id: 1, ...payload }
-      repo.create.mockResolvedValue(createdObj as any)
+      const createdObj = vehicleFixture(createPayload)
+      repo.create.mockResolvedValue(createdObj)
 
-      const result = await service.create(1, payload)
+      const result = await service.create(1, createPayload)
       expect(result).toEqual(createdObj)
-      expect(repo.findByLicensePlate).toHaveBeenCalledWith('29A-12345')
-      expect(repo.create).toHaveBeenCalledWith(1, payload)
+      expect(repo.findByLicensePlate.mock.calls).toContainEqual(['29A-12345'])
+      expect(repo.create.mock.calls).toContainEqual([1, createPayload])
     })
 
     it('văng lỗi ConflictException nếu biển số đã tồn tại', async () => {
-      repo.findByLicensePlate.mockResolvedValue({ id: 1 } as any)
+      repo.findByLicensePlate.mockResolvedValue(vehicleFixture())
 
-      const payload = {
-        licensePlate: '29A-12345',
-        type: VehicleType.TRUCK,
-        fuelType: FuelType.DIESEL,
-        capacityIndex: 1,
-        emissionRatePerKm: 1,
-        hubId: 1,
-      }
-
-      await expect(service.create(1, payload)).rejects.toThrow(ConflictException)
+      await expect(service.create(1, createPayload)).rejects.toThrow(ConflictException)
     })
   })
 
   describe('findAll', () => {
     it('gọi hàm findAll của repo', async () => {
-      repo.findAll.mockResolvedValue({ data: [], totalItems: 0 } as any)
-      const res = await service.findAll({})
+      const listResult: GetAllVehiclesResType = { data: [], totalItems: 0 }
+      repo.findAll.mockResolvedValue(listResult)
+      const res = await service.findAll({ limit: 10, page: 1 })
       expect(res).toEqual({ data: [], totalItems: 0 })
-      expect(repo.findAll).toHaveBeenCalledWith({})
+      expect(repo.findAll.mock.calls).toContainEqual([{ limit: 10, page: 1 }])
     })
   })
 
   describe('findById', () => {
     it('trả ra đối tượng nếu ID tồn tại', async () => {
-      repo.findById.mockResolvedValue({ id: 1 } as any)
+      const existingVehicle = vehicleFixture()
+      repo.findById.mockResolvedValue(existingVehicle)
       const res = await service.findById(1)
-      expect(res).toEqual({ id: 1 })
-      expect(repo.findById).toHaveBeenCalledWith(1)
+      expect(res).toEqual(existingVehicle)
+      expect(repo.findById.mock.calls).toContainEqual([1])
     })
 
     it('văng NotFoundException nếu không tìm thấy', async () => {
@@ -99,26 +118,27 @@ describe('VehicleService', () => {
 
   describe('update', () => {
     it('update thành công nếu đúng id và k đổi license plate', async () => {
-      repo.findById.mockResolvedValue({ id: 1, licensePlate: 'OLD' } as any)
-      repo.update.mockResolvedValue({ id: 1 } as any)
+      const updatedVehicle = vehicleFixture({ licensePlate: 'OLD' })
+      repo.findById.mockResolvedValue(updatedVehicle)
+      repo.update.mockResolvedValue(updatedVehicle)
 
-      const res = await service.update(2, 1, { capacityIndex: 5 })
-      expect(res).toEqual({ id: 1 })
-      expect(repo.update).toHaveBeenCalledWith(2, 1, { capacityIndex: 5 })
+      const res = await service.update(2, 1, { capacityWeight: 5000 })
+      expect(res).toEqual(updatedVehicle)
+      expect(repo.update.mock.calls).toContainEqual([2, 1, { capacityWeight: 5000 }])
     })
 
     it('update thành công khi đổi license plate chưa người nào dùng', async () => {
-      repo.findById.mockResolvedValue({ id: 1, licensePlate: 'OLD' } as any)
+      repo.findById.mockResolvedValue(vehicleFixture({ licensePlate: 'OLD' }))
       repo.findByLicensePlate.mockResolvedValue(null)
-      repo.update.mockResolvedValue({ id: 1 } as any)
+      repo.update.mockResolvedValue(vehicleFixture({ licensePlate: 'NEW' }))
 
       const res = await service.update(2, 1, { licensePlate: 'NEW' })
-      expect(res).toEqual({ id: 1 })
+      expect(res.licensePlate).toBe('NEW')
     })
 
     it('văng ConflictException nếu license plate mới đã đc 1 id KHÁC sử dụng', async () => {
-      repo.findById.mockResolvedValue({ id: 1, licensePlate: 'OLD' } as any)
-      repo.findByLicensePlate.mockResolvedValue({ id: 2 } as any) // id 2 đang dùng
+      repo.findById.mockResolvedValue(vehicleFixture({ licensePlate: 'OLD' }))
+      repo.findByLicensePlate.mockResolvedValue(vehicleFixture({ id: 2, licensePlate: 'NEW' }))
 
       await expect(service.update(2, 1, { licensePlate: 'NEW' })).rejects.toThrow(ConflictException)
     })
@@ -126,12 +146,13 @@ describe('VehicleService', () => {
 
   describe('delete', () => {
     it('xóa thành công', async () => {
-      repo.findById.mockResolvedValue({ id: 1 } as any)
-      repo.delete.mockResolvedValue({ success: true } as any)
+      const deletedVehicle = vehicleFixture({ deletedAt: new Date('2026-05-08T01:00:00.000Z'), deletedById: 2 })
+      repo.findById.mockResolvedValue(vehicleFixture())
+      repo.delete.mockResolvedValue(deletedVehicle)
 
       const res = await service.delete({ id: 1, deletedById: 2 })
-      expect(res).toEqual({ success: true })
-      expect(repo.delete).toHaveBeenCalledWith({ id: 1, deletedById: 2 })
+      expect(res).toEqual(deletedVehicle)
+      expect(repo.delete.mock.calls).toContainEqual([{ id: 1, deletedById: 2 }])
     })
 
     it('văng NotFoundException nếu k có element để xóa', async () => {

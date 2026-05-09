@@ -21,18 +21,29 @@ export class TripRepository {
    * - ARRIVED_AT_HUB: Đơn liên tỉnh đã hoàn thành First-mile, về đến Hub đích,
    *   chờ dispatch Last-mile giao tận nhà người nhận.
    */
-  async findPendingOrders(hubId?: number) {
+  private buildPendingOrdersWhere(hubId?: number): Prisma.OrderWhereInput {
+    return {
+      status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
+      deletedAt: null,
+      currentTripId: null,
+      ...DISPATCHABLE_PAYMENT_FILTER,
+      ...(hubId ? { currentHubId: hubId } : {}),
+    }
+  }
+
+  async countPendingOrders(hubId?: number) {
+    return this.prismaService.order.count({
+      where: this.buildPendingOrdersWhere(hubId),
+    })
+  }
+
+  async findPendingOrders(hubId?: number, limit?: number) {
     return this.prismaService.order.findMany({
-      where: {
-        status: { in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB] },
-        deletedAt: null,
-        currentTripId: null, // Chỉ lấy đơn chưa nằm trên xe nào
-        ...DISPATCHABLE_PAYMENT_FILTER,
-        ...(hubId ? { currentHubId: hubId } : {}),
-      },
+      where: this.buildPendingOrdersWhere(hubId),
       orderBy: {
         createdAt: 'asc',
       },
+      ...(limit ? { take: limit } : {}),
     })
   }
 

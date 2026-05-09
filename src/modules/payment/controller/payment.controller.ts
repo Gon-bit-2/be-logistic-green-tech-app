@@ -9,6 +9,8 @@ import {
   ParseIntPipe,
   Get,
   type RawBodyRequest,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common'
 import type { Request } from 'express'
 import { Throttle } from '@nestjs/throttler'
@@ -19,6 +21,13 @@ import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import { AuthType } from 'src/common/constants/auth.constant'
 import roleName from 'src/common/constants/role.constant'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
+import { ZodSerializerDto } from 'nestjs-zod'
+import {
+  ConfirmCODResDto,
+  CreatePaymentIntentResDto,
+  PaymentResponseDto,
+  StripeWebhookResDto,
+} from '../dto/payment.dto'
 
 @Controller('payments')
 export class PaymentController {
@@ -32,6 +41,7 @@ export class PaymentController {
   @Post('create-intent/:orderId')
   @Throttle({ default: { ttl: 60000, limit: 3 } })
   @Roles(roleName.CUSTOMER)
+  @ZodSerializerDto(CreatePaymentIntentResDto)
   createIntent(@Param('orderId', ParseIntPipe) orderId: number, @ActiveUser('userId') userId: number) {
     return this.paymentService.createPaymentIntent(orderId, userId)
   }
@@ -40,8 +50,10 @@ export class PaymentController {
    * Xác nhận thu tiền mặt (Tài xế bấm sau khi thu COD)
    */
   @Post('cod-confirm/:orderId')
+  @HttpCode(HttpStatus.OK)
   @Auth(AuthType.Bearer)
   @Roles(roleName.DRIVER)
+  @ZodSerializerDto(ConfirmCODResDto)
   confirmCOD(@Param('orderId', ParseIntPipe) orderId: number, @ActiveUser('userId') driverId: number) {
     return this.paymentService.confirmCOD(orderId, driverId)
   }
@@ -51,6 +63,7 @@ export class PaymentController {
    */
   @Get('order/:orderId')
   @Roles(roleName.CUSTOMER, roleName.DRIVER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  @ZodSerializerDto(PaymentResponseDto)
   getPaymentStatus(@Param('orderId', ParseIntPipe) orderId: number, @ActiveUser() user: AccessTokenPayload) {
     return this.paymentService.getPaymentByOrderId(orderId, user)
   }
@@ -61,7 +74,9 @@ export class PaymentController {
    * Để nhận RawBody trong Nest, ta cần dùng req.rawBody hoặc Buffer xử lý qua Middleware.
    */
   @Post('webhook')
+  @HttpCode(HttpStatus.OK)
   @isPublic() // Webhook được public nhưng bị protect bởi HMAC Signature từ Stripe
+  @ZodSerializerDto(StripeWebhookResDto)
   async handleWebhook(
     @Headers('stripe-signature') signature: string,
     @Req() req: RawBodyRequest<Request>,

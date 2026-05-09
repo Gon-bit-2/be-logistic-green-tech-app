@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common'
 import { TripRepository } from '../repository/trip.repository'
 import { PrismaService } from 'src/database/prisma.service'
-import { DispatchBoardResType, DriverAssignmentRequestResType, DriverDispatchBoardResType } from '../model/trip.model'
+import {
+  DispatchBoardQueryType,
+  DispatchBoardResType,
+  DriverAssignmentRequestResType,
+  DriverDispatchBoardQueryType,
+  DriverDispatchBoardResType,
+} from '../model/trip.model'
 import { TRIP_STATUS } from 'src/common/constants/trip.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { DISPATCHABLE_PAYMENT_FILTER } from 'src/common/constants/order-query.constant'
@@ -31,10 +37,20 @@ export class DispatchBoardService {
    * Lấy dữ liệu Dispatch Board cho Admin/Staff.
    * Bao gồm: đơn chờ dispatch, tài xế, xe, và chuyến PENDING.
    */
-  async getDispatchBoard(requestedHubId: number | undefined, actor: AccessTokenPayload): Promise<DispatchBoardResType> {
-    const hubId = await this.hubHelper.resolveDispatchHub(requestedHubId, actor)
-    const [dispatchableOrders, drivers, vehicles, pendingTrips] = await Promise.all([
-      this.tripRepo.findPendingOrders(hubId),
+  async getDispatchBoard(query: DispatchBoardQueryType, actor: AccessTokenPayload): Promise<DispatchBoardResType> {
+    const hubId = await this.hubHelper.resolveDispatchHub(query.hubId, actor)
+    const [
+      dispatchableOrdersRaw,
+      dispatchableOrderCount,
+      driversRaw,
+      ,
+      vehiclesRaw,
+      ,
+      pendingTripsRaw,
+      pendingTripCount,
+    ] = await Promise.all([
+      this.tripRepo.findPendingOrders(hubId, query.ordersLimit + 1),
+      this.tripRepo.countPendingOrders(hubId),
       this.prismaService.user.findMany({
         where: {
           deletedAt: null,
@@ -58,6 +74,15 @@ export class DispatchBoardService {
           },
         },
         orderBy: [{ fullName: 'asc' }, { id: 'asc' }],
+        take: query.driversLimit + 1,
+      }),
+      this.prismaService.user.count({
+        where: {
+          deletedAt: null,
+          hubId,
+          isDeleted: false,
+          role: { name: roleName.DRIVER },
+        },
       }),
       this.prismaService.vehicle.findMany({
         where: {
@@ -83,6 +108,14 @@ export class DispatchBoardService {
           type: true,
         },
         orderBy: [{ licensePlate: 'asc' }, { id: 'asc' }],
+        take: query.vehiclesLimit + 1,
+      }),
+      this.prismaService.vehicle.count({
+        where: {
+          deletedAt: null,
+          hubId,
+          isActive: true,
+        },
       }),
       this.prismaService.trip.findMany({
         where: {
@@ -126,8 +159,23 @@ export class DispatchBoardService {
           },
         },
         orderBy: [{ createdAt: 'desc' }],
+        take: query.pendingTripsLimit + 1,
+      }),
+      this.prismaService.trip.count({
+        where: {
+          status: TRIP_STATUS.PENDING,
+          vehicle: {
+            deletedAt: null,
+            hubId,
+          },
+        },
       }),
     ])
+
+    const dispatchableOrders = dispatchableOrdersRaw.slice(0, query.ordersLimit)
+    const drivers = driversRaw.slice(0, query.driversLimit)
+    const vehicles = vehiclesRaw.slice(0, query.vehiclesLimit)
+    const pendingTrips = pendingTripsRaw.slice(0, query.pendingTripsLimit)
 
     const mappedOrders = dispatchableOrders.map((order) => ({
       id: order.id,
@@ -209,15 +257,27 @@ export class DispatchBoardService {
     return {
       dispatchableOrders: mappedOrders,
       drivers: mappedDrivers,
+      hasMore: {
+        dispatchableOrders: dispatchableOrdersRaw.length > query.ordersLimit,
+        drivers: driversRaw.length > query.driversLimit,
+        pendingTrips: pendingTripsRaw.length > query.pendingTripsLimit,
+        vehicles: vehiclesRaw.length > query.vehiclesLimit,
+      },
       hubId,
+      limits: {
+        driversLimit: query.driversLimit,
+        ordersLimit: query.ordersLimit,
+        pendingTripsLimit: query.pendingTripsLimit,
+        vehiclesLimit: query.vehiclesLimit,
+      },
       pendingTrips: mappedPendingTrips,
       summary: {
         availableDriverCount: mappedDrivers.filter((driver) => driver.isAvailable).length,
         availableVehicleCount: mappedVehicles.filter((vehicle) => vehicle.isAvailable).length,
-        dispatchableOrderCount: mappedOrders.length,
+        dispatchableOrderCount,
         dispatchableVolume: mappedOrders.reduce((sum, order) => sum + order.totalVolume, 0),
         dispatchableWeight: mappedOrders.reduce((sum, order) => sum + order.totalWeight, 0),
-        pendingTripCount: mappedPendingTrips.length,
+        pendingTripCount,
       },
       vehicles: mappedVehicles,
     }
@@ -227,7 +287,10 @@ export class DispatchBoardService {
    * Lấy dữ liệu Dispatch Board cho Driver.
    * Bao gồm: chuyến đang chạy, đơn có thể nhận, yêu cầu nhận đơn gần đây.
    */
-  async getDriverDispatchBoard(actor: AccessTokenPayload): Promise<DriverDispatchBoardResType> {
+  async getDriverDispatchBoard(
+    query: DriverDispatchBoardQueryType,
+    actor: AccessTokenPayload,
+  ): Promise<DriverDispatchBoardResType> {
     const driver = await this.hubHelper.getDriverScopeUser(actor)
     const activeTripsPromise = this.prismaService.trip.findMany({
       where: {
@@ -300,23 +363,55 @@ export class DispatchBoardService {
             totalWeight: true,
             trackingCode: true,
           },
+          take: query.assignableOrdersLimit + 1,
         })
       : Promise.resolve([] as never[])
+    const assignableOrderCountPromise = driver.hubId
+      ? this.prismaService.order.count({
+          where: {
+            currentHubId: driver.hubId,
+            currentTripId: null,
+            deletedAt: null,
+            status: {
+              in: [ORDER_STATUS.PENDING, ORDER_STATUS.ARRIVED_AT_HUB],
+            },
+            ...DISPATCHABLE_PAYMENT_FILTER,
+          },
+        })
+      : Promise.resolve(0)
     const recentRequestsPromise = this.prismaService.driverAssignmentRequest.findMany({
       where: {
         driverId: actor.userId,
       },
       include: this.assignmentHelper.getDriverAssignmentRequestInclude(),
       orderBy: [{ createdAt: 'desc' }],
-      take: 12,
+      take: query.requestsLimit + 1,
+    })
+    const pendingRequestCountPromise = this.prismaService.driverAssignmentRequest.count({
+      where: {
+        driverId: actor.userId,
+        status: DriverAssignmentRequestStatus.PENDING,
+      },
     })
 
-    const [activeTrips, completedTripCount, assignableOrders, recentRequests] = await Promise.all([
+    const [
+      activeTrips,
+      completedTripCount,
+      assignableOrdersRaw,
+      assignableOrderCount,
+      recentRequestsRaw,
+      pendingRequestCount,
+    ] = await Promise.all([
       activeTripsPromise,
       completedTripCountPromise,
       assignableOrdersPromise,
+      assignableOrderCountPromise,
       recentRequestsPromise,
+      pendingRequestCountPromise,
     ])
+
+    const assignableOrders = assignableOrdersRaw.slice(0, query.assignableOrdersLimit)
+    const recentRequests = recentRequestsRaw.slice(0, query.requestsLimit)
 
     const requestByOrderId = new Map<number, DriverAssignmentRequestResType>()
     const mappedRequests = recentRequests.map((request) => this.assignmentHelper.mapDriverAssignmentRequest(request))
@@ -337,16 +432,19 @@ export class DispatchBoardService {
         ...order,
         request: requestByOrderId.get(order.id) ?? null,
       })),
+      hasMore: {
+        assignableOrders: assignableOrdersRaw.length > query.assignableOrdersLimit,
+        requests: recentRequestsRaw.length > query.requestsLimit,
+      },
       hubId: driver.hubId,
+      limits: query,
       requests: mappedRequests,
       summary: {
         activeTripCount: activeTrips.length,
-        assignableOrderCount: assignableOrders.length,
+        assignableOrderCount,
         completedTripCount,
         inProgressTripCount: activeTrips.filter((trip) => trip.status === TRIP_STATUS.IN_PROGRESS).length,
-        pendingRequestCount: mappedRequests.filter(
-          (request) => request.status === DriverAssignmentRequestStatus.PENDING,
-        ).length,
+        pendingRequestCount,
       },
     }
   }
