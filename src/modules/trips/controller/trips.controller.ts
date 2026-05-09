@@ -1,15 +1,22 @@
-import { Controller, Get, Post, Body, Param, ParseIntPipe, Patch, Query } from '@nestjs/common'
+import { Controller, Get, Post, Body, Param, ParseIntPipe, Patch, Query, HttpCode, HttpStatus } from '@nestjs/common'
 import {
   AddOrdersToTripDto,
   ApproveDriverAssignmentRequestDto,
   AssignVehicleDto,
   AutoDispatchQueryDto,
+  AutoDispatchResDto,
   CreateDriverAssignmentRequestDto,
   CreateManualTripDto,
   DispatchApproveDto,
+  DispatchBoardResDto,
   DispatchBoardQueryDto,
   DispatchPreviewQueryDto,
+  DriverAssignmentRequestListResDto,
+  DriverDispatchBoardQueryDto,
+  DriverDispatchBoardResDto,
+  GetTripDetailResDto,
   GetTripListDto,
+  GetTripListResDto,
   RejectDriverAssignmentRequestDto,
   UpdateTripStatusDto,
 } from '../dto/trip.dto'
@@ -20,6 +27,7 @@ import { ResourceAccess } from 'src/common/decorators/resource-access.decorator'
 import { ActiveUser } from 'src/common/decorators/active-user.decorator'
 import roleName from 'src/common/constants/role.constant'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
+import { ZodSerializerDto } from 'nestjs-zod'
 
 @Controller('trips')
 export class TripsController {
@@ -42,18 +50,21 @@ export class TripsController {
 
   @Get('dispatch-board')
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  @ZodSerializerDto(DispatchBoardResDto)
   dispatchBoard(@Query() query: DispatchBoardQueryDto, @ActiveUser() user: AccessTokenPayload) {
-    return this.tripsService.getDispatchBoard(query.hubId, user)
+    return this.tripsService.getDispatchBoard(query, user)
   }
 
   @Get('driver-dispatch-board')
   @Roles(roleName.DRIVER)
-  driverDispatchBoard(@ActiveUser() user: AccessTokenPayload) {
-    return this.tripsService.getDriverDispatchBoard(user)
+  @ZodSerializerDto(DriverDispatchBoardResDto)
+  driverDispatchBoard(@Query() query: DriverDispatchBoardQueryDto, @ActiveUser() user: AccessTokenPayload) {
+    return this.tripsService.getDriverDispatchBoard(query, user)
   }
 
   @Get('driver-assignment-requests')
   @Roles(roleName.DRIVER)
+  @ZodSerializerDto(DriverAssignmentRequestListResDto)
   driverAssignmentRequests(@ActiveUser() user: AccessTokenPayload) {
     return this.tripsService.listDriverAssignmentRequests(user)
   }
@@ -121,6 +132,8 @@ export class TripsController {
 
   @Post('auto-dispatch')
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF)
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ZodSerializerDto(AutoDispatchResDto)
   autoDispatch(@Query() query: AutoDispatchQueryDto) {
     if (query.hubId) {
       return this.tripsService.autoDispatchLocalTask(query.hubId)
@@ -131,11 +144,14 @@ export class TripsController {
 
   @Post('auto-dispatch/all')
   @Roles(roleName.ADMIN)
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ZodSerializerDto(AutoDispatchResDto)
   autoDispatchAll() {
     return this.tripsService.autoDispatchGlobalTask()
   }
 
   @Post(':id/optimize-route')
+  @HttpCode(HttpStatus.OK)
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
   @ResourceAccess({
     model: 'trip',
@@ -147,6 +163,7 @@ export class TripsController {
   }
 
   @Post(':id/recalculate-eta')
+  @HttpCode(HttpStatus.OK)
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
   @ResourceAccess({
     model: 'trip',
@@ -165,6 +182,7 @@ export class TripsController {
 
   @Get()
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
+  @ZodSerializerDto(GetTripListResDto)
   findAll(@Query() query: GetTripListDto, @ActiveUser() user: AccessTokenPayload) {
     let driverId: number | undefined
     if (user.roleName === roleName.DRIVER) {
@@ -175,6 +193,7 @@ export class TripsController {
 
   @Get(':id')
   @Roles(roleName.ADMIN, roleName.WAREHOUSE_STAFF, roleName.DRIVER)
+  @ZodSerializerDto(GetTripDetailResDto)
   @ResourceAccess({
     model: 'trip',
     paramName: 'id',

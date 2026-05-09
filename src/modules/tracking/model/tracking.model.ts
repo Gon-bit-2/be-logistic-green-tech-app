@@ -175,7 +175,40 @@ export const TrackingEventResponseSchema = z.object({
 export const TrackingTimelineResponseSchema = z.object({
   trackingCode: z.string(),
   currentStatus: OrderStatusSchema,
+  eta: z
+    .object({
+      actualArrivalTime: z.date().nullable(),
+      expectedArrivalTime: z.date(),
+      tripId: z.number(),
+    })
+    .nullable()
+    .optional(),
   events: z.array(TrackingEventResponseSchema),
+})
+
+export const PublicTrackingEventResponseSchema = z.object({
+  id: z.number(),
+  eventType: TrackingEventTypeSchema,
+  status: OrderStatusSchema.nullable(),
+  location: z.string().nullable(),
+  description: z.string().nullable(),
+  occurredAt: z.date(),
+  pod: z
+    .object({
+      receiverName: z.string(),
+      packageCondition: PackageConditionSchema,
+      images: z.array(
+        z.object({
+          url: z.string(),
+          type: ProofImageTypeSchema,
+        }),
+      ),
+    })
+    .nullable(),
+})
+
+export const PublicTrackingTimelineResponseSchema = TrackingTimelineResponseSchema.omit({ events: true }).extend({
+  events: z.array(PublicTrackingEventResponseSchema),
 })
 
 export type CreateTrackingEventType = z.infer<typeof CreateTrackingEventSchema>
@@ -183,4 +216,5 @@ export type GetTrackingTimelineQueryType = z.infer<typeof GetTrackingTimelineQue
 export type GetPublicTrackingParamsType = z.infer<typeof GetPublicTrackingParamsSchema>
 export type TrackingEventResponseType = z.infer<typeof TrackingEventResponseSchema>
 export type TrackingTimelineResponseType = z.infer<typeof TrackingTimelineResponseSchema>
+export type PublicTrackingTimelineResponseType = z.infer<typeof PublicTrackingTimelineResponseSchema>
 export type ProofOfDeliveryInputType = z.infer<typeof ProofOfDeliveryInputSchema>

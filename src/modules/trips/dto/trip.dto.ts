@@ -16,6 +16,7 @@ import {
   DispatchBoardQuerySchema,
   DispatchBoardResSchema,
   DispatchPreviewQuerySchema,
+  DriverDispatchBoardQuerySchema,
   DriverAssignmentRequestListResSchema,
   DriverDispatchBoardResSchema,
   RejectDriverAssignmentRequestSchema,
@@ -33,6 +34,7 @@ export class AssignVehicleDto extends createZodDto(AssignVehicleSchema) {}
 export class AddOrdersToTripDto extends createZodDto(AddOrdersToTripSchema) {}
 export class DispatchPreviewQueryDto extends createZodDto(DispatchPreviewQuerySchema) {}
 export class DispatchBoardQueryDto extends createZodDto(DispatchBoardQuerySchema) {}
+export class DriverDispatchBoardQueryDto extends createZodDto(DriverDispatchBoardQuerySchema) {}
 export class DispatchBoardResDto extends createZodDto(DispatchBoardResSchema) {}
 export class DispatchApproveDto extends createZodDto(DispatchApproveSchema) {}
 export class UpdateTripStatusDto extends createZodDto(UpdateTripStatusSchema) {}

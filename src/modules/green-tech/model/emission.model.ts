@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { DecimalNumberSchema } from 'src/common/utils/decimal.util'
 
 export const CalculationMethodSchema = z.enum(['HAVERSINE', 'GPS_ACTUAL', 'MANUAL', 'TRIP_TOTAL_DISTANCE'])
 export const AllocationMethodSchema = z.enum(['WEIGHT_RATIO', 'DISTANCE_RATIO', 'EQUAL_SPLIT'])
@@ -12,12 +13,12 @@ export const EmissionLogResponseSchema = z.object({
   tripId: z.number(),
   version: z.number(),
   isLatest: z.boolean(),
-  actualDistance: z.number(),
-  payloadWeight: z.number(),
-  co2Emitted: z.number(),
-  co2Saved: z.number(),
-  emissionFactor: z.number(),
-  baselineRate: z.number(),
+  actualDistance: DecimalNumberSchema,
+  payloadWeight: DecimalNumberSchema,
+  co2Emitted: DecimalNumberSchema,
+  co2Saved: DecimalNumberSchema,
+  emissionFactor: DecimalNumberSchema,
+  baselineRate: DecimalNumberSchema,
   vehicleType: z.string(),
   fuelType: z.string(),
   calculationMethod: z.string(),
@@ -27,9 +28,67 @@ export const EmissionLogResponseSchema = z.object({
 
 export const OrderAllocationResponseSchema = z.object({
   orderId: z.number(),
-  allocatedCo2: z.number(),
-  allocatedCo2Saved: z.number(),
-  weightRatio: z.number().nullable(),
+  allocatedCo2: DecimalNumberSchema,
+  allocatedCo2Saved: DecimalNumberSchema,
+  weightRatio: DecimalNumberSchema.nullable(),
+})
+
+export const EmissionAllocationResponseSchema = OrderAllocationResponseSchema.extend({
+  allocationMethod: z.string(),
+  calculatedAt: z.date().optional(),
+  createdAt: z.date().optional(),
+  emissionLogId: z.number().int().positive().optional(),
+  id: z.number().int().positive().optional(),
+  tripId: z.number().int().positive().optional(),
+  updatedAt: z.date().optional(),
+}).passthrough()
+
+export const EmissionLogWithAllocationsResponseSchema = EmissionLogResponseSchema.extend({
+  allocations: z.array(EmissionAllocationResponseSchema).optional(),
+}).passthrough()
+
+export const EmissionLogListResponseSchema = z.array(EmissionLogWithAllocationsResponseSchema)
+
+export const GreenTechDashboardResSchema = z.object({
+  averageCo2SavedPerOrder: z.number(),
+  greenOrderCount: z.number().int().nonnegative(),
+  greenTripCount: z.number().int().nonnegative(),
+  topVehicles: z.array(
+    z.object({
+      co2Saved: z.number(),
+      licensePlate: z.string(),
+      vehicleId: z.number().int().positive(),
+      vehicleType: z.string(),
+    }),
+  ),
+  totalAllocatedCo2: z.number(),
+  totalAllocatedCo2Saved: z.number(),
+  totalCo2Emitted: z.number(),
+  totalCo2Saved: z.number(),
+})
+
+export const OrderFootprintResSchema = z.object({
+  allocations: z.array(
+    z.object({
+      allocatedCo2: z.number(),
+      allocatedCo2Saved: z.number(),
+      allocationMethod: z.string(),
+      calculatedAt: z.date(),
+      emissionLogId: z.number().int().positive(),
+      tripId: z.number().int().positive(),
+      weightRatio: z.number().nullable(),
+    }),
+  ),
+  orderId: z.number().int().positive(),
+  trackingCode: z.string(),
+  totalAllocatedCo2: z.number(),
+  totalAllocatedCo2Saved: z.number(),
+})
+
+export const CustomerGreenSummaryResSchema = z.object({
+  greenOrderCount: z.number().int().nonnegative(),
+  totalCo2: z.number(),
+  totalCo2Saved: z.number(),
 })
 
 export const GreenTechDashboardQuerySchema = z.object({
@@ -44,9 +103,13 @@ export const GreenTechExportQuerySchema = GreenTechDashboardQuerySchema.extend({
 
 export type CalculateEmissionParamsType = z.infer<typeof CalculateEmissionParamsSchema>
 export type EmissionLogResponseType = z.infer<typeof EmissionLogResponseSchema>
+export type EmissionLogListResponseType = z.infer<typeof EmissionLogListResponseSchema>
 export type GreenTechDashboardQueryType = z.infer<typeof GreenTechDashboardQuerySchema>
+export type GreenTechDashboardResType = z.infer<typeof GreenTechDashboardResSchema>
 export type GreenTechExportQueryType = z.infer<typeof GreenTechExportQuerySchema>
+export type OrderFootprintResType = z.infer<typeof OrderFootprintResSchema>
 export type OrderAllocationResponseType = z.infer<typeof OrderAllocationResponseSchema>
+export type CustomerGreenSummaryResType = z.infer<typeof CustomerGreenSummaryResSchema>
 
 export interface EmissionLogInput {
   tripId: number

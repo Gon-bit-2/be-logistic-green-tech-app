@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Test, TestingModule } from '@nestjs/testing'
 import { AuthService } from '../service/auth.service'
 import { EmailService } from 'src/common/services/email.service'
@@ -14,6 +13,16 @@ import { RegisterResSchema } from '../model/auth.model'
 import { addMilliseconds } from 'date-fns'
 import { RoleRepository } from 'src/modules/role/repository/role.repo'
 
+type PrismaServiceMock = {
+  $transaction: jest.Mock
+  user: { create: jest.Mock; update: jest.Mock }
+  verificationCode: { delete: jest.Mock }
+  device: { update: jest.Mock }
+  refreshToken: { delete: jest.Mock; create: jest.Mock }
+}
+
+type TransactionCallback = (tx: Record<string, never>) => unknown
+
 describe('AuthService', () => {
   let service: AuthService
   let roleRepo: jest.Mocked<RoleRepository>
@@ -22,8 +31,7 @@ describe('AuthService', () => {
   let hashingService: jest.Mocked<HashingService>
   let authRepo: jest.Mocked<AuthRepository>
   let verificationCodeRepo: jest.Mocked<VerificationCodeRepository>
-  let prismaService: any
-  let cacheManager: any
+  let prismaService: PrismaServiceMock
 
   beforeEach(async () => {
     const roleRepoMock = { getClientRoleId: jest.fn() }
@@ -58,7 +66,7 @@ describe('AuthService', () => {
       findUniqueVerificationCode: jest.fn(),
       createVerificationCode: jest.fn(),
     }
-    const prismaServiceMock = {
+    const prismaServiceMock: PrismaServiceMock = {
       $transaction: jest.fn(),
       user: { create: jest.fn(), update: jest.fn() },
       verificationCode: { delete: jest.fn() },
@@ -89,7 +97,6 @@ describe('AuthService', () => {
     authRepo = module.get(AuthRepository)
     verificationCodeRepo = module.get(VerificationCodeRepository)
     prismaService = module.get(PrismaService)
-    cacheManager = module.get(CACHE_MANAGER)
   })
 
   afterEach(() => {
@@ -114,20 +121,20 @@ describe('AuthService', () => {
         phone: '0987654321',
       })
 
-      expect(authRepo.update).toHaveBeenCalledWith(
+      expect(authRepo.update.mock.calls).toContainEqual([
         { id: 1 },
         {
           fullName: 'Updated User',
           phone: '0987654321',
           updatedById: 1,
         },
-      )
+      ])
       expect(res).toMatchObject({
         id: 1,
         email: 'test@mail.com',
         fullName: 'Updated User',
       })
-      expect(res.password).toBeUndefined()
+      expect('password' in res).toBe(false)
     })
 
     it('văng Unauthorized khi user không tồn tại', async () => {
@@ -143,7 +150,7 @@ describe('AuthService', () => {
 
       const res = await service.getAddressBooks(1)
 
-      expect(authRepo.findAddressBooksByUserId).toHaveBeenCalledWith(1)
+      expect(authRepo.findAddressBooksByUserId.mock.calls).toContainEqual([1])
       expect(res).toEqual({
         data: [{ id: 1, contactName: 'Home' }],
       })
@@ -152,7 +159,7 @@ describe('AuthService', () => {
     it('tạo địa chỉ đầu tiên sẽ tự đặt mặc định', async () => {
       authRepo.countActiveAddressBooksByUserId.mockResolvedValue(0)
       authRepo.createAddressBook.mockResolvedValue({ id: 1, isDefault: true } as any)
-      prismaService.$transaction.mockImplementation(async (callback: any) => callback({}))
+      prismaService.$transaction.mockImplementation((callback: TransactionCallback) => callback({}))
 
       const res = await service.createAddressBook(1, {
         contactName: 'Nhà riêng',
@@ -163,63 +170,61 @@ describe('AuthService', () => {
         longitude: null,
       })
 
-      expect(authRepo.clearDefaultAddressBooks).toHaveBeenCalledWith(1, undefined, {})
-      expect(authRepo.createAddressBook).toHaveBeenCalledWith(
+      expect(authRepo.clearDefaultAddressBooks.mock.calls).toContainEqual([1, undefined, {}])
+      expect(authRepo.createAddressBook.mock.calls).toContainEqual([
         expect.objectContaining({
           userId: 1,
           isDefault: true,
         }),
         {},
-      )
+      ])
       expect(res).toEqual({ id: 1, isDefault: true })
     })
 
     it('cập nhật địa chỉ mặc định sẽ bỏ mặc định các địa chỉ khác', async () => {
       authRepo.findAddressBookByIdForUser.mockResolvedValue({ id: 10, userId: 1 } as any)
       authRepo.updateAddressBook.mockResolvedValue({ id: 10, isDefault: true } as any)
-      prismaService.$transaction.mockImplementation(async (callback: any) => callback({}))
+      prismaService.$transaction.mockImplementation((callback: TransactionCallback) => callback({}))
 
       const res = await service.updateAddressBook(1, 10, {
         isDefault: true,
         label: 'Office',
       })
 
-      expect(authRepo.clearDefaultAddressBooks).toHaveBeenCalledWith(1, 10, {})
-      expect(authRepo.updateAddressBook).toHaveBeenCalledWith(
+      expect(authRepo.clearDefaultAddressBooks.mock.calls).toContainEqual([1, 10, {}])
+      expect(authRepo.updateAddressBook.mock.calls).toContainEqual([
         10,
         expect.objectContaining({
           isDefault: true,
           label: 'Office',
         }),
         {},
-      )
+      ])
       expect(res).toEqual({ id: 10, isDefault: true })
     })
 
     it('xóa địa chỉ mặc định sẽ gán mặc định cho địa chỉ tiếp theo', async () => {
       authRepo.findAddressBookByIdForUser.mockResolvedValue({ id: 10, userId: 1, isDefault: true } as any)
       authRepo.findFirstActiveAddressBookByUserId.mockResolvedValue({ id: 11 } as any)
-      prismaService.$transaction.mockImplementation(async (callback: any) => callback({}))
+      prismaService.$transaction.mockImplementation((callback: TransactionCallback) => callback({}))
 
       const res = await service.deleteAddressBook(1, 10)
 
-      expect(authRepo.updateAddressBook).toHaveBeenNthCalledWith(
-        1,
+      expect(authRepo.updateAddressBook.mock.calls[0]).toEqual([
         10,
         expect.objectContaining({
           isDefault: false,
           deletedAt: expect.any(Date),
         }),
         {},
-      )
-      expect(authRepo.updateAddressBook).toHaveBeenNthCalledWith(
-        2,
+      ])
+      expect(authRepo.updateAddressBook.mock.calls[1]).toEqual([
         11,
         {
           isDefault: true,
         },
         {},
-      )
+      ])
       expect(res).toEqual({
         message: 'Xóa địa chỉ thành công',
       })
@@ -264,7 +269,7 @@ describe('AuthService', () => {
 
       expect(res).toMatchObject({ id: 1, email: 'test@mail.com' })
       expect(RegisterResSchema.safeParse(res).success).toBe(true)
-      expect(prismaService.$transaction).toHaveBeenCalled()
+      expect(prismaService.$transaction.mock.calls.length).toBeGreaterThan(0)
     })
 
     it('văng UnprocessableEntityException do mã OTP không hợp lệ', async () => {
@@ -353,8 +358,8 @@ describe('AuthService', () => {
       await expect(service.sendOTP({ email: 't@t.c', type: TypeOfVerificationCode.FORGOT_PASSWORD })).resolves.toEqual({
         message: 'Nếu email tồn tại, mã OTP đã được gửi',
       })
-      expect(verificationCodeRepo.createVerificationCode).not.toHaveBeenCalled()
-      expect(emailService.sendOTPToEMAIL).not.toHaveBeenCalled()
+      expect(verificationCodeRepo.createVerificationCode.mock.calls).toHaveLength(0)
+      expect(emailService.sendOTPToEMAIL.mock.calls).toHaveLength(0)
     })
 
     it('văng lỗi nếu Gửi Mail Fail qua provider', async () => {
@@ -386,13 +391,15 @@ describe('AuthService', () => {
 
       const res = await service.login({ email: 't@t.c', password: 'password', ip: '1.2.3.4', userAgent: 'Chrome' })
       expect(res).toEqual({ accessToken: 'AT', refreshToken: 'RT' })
-      expect(tokenService.signAccessToken).toHaveBeenCalledWith({
-        userId: 1,
-        deviceId: 10,
-        roleId: 2,
-        roleName: 'CUSTOMER',
-        hubId: 8,
-      })
+      expect(tokenService.signAccessToken.mock.calls).toContainEqual([
+        {
+          userId: 1,
+          deviceId: 10,
+          roleId: 2,
+          roleName: 'CUSTOMER',
+          hubId: 8,
+        },
+      ])
     })
 
     it('Báo lỗi sai email', async () => {
@@ -401,7 +408,7 @@ describe('AuthService', () => {
       await expect(
         service.login({ email: 't@t.c', password: 'password', ip: '1.2.3.4', userAgent: 'Chrome' }),
       ).rejects.toThrow(UnprocessableEntityException)
-      expect(hashingService.compare).toHaveBeenCalled()
+      expect(hashingService.compare.mock.calls.length).toBeGreaterThan(0)
     })
 
     it('Báo lỗi sai mật khẩu', async () => {
@@ -436,15 +443,17 @@ describe('AuthService', () => {
 
       const res = await service.refreshToken({ refreshToken: 'oldRT', userAgent: 'X', ip: '127' })
       expect(res).toEqual({ accessToken: 'newAT', refreshToken: 'newRT' })
-      expect(authRepo.findFirstRefreshTokenIncludeUserRoleByTokens).toHaveBeenCalledWith(expect.any(Array))
-      expect(tokenService.signAccessToken).toHaveBeenCalledWith({
-        userId: 1,
-        deviceId: 10,
-        roleId: 2,
-        roleName: 'CUST',
-        hubId: 6,
-      })
-      expect(prismaService.$transaction).toHaveBeenCalled() // Ensure the database rotated the code
+      expect(authRepo.findFirstRefreshTokenIncludeUserRoleByTokens.mock.calls[0]?.[0]).toEqual(expect.any(Array))
+      expect(tokenService.signAccessToken.mock.calls).toContainEqual([
+        {
+          userId: 1,
+          deviceId: 10,
+          roleId: 2,
+          roleName: 'CUST',
+          hubId: 6,
+        },
+      ])
+      expect(prismaService.$transaction.mock.calls.length).toBeGreaterThan(0)
     })
 
     it('văng Unauthorized khi db k thấy RT cũ (tức là đã revoke)', async () => {
@@ -471,14 +480,16 @@ describe('AuthService', () => {
       })
 
       expect(res).toEqual({ accessToken: 'AT', refreshToken: 'RT' })
-      expect(authRepo.findUnique).toHaveBeenCalledWith({ id: 4 })
-      expect(tokenService.signAccessToken).toHaveBeenCalledWith({
-        userId: 4,
-        deviceId: 9,
-        roleId: 4,
-        roleName: 'WAREHOUSE_STAFF',
-        hubId: 12,
-      })
+      expect(authRepo.findUnique.mock.calls).toContainEqual([{ id: 4 }])
+      expect(tokenService.signAccessToken.mock.calls).toContainEqual([
+        {
+          userId: 4,
+          deviceId: 9,
+          roleId: 4,
+          roleName: 'WAREHOUSE_STAFF',
+          hubId: 12,
+        },
+      ])
     })
   })
 
@@ -489,8 +500,8 @@ describe('AuthService', () => {
       authRepo.deleteRefreshToken.mockResolvedValue({ deviceId: 10 } as any)
 
       const res = await service.logout('RT')
-      expect(res.message).toBe('Đăng Xuất Thành Công')
-      expect(authRepo.updateDevice).toHaveBeenCalledWith(10, { isActive: false })
+      expect(res).toMatchObject({ message: 'Đăng Xuất Thành Công' })
+      expect(authRepo.updateDevice.mock.calls).toContainEqual([10, { isActive: false }])
     })
 
     it('văng Unauthorized nếu token k hợp lệ', async () => {
@@ -513,7 +524,7 @@ describe('AuthService', () => {
         confirmNewPassword: 'NEW',
       })
       expect(res.message).toBe('Đổi Mật Khẩu Thành Công')
-      expect(prismaService.$transaction).toHaveBeenCalled()
+      expect(prismaService.$transaction.mock.calls.length).toBeGreaterThan(0)
     })
 
     it('thất bại do email k tồn tại', async () => {

@@ -43,8 +43,16 @@ export const FleetPerformanceResSchema = z.array(
   }),
 )
 
+export const SlaAnalyticsResSchema = z.object({
+  activeAlerts: z.number(),
+  avgDelayMinutes: z.number(),
+  breachedOrders: z.number(),
+  resolvedAlerts: z.number(),
+})
+
 export type GetAnalyticsQueryType = z.infer<typeof GetAnalyticsQuerySchema>
 export type DashboardSummaryResType = z.infer<typeof DashboardSummaryResSchema>
 export type OrderAnalyticsResType = z.infer<typeof OrderAnalyticsResSchema>
 export type EmissionsAnalyticsResType = z.infer<typeof EmissionsAnalyticsResSchema>
 export type FleetPerformanceResType = z.infer<typeof FleetPerformanceResSchema>
+export type SlaAnalyticsResType = z.infer<typeof SlaAnalyticsResSchema>

@@ -1,5 +1,6 @@
 import { STOP_TYPE, TRIP_STATUS } from 'src/common/constants/trip.constant'
 import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
+import { DecimalNumberSchema } from 'src/common/utils/decimal.util'
 import { ProofOfDeliveryInputSchema } from 'src/modules/tracking/model/tracking.model'
 import { DriverAssignmentRequestStatus } from 'src/common/constants/driver-assignment-request.constant'
 import z from 'zod'
@@ -38,8 +39,29 @@ export const TripSchema = z.object({
 
 // DTO Response sau khi đã lược bỏ dữ liệu nhạy cảm hoặc join data
 export const TripResponseSchema = TripSchema.extend({
-  stops: z.array(TripStopSchema).optional(),
-})
+  stops: z.array(TripStopSchema.passthrough()).optional(),
+  driver: z
+    .object({
+      avatar: z.string().nullable().optional(),
+      fullName: z.string(),
+      id: z.number().int().positive(),
+    })
+    .passthrough()
+    .optional(),
+  driverName: z.string().optional(),
+  orderCount: z.number().int().nonnegative().optional(),
+  vehicle: z
+    .object({
+      hubId: z.number().int().positive().nullable().optional(),
+      id: z.number().int().positive(),
+      isActive: z.boolean().optional(),
+      licensePlate: z.string(),
+      type: z.string().optional(),
+    })
+    .passthrough()
+    .optional(),
+  vehicleLicensePlate: z.string().optional(),
+}).passthrough()
 
 // Query Params
 export const GetTripListQuerySchema = PaginationQuerySchema.extend({
@@ -100,7 +122,16 @@ export const DispatchPreviewQuerySchema = z.object({
 })
 
 export const DispatchBoardQuerySchema = z.object({
+  driversLimit: z.coerce.number().int().positive().max(500).default(200),
   hubId: z.coerce.number().int().positive().optional(),
+  ordersLimit: z.coerce.number().int().positive().max(500).default(100),
+  pendingTripsLimit: z.coerce.number().int().positive().max(200).default(50),
+  vehiclesLimit: z.coerce.number().int().positive().max(500).default(200),
+})
+
+export const DriverDispatchBoardQuerySchema = z.object({
+  assignableOrdersLimit: z.coerce.number().int().positive().max(500).default(100),
+  requestsLimit: z.coerce.number().int().positive().max(100).default(12),
 })
 
 const DispatchBoardOrderSchema = z.object({
@@ -110,8 +141,8 @@ const DispatchBoardOrderSchema = z.object({
   receiverAddress: z.string().nullable().optional(),
   senderAddress: z.string().nullable().optional(),
   status: z.string(),
-  totalVolume: z.number(),
-  totalWeight: z.number(),
+  totalVolume: DecimalNumberSchema,
+  totalWeight: DecimalNumberSchema,
 })
 
 const DispatchBoardDriverSchema = z.object({
@@ -126,8 +157,8 @@ const DispatchBoardDriverSchema = z.object({
 const DispatchBoardVehicleSchema = z.object({
   activeTripId: z.number().int().positive().nullable().optional(),
   activeTripStatus: TripStatusSchema.nullable().optional(),
-  capacityVolume: z.number(),
-  capacityWeight: z.number(),
+  capacityVolume: DecimalNumberSchema,
+  capacityWeight: DecimalNumberSchema,
   id: z.number().int().positive(),
   isAvailable: z.boolean(),
   licensePlate: z.string(),
@@ -193,15 +224,22 @@ const DriverAssignableOrderSchema = z.object({
   senderLat: z.number().nullable().optional(),
   senderLng: z.number().nullable().optional(),
   status: z.string(),
-  totalVolume: z.number(),
-  totalWeight: z.number(),
+  totalVolume: DecimalNumberSchema,
+  totalWeight: DecimalNumberSchema,
   trackingCode: z.string().nullable().optional(),
 })
 
 export const DriverDispatchBoardResSchema = z.object({
   activeTrip: DriverAssignmentTripSummarySchema.nullable(),
   assignableOrders: z.array(DriverAssignableOrderSchema),
+  hasMore: z
+    .object({
+      assignableOrders: z.boolean(),
+      requests: z.boolean(),
+    })
+    .optional(),
   hubId: z.number().int().positive().nullable(),
+  limits: DriverDispatchBoardQuerySchema.optional(),
   requests: z.array(DriverAssignmentRequestSchema),
   summary: z.object({
     activeTripCount: z.number().int().nonnegative(),
@@ -239,7 +277,16 @@ export const AssignmentRequestInboxResSchema = z.object({
 export const DispatchBoardResSchema = z.object({
   dispatchableOrders: z.array(DispatchBoardOrderSchema),
   drivers: z.array(DispatchBoardDriverSchema),
+  hasMore: z
+    .object({
+      dispatchableOrders: z.boolean(),
+      drivers: z.boolean(),
+      pendingTrips: z.boolean(),
+      vehicles: z.boolean(),
+    })
+    .optional(),
   hubId: z.number().int().positive(),
+  limits: DispatchBoardQuerySchema.omit({ hubId: true }).optional(),
   pendingTrips: z.array(DispatchBoardPendingTripSchema),
   summary: z.object({
     availableDriverCount: z.number().int().nonnegative(),
@@ -307,6 +354,7 @@ export type AssignVehicleType = z.infer<typeof AssignVehicleSchema>
 export type AddOrdersToTripType = z.infer<typeof AddOrdersToTripSchema>
 export type DispatchPreviewQueryType = z.infer<typeof DispatchPreviewQuerySchema>
 export type DispatchBoardQueryType = z.infer<typeof DispatchBoardQuerySchema>
+export type DriverDispatchBoardQueryType = z.infer<typeof DriverDispatchBoardQuerySchema>
 export type DispatchBoardResType = z.infer<typeof DispatchBoardResSchema>
 export type DispatchApproveType = z.infer<typeof DispatchApproveSchema>
 export type UpdateTripStatusType = z.infer<typeof UpdateTripStatusSchema>
@@ -324,4 +372,3 @@ export type ManualCreateTripType = CreateManualTripType
 export type GetTripsQueryType = GetTripListQueryType
 export type ReassignTripVehicleType = AssignVehicleType
 export type CancelTripBodyType = { reason?: string }
-

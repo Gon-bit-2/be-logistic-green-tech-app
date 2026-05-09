@@ -1,8 +1,10 @@
+import type { RoleNameType } from '../constants/role.constant'
+
 export interface IAccessTokenPayload {
   userId: number
   deviceId: number
   roleId: number
-  roleName: string
+  roleName: RoleNameType
   hubId?: number | null
 }
 export interface AccessTokenPayload extends IAccessTokenPayload {

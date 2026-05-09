@@ -7,10 +7,14 @@ import {
   AssignVehicleType,
   CreateDriverAssignmentRequestType,
   CreateManualTripType,
+  DispatchBoardQuerySchema,
   DispatchBoardResType,
   DispatchApproveType,
+  DispatchBoardQueryType,
   DriverAssignmentRequestListResType,
   DriverAssignmentRequestResType,
+  DriverDispatchBoardQuerySchema,
+  DriverDispatchBoardQueryType,
   DriverDispatchBoardResType,
   GetTripListQueryType,
   RejectDriverAssignmentRequestType,
@@ -75,13 +79,19 @@ export class TripsService {
   // ========================
 
   /** Lấy bảng điều phối cho Admin/Staff */
-  async getDispatchBoard(requestedHubId: number | undefined, actor: AccessTokenPayload): Promise<DispatchBoardResType> {
-    return this.dispatchBoardService.getDispatchBoard(requestedHubId, actor)
+  async getDispatchBoard(
+    query: Partial<DispatchBoardQueryType> | undefined,
+    actor: AccessTokenPayload,
+  ): Promise<DispatchBoardResType> {
+    return this.dispatchBoardService.getDispatchBoard(DispatchBoardQuerySchema.parse(query ?? {}), actor)
   }
 
   /** Lấy bảng điều phối cho Driver */
-  async getDriverDispatchBoard(actor: AccessTokenPayload): Promise<DriverDispatchBoardResType> {
-    return this.dispatchBoardService.getDriverDispatchBoard(actor)
+  async getDriverDispatchBoard(
+    query: Partial<DriverDispatchBoardQueryType> | undefined,
+    actor: AccessTokenPayload,
+  ): Promise<DriverDispatchBoardResType> {
+    return this.dispatchBoardService.getDriverDispatchBoard(DriverDispatchBoardQuerySchema.parse(query ?? {}), actor)
   }
 
   // ========================

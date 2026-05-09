@@ -5,6 +5,7 @@ const roleName = {
   WAREHOUSE_STAFF: 'WAREHOUSE_STAFF',
 } as const
 export default roleName
+export type RoleNameType = (typeof roleName)[keyof typeof roleName]
 
 export const HTTPMethod = {
   GET: 'GET',
