@@ -1,5 +1,6 @@
 import { STOP_TYPE, TRIP_STATUS } from 'src/common/constants/trip.constant'
 import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
+import { IsoDateTimeCodec } from 'src/common/utils/date-codec.util'
 import { DecimalNumberSchema } from 'src/common/utils/decimal.util'
 import { ProofOfDeliveryInputSchema } from 'src/modules/tracking/model/tracking.model'
 import { DriverAssignmentRequestStatus } from 'src/common/constants/driver-assignment-request.constant'
@@ -21,8 +22,8 @@ export const TripStopSchema = z.object({
   hubId: z.number().nullable().optional(),
   stopSequence: z.number().int().positive(),
   stopType: StopTypeSchema,
-  expectedArrivalTime: z.date().nullable().optional(),
-  actualArrivalTime: z.date().nullable().optional(),
+  expectedArrivalTime: IsoDateTimeCodec.nullable().optional(),
+  actualArrivalTime: IsoDateTimeCodec.nullable().optional(),
 })
 
 export const TripSchema = z.object({
@@ -30,11 +31,11 @@ export const TripSchema = z.object({
   vehicleId: z.number(),
   driverId: z.number(),
   status: TripStatusSchema,
-  startTime: z.date().nullable().optional(),
-  endTime: z.date().nullable().optional(),
+  startTime: IsoDateTimeCodec.nullable().optional(),
+  endTime: IsoDateTimeCodec.nullable().optional(),
   totalDistance: z.number().nullable().optional(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: IsoDateTimeCodec,
+  updatedAt: IsoDateTimeCodec,
 })
 
 // DTO Response sau khi đã lược bỏ dữ liệu nhạy cảm hoặc join data
@@ -203,17 +204,17 @@ const DriverAssignmentRequestSchema = z.object({
   driverName: z.string(),
   hubId: z.number().int().positive(),
   reviewNote: z.string().nullable().optional(),
-  reviewedAt: z.date().nullable().optional(),
+  reviewedAt: IsoDateTimeCodec.nullable().optional(),
   reviewedById: z.number().int().positive().nullable().optional(),
   status: DriverAssignmentRequestStatusSchema,
-  createdAt: z.date(),
+  createdAt: IsoDateTimeCodec,
   trip: DriverAssignmentTripSummarySchema.nullable().optional(),
 })
 
 const DriverAssignableOrderSchema = z.object({
   id: z.number().int().positive(),
-  preferredDeliveryTimeEnd: z.date().nullable().optional(),
-  preferredDeliveryTimeStart: z.date().nullable().optional(),
+  preferredDeliveryTimeEnd: IsoDateTimeCodec.nullable().optional(),
+  preferredDeliveryTimeStart: IsoDateTimeCodec.nullable().optional(),
   receiverAddress: z.string().nullable().optional(),
   receiverLat: z.number().nullable().optional(),
   receiverLng: z.number().nullable().optional(),
@@ -304,8 +305,8 @@ export const DispatchApproveStopSchema = z.object({
   hubId: z.number().int().positive().nullable().optional(),
   stopSequence: z.number().int().positive(),
   stopType: StopTypeSchema,
-  expectedArrivalTime: z.coerce.date().nullable().optional(),
-  actualArrivalTime: z.coerce.date().nullable().optional(),
+  expectedArrivalTime: IsoDateTimeCodec.nullable().optional(),
+  actualArrivalTime: IsoDateTimeCodec.nullable().optional(),
 })
 
 export const DispatchApproveSchema = z.object({

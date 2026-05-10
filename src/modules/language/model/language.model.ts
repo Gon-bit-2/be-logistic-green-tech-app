@@ -1,4 +1,5 @@
 import z from 'zod'
+import { IsoDateTimeCodec } from 'src/common/utils/date-codec.util'
 
 export const languageSchema = z.object({
   id: z.string(),
@@ -6,9 +7,9 @@ export const languageSchema = z.object({
   code: z.string(),
   createdById: z.number().nullable(),
   updatedById: z.number().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  deletedAt: z.date().nullable(),
+  createdAt: IsoDateTimeCodec,
+  updatedAt: IsoDateTimeCodec,
+  deletedAt: IsoDateTimeCodec.nullable(),
 })
 
 export const GetLanguageResSchema = z.object({

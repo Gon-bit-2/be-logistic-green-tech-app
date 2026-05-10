@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { DecimalNumberSchema } from 'src/common/utils/decimal.util'
+import { IsoDateTimeCodec } from 'src/common/utils/date-codec.util'
 
 export const PaymentMethodSchema = z.enum(['STRIPE', 'COD'])
 export const PaymentStatusSchema = z.enum(['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED'])
@@ -19,8 +20,8 @@ export const PaymentResponseSchema = z.object({
   method: PaymentMethodSchema,
   status: PaymentStatusSchema,
   transactionId: z.string().nullable(),
-  paidAt: z.date().nullable(),
-  createdAt: z.date(),
+  paidAt: IsoDateTimeCodec.nullable(),
+  createdAt: IsoDateTimeCodec,
 })
 
 export const CreatePaymentIntentResSchema = z.object({

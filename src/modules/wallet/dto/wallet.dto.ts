@@ -22,7 +22,7 @@ export type CreateSettlementBatchDto = z.infer<typeof CreateSettlementBatchSchem
 export type CompleteSettlementBatchDto = z.infer<typeof CompleteSettlementBatchSchema>
 export type DisputeSettlementBatchDto = z.infer<typeof DisputeSettlementBatchSchema>
 
-export class WalletResponseDto extends createZodDto(WalletResponseSchema) {}
-export class OutstandingCodOrderListDto extends createZodDto(OutstandingCodOrderListSchema) {}
-export class CodSettlementBatchResponseDto extends createZodDto(CodSettlementBatchResponseSchema) {}
-export class SettlementBatchListResponseDto extends createZodDto(SettlementBatchListResponseSchema) {}
+export class WalletResponseDto extends createZodDto(WalletResponseSchema, { codec: true }) {}
+export class OutstandingCodOrderListDto extends createZodDto(OutstandingCodOrderListSchema, { codec: true }) {}
+export class CodSettlementBatchResponseDto extends createZodDto(CodSettlementBatchResponseSchema, { codec: true }) {}
+export class SettlementBatchListResponseDto extends createZodDto(SettlementBatchListResponseSchema, { codec: true }) {}

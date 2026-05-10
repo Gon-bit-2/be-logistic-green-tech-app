@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { IsoDateTimeCodec } from 'src/common/utils/date-codec.util'
 import { DecimalNumberSchema } from 'src/common/utils/decimal.util'
 
 export const CalculationMethodSchema = z.enum(['HAVERSINE', 'GPS_ACTUAL', 'MANUAL', 'TRIP_TOTAL_DISTANCE'])
@@ -23,7 +24,7 @@ export const EmissionLogResponseSchema = z.object({
   fuelType: z.string(),
   calculationMethod: z.string(),
   ghgScope: z.number(),
-  calculatedAt: z.date(),
+  calculatedAt: IsoDateTimeCodec,
 })
 
 export const OrderAllocationResponseSchema = z.object({
@@ -35,12 +36,12 @@ export const OrderAllocationResponseSchema = z.object({
 
 export const EmissionAllocationResponseSchema = OrderAllocationResponseSchema.extend({
   allocationMethod: z.string(),
-  calculatedAt: z.date().optional(),
-  createdAt: z.date().optional(),
+  calculatedAt: IsoDateTimeCodec.optional(),
+  createdAt: IsoDateTimeCodec.optional(),
   emissionLogId: z.number().int().positive().optional(),
   id: z.number().int().positive().optional(),
   tripId: z.number().int().positive().optional(),
-  updatedAt: z.date().optional(),
+  updatedAt: IsoDateTimeCodec.optional(),
 }).passthrough()
 
 export const EmissionLogWithAllocationsResponseSchema = EmissionLogResponseSchema.extend({
@@ -73,7 +74,7 @@ export const OrderFootprintResSchema = z.object({
       allocatedCo2: z.number(),
       allocatedCo2Saved: z.number(),
       allocationMethod: z.string(),
-      calculatedAt: z.date(),
+      calculatedAt: IsoDateTimeCodec,
       emissionLogId: z.number().int().positive(),
       tripId: z.number().int().positive(),
       weightRatio: z.number().nullable(),

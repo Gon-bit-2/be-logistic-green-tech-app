@@ -9,6 +9,6 @@ import {
 
 export class LanguageBodyDto extends createZodDto(CreateLanguageSchema) {}
 export class LanguageUpdateBodyDto extends createZodDto(UpdateLanguageSchema) {}
-export class GetLanguageResDTO extends createZodDto(GetLanguageResSchema) {}
+export class GetLanguageResDTO extends createZodDto(GetLanguageResSchema, { codec: true }) {}
 export class GetLanguageParamsDTO extends createZodDto(GetLanguageParamsSchema) {}
-export class GetLanguageDetailResDTO extends createZodDto(GetLanguageDetailResSchema) {}
+export class GetLanguageDetailResDTO extends createZodDto(GetLanguageDetailResSchema, { codec: true }) {}

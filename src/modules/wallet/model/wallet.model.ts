@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { DecimalNumberSchema } from 'src/common/utils/decimal.util'
+import { IsoDateTimeCodec } from 'src/common/utils/date-codec.util'
 
 export const WalletStatusSchema = z.enum(['ACTIVE', 'BLOCKED'])
 export const TransactionTypeSchema = z.enum([
@@ -15,8 +16,8 @@ export const CodSettlementBatchStatusSchema = z.enum(['DRAFT', 'SUBMITTED', 'COM
 export const CodSettlementItemStatusSchema = z.enum(['PENDING', 'COMPLETED', 'DISPUTED', 'CANCELLED'])
 
 const DateRangeSchema = z.object({
-  from: z.coerce.date().optional(),
-  to: z.coerce.date().optional(),
+  from: IsoDateTimeCodec.optional(),
+  to: IsoDateTimeCodec.optional(),
 })
 
 export const AddCodSchema = z.object({
@@ -71,13 +72,13 @@ export const WalletResponseSchema = z.object({
   balance: DecimalNumberSchema,
   codCollected: DecimalNumberSchema,
   status: WalletStatusSchema,
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: IsoDateTimeCodec,
+  updatedAt: IsoDateTimeCodec,
 })
 
 export const OutstandingCodOrderSchema = z.object({
   amount: z.number(),
-  collectedAt: z.date(),
+  collectedAt: IsoDateTimeCodec,
   orderId: z.number().int().positive(),
   trackingCode: z.string(),
   transactionId: z.number().int().positive(),
@@ -89,14 +90,14 @@ export const CodSettlementItemResponseSchema = z
   .object({
     amount: DecimalNumberSchema,
     batchId: z.number().int().positive(),
-    createdAt: z.date(),
+    createdAt: IsoDateTimeCodec,
     disputeReason: z.string().nullable().optional(),
     id: z.number().int().positive(),
     order: z
       .object({
         codAmount: DecimalNumberSchema.nullable().optional(),
-        codCollectedAt: z.date().nullable().optional(),
-        codReconciledAt: z.date().nullable().optional(),
+        codCollectedAt: IsoDateTimeCodec.nullable().optional(),
+        codReconciledAt: IsoDateTimeCodec.nullable().optional(),
         id: z.number().int().positive(),
         payment: z
           .object({
@@ -121,19 +122,19 @@ export const CodSettlementItemResponseSchema = z
       .nullable()
       .optional(),
     transactionId: z.number().int().positive().nullable().optional(),
-    updatedAt: z.date(),
+    updatedAt: IsoDateTimeCodec,
   })
   .passthrough()
 
 export const CodSettlementBatchResponseSchema = z
   .object({
     batchCode: z.string(),
-    cancelledAt: z.date().nullable().optional(),
-    completedAt: z.date().nullable().optional(),
+    cancelledAt: IsoDateTimeCodec.nullable().optional(),
+    completedAt: IsoDateTimeCodec.nullable().optional(),
     completedById: z.number().int().positive().nullable().optional(),
-    createdAt: z.date(),
+    createdAt: IsoDateTimeCodec,
     createdById: z.number().int().positive(),
-    disputedAt: z.date().nullable().optional(),
+    disputedAt: IsoDateTimeCodec.nullable().optional(),
     driver: z
       .object({
         fullName: z.string(),
@@ -148,9 +149,9 @@ export const CodSettlementBatchResponseSchema = z
     note: z.string().nullable().optional(),
     orderCount: z.number().int().nonnegative(),
     status: CodSettlementBatchStatusSchema,
-    submittedAt: z.date().nullable().optional(),
+    submittedAt: IsoDateTimeCodec.nullable().optional(),
     totalAmount: DecimalNumberSchema,
-    updatedAt: z.date(),
+    updatedAt: IsoDateTimeCodec,
   })
   .passthrough()
 

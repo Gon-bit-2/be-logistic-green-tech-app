@@ -3,6 +3,7 @@ import roleName from 'src/common/constants/role.constant'
 import { NotificationType } from 'src/common/constants/notification.constant'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
 import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
+import { IsoDateTimeCodec } from 'src/common/utils/date-codec.util'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import { DriverAssignmentRequestStatus } from 'src/common/constants/driver-assignment-request.constant'
 
@@ -77,8 +78,8 @@ export const NotificationSchema = z.object({
   message: z.string().min(1).max(1000),
   payload: z.union([NotificationPayloadSchema, z.record(z.string(), z.unknown())]).nullable(),
   isRead: z.boolean(),
-  readAt: z.date().nullable(),
-  createdAt: z.date(),
+  readAt: IsoDateTimeCodec.nullable(),
+  createdAt: IsoDateTimeCodec,
 })
 
 export const GetNotificationsQuerySchema = PaginationQuerySchema.extend({
