@@ -13,6 +13,6 @@ export class CreateRoleRequestBodyDTO extends createZodDto(CreateRoleRequestBody
 export class ApproveRoleRequestBodyDTO extends createZodDto(ApproveRoleRequestBodySchema) {}
 export class RejectRoleRequestBodyDTO extends createZodDto(RejectRoleRequestBodySchema) {}
 export class GetRoleRequestsQueryDTO extends createZodDto(GetRoleRequestsQuerySchema) {}
-export class GetRoleRequestsResDTO extends createZodDto(GetRoleRequestsResSchema) {}
-export class RoleRequestItemDTO extends createZodDto(RoleRequestItemSchema) {}
+export class GetRoleRequestsResDTO extends createZodDto(GetRoleRequestsResSchema, { codec: true }) {}
+export class RoleRequestItemDTO extends createZodDto(RoleRequestItemSchema, { codec: true }) {}
 export class RoleRequestParamsDTO extends createZodDto(RoleRequestParamsSchema) {}

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
+import { IsoDateTimeCodec } from 'src/common/utils/date-codec.util'
 import {
   TRACKING_EVENT_TYPE,
   EVENT_SOURCE,
@@ -97,7 +98,7 @@ export const CreateTrackingEventSchema = z
     failureReasonCode: FailureReasonCodeSchema.optional(),
     attemptNumber: z.number().int().min(1).max(5).optional(),
 
-    occurredAt: z.coerce.date().optional(),
+    occurredAt: IsoDateTimeCodec.optional(),
 
     pod: ProofOfDeliveryInputSchema.optional(),
   })
@@ -166,8 +167,8 @@ export const TrackingEventResponseSchema = z.object({
   source: EventSourceSchema,
   failureReasonCode: FailureReasonCodeSchema.nullable(),
   attemptNumber: z.number().nullable(),
-  occurredAt: z.date(),
-  recordedAt: z.date(),
+  occurredAt: IsoDateTimeCodec,
+  recordedAt: IsoDateTimeCodec,
   createdById: z.number().nullable(),
   pod: ProofOfDeliveryResponseSchema.nullable().optional(),
 })
@@ -177,8 +178,8 @@ export const TrackingTimelineResponseSchema = z.object({
   currentStatus: OrderStatusSchema,
   eta: z
     .object({
-      actualArrivalTime: z.date().nullable(),
-      expectedArrivalTime: z.date(),
+      actualArrivalTime: IsoDateTimeCodec.nullable(),
+      expectedArrivalTime: IsoDateTimeCodec,
       tripId: z.number(),
     })
     .nullable()
@@ -192,7 +193,7 @@ export const PublicTrackingEventResponseSchema = z.object({
   status: OrderStatusSchema.nullable(),
   location: z.string().nullable(),
   description: z.string().nullable(),
-  occurredAt: z.date(),
+  occurredAt: IsoDateTimeCodec,
   pod: z
     .object({
       receiverName: z.string(),

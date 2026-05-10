@@ -1,6 +1,7 @@
 import z from 'zod'
 import { FuelType, VehicleType } from 'src/common/constants/vehicle.constant'
 import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
+import { IsoDateTimeCodec } from 'src/common/utils/date-codec.util'
 
 export const VehicleSchema = z.object({
   id: z.number(),
@@ -13,9 +14,9 @@ export const VehicleSchema = z.object({
   imageUrl: z.string().url().nullable(), // URL ảnh đại diện xe (Cloudinary)
   isActive: z.boolean(),
   hubId: z.number().int().positive().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  deletedAt: z.date().nullable(),
+  createdAt: IsoDateTimeCodec,
+  updatedAt: IsoDateTimeCodec,
+  deletedAt: IsoDateTimeCodec.nullable(),
   deletedById: z.number().nullable(),
   createdById: z.number().nullable(),
   updatedById: z.number().nullable(),

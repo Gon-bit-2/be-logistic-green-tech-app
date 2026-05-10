@@ -8,14 +8,14 @@ import {
   TrackingTimelineResponseSchema,
 } from '../model/tracking.model'
 
-export class CreateTrackingEventDto extends createZodDto(CreateTrackingEventSchema) {}
+export class CreateTrackingEventDto extends createZodDto(CreateTrackingEventSchema, { codec: true }) {}
 
 export class GetTrackingTimelineQueryDto extends createZodDto(GetTrackingTimelineQuerySchema) {}
 
 export class GetPublicTrackingParamsDto extends createZodDto(GetPublicTrackingParamsSchema) {}
 
-export class TrackingEventResponseDto extends createZodDto(TrackingEventResponseSchema) {}
+export class TrackingEventResponseDto extends createZodDto(TrackingEventResponseSchema, { codec: true }) {}
 
-export class TrackingTimelineResponseDto extends createZodDto(TrackingTimelineResponseSchema) {}
+export class TrackingTimelineResponseDto extends createZodDto(TrackingTimelineResponseSchema, { codec: true }) {}
 
-export class PublicTrackingTimelineResponseDto extends createZodDto(PublicTrackingTimelineResponseSchema) {}
+export class PublicTrackingTimelineResponseDto extends createZodDto(PublicTrackingTimelineResponseSchema, { codec: true }) {}

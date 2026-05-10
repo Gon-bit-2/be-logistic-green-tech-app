@@ -12,21 +12,21 @@ import {
   OrderQuoteResSchema,
 } from '../model/order.model'
 
-export class OrderQuoteBodyDto extends createZodDto(OrderQuoteBodySchema) {}
+export class OrderQuoteBodyDto extends createZodDto(OrderQuoteBodySchema, { codec: true }) {}
 export class OrderQuoteResDto extends createZodDto(OrderQuoteResSchema) {}
 
-export class CreateOrderDto extends createZodDto(CreateOrderBodySchema) {}
+export class CreateOrderDto extends createZodDto(CreateOrderBodySchema, { codec: true }) {}
 
 export class GetOrderListDto extends createZodDto(GetOrderListQuerySchema) {}
 
-export class GetOrderListResDto extends createZodDto(GetOrderListResSchema) {}
+export class GetOrderListResDto extends createZodDto(GetOrderListResSchema, { codec: true }) {}
 
-export class GetOrderDetailDto extends createZodDto(GetOrderDetailResSchema) {}
+export class GetOrderDetailDto extends createZodDto(GetOrderDetailResSchema, { codec: true }) {}
 
-export class CancelOrderResDto extends createZodDto(CancelOrderResSchema) {}
+export class CancelOrderResDto extends createZodDto(CancelOrderResSchema, { codec: true }) {}
 
 export class UpdateOrderStatusDto extends createZodDto(UpdateOrderStatusSchema) {}
 
 export class GetOrderParamsDto extends createZodDto(GetOrderParamsSchema) {}
 
-export class CreateOrderResDto extends createZodDto(CreateOrderBodyResSchema) {}
+export class CreateOrderResDto extends createZodDto(CreateOrderBodyResSchema, { codec: true }) {}

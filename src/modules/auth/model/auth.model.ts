@@ -1,4 +1,5 @@
 import { TypeOfVerificationCode } from 'src/common/constants/auth.constant'
+import { IsoDateTimeCodec } from 'src/common/utils/date-codec.util'
 import z from 'zod'
 import { PermissionSchema, RoleSchema } from 'src/modules/role/model/role.model'
 
@@ -22,9 +23,9 @@ export const UserSchema = z.object({
   hubId: z.number().positive().nullable(),
   createdById: z.number().nullable(),
   updatedById: z.number().nullable(),
-  deletedAt: z.date().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  deletedAt: IsoDateTimeCodec.nullable(),
+  createdAt: IsoDateTimeCodec,
+  updatedAt: IsoDateTimeCodec,
 })
 
 export type UserType = z.infer<typeof UserSchema>
@@ -69,8 +70,8 @@ export const VerificationCode = z.object({
   email: z.string().email(),
   code: z.string().length(6),
   type: z.enum([TypeOfVerificationCode.REGISTER, TypeOfVerificationCode.FORGOT_PASSWORD, TypeOfVerificationCode.LOGIN]),
-  expiresAt: z.date(),
-  createdAt: z.date(),
+  expiresAt: IsoDateTimeCodec,
+  createdAt: IsoDateTimeCodec,
 })
 export type VerificationCodeType = z.infer<typeof VerificationCode>
 //
@@ -109,8 +110,8 @@ export const RefreshTokenSchema = z.object({
   token: z.string(),
   userId: z.number(),
   deviceId: z.number(),
-  expiresAt: z.date(),
-  createdAt: z.date(),
+  expiresAt: IsoDateTimeCodec,
+  createdAt: IsoDateTimeCodec,
 })
 export type RefreshTokenType = z.infer<typeof RefreshTokenSchema>
 export const RefreshTokenBodySchema = z
@@ -128,8 +129,8 @@ export const DeviceSchema = z.object({
   userId: z.number(),
   userAgent: z.string(),
   ip: z.string(),
-  lastActive: z.date(),
-  createdAt: z.date(),
+  lastActive: IsoDateTimeCodec,
+  createdAt: IsoDateTimeCodec,
   isActive: z.boolean().optional(),
 })
 export type DeviceType = z.infer<typeof DeviceSchema>
@@ -236,9 +237,9 @@ export const AddressBookSchema = z.object({
   latitude: z.number().min(-90).max(90).nullable(),
   longitude: z.number().min(-180).max(180).nullable(),
   isDefault: z.boolean(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  deletedAt: z.date().nullable(),
+  createdAt: IsoDateTimeCodec,
+  updatedAt: IsoDateTimeCodec,
+  deletedAt: IsoDateTimeCodec.nullable(),
 })
 
 export const CreateAddressBookBodySchema = AddressBookSchema.pick({

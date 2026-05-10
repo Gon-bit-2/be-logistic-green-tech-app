@@ -23,7 +23,7 @@ import {
 //Serializer
 
 export class RegisterBodyDTO extends createZodDto(RegisterBodySchema) {}
-export class RegisterResDTO extends createZodDto(RegisterResSchema) {}
+export class RegisterResDTO extends createZodDto(RegisterResSchema, { codec: true }) {}
 export class SendOPTBodyDTO extends createZodDto(SendOTPBodySchema) {}
 export class VerifyOTPBodyDTO extends createZodDto(VerifyOTPBodySchema) {}
 export class LoginBodyDTO extends createZodDto(LoginBodySchema) {}
@@ -36,8 +36,8 @@ export class GoogleSessionBodyDTO extends createZodDto(GoogleSessionBodySchema) 
 export class GoogleSessionResDTO extends createZodDto(GoogleSessionResSchema) {}
 export class ForgotPasswordBodyDTO extends createZodDto(ForgotPasswordBodySchema) {}
 export class UpdateProfileBodyDTO extends createZodDto(UpdateProfileBodySchema) {}
-export class UpdateProfileResDTO extends createZodDto(UpdateProfileResSchema) {}
+export class UpdateProfileResDTO extends createZodDto(UpdateProfileResSchema, { codec: true }) {}
 export class CreateAddressBookBodyDTO extends createZodDto(CreateAddressBookBodySchema) {}
 export class UpdateAddressBookBodyDTO extends createZodDto(UpdateAddressBookBodySchema) {}
-export class AddressBookResDTO extends createZodDto(AddressBookResSchema) {}
-export class AddressBookListResDTO extends createZodDto(AddressBookListResSchema) {}
+export class AddressBookResDTO extends createZodDto(AddressBookResSchema, { codec: true }) {}
+export class AddressBookListResDTO extends createZodDto(AddressBookListResSchema, { codec: true }) {}

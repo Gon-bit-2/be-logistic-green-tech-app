@@ -3,6 +3,7 @@ import roleName from 'src/common/constants/role.constant'
 import { HTTPMethod } from 'src/common/constants/role.constant'
 import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
+import { IsoDateTimeCodec } from 'src/common/utils/date-codec.util'
 
 export const PermissionSchema = z.object({
   id: z.number(),
@@ -20,11 +21,11 @@ export const PermissionSchema = z.object({
     HTTPMethod.HEAD,
   ]),
   createdById: z.number().nullable(),
-  createdAt: z.date(),
+  createdAt: IsoDateTimeCodec,
   updatedById: z.number().nullable(),
-  updatedAt: z.date(),
+  updatedAt: IsoDateTimeCodec,
   deletedById: z.number().nullable(),
-  deletedAt: z.date().nullable(),
+  deletedAt: IsoDateTimeCodec.nullable(),
 })
 
 export const RoleSchema = z.object({
@@ -35,9 +36,9 @@ export const RoleSchema = z.object({
   createdById: z.number().nullable(),
   updatedById: z.number().nullable(),
   deletedById: z.number().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  deletedAt: z.date().nullable(),
+  createdAt: IsoDateTimeCodec,
+  updatedAt: IsoDateTimeCodec,
+  deletedAt: IsoDateTimeCodec.nullable(),
 })
 
 export const RolePermissionSchema = RoleSchema.extend({
@@ -106,10 +107,10 @@ export const RoleRequestItemSchema = z.object({
   status: z.enum([RoleRequestStatus.PENDING, RoleRequestStatus.APPROVED, RoleRequestStatus.REJECTED]),
   reviewNote: z.string().nullable(),
   reviewedById: z.number().int().positive().nullable(),
-  reviewedAt: z.date().nullable(),
+  reviewedAt: IsoDateTimeCodec.nullable(),
   assignedHubId: z.number().int().positive().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: IsoDateTimeCodec,
+  updatedAt: IsoDateTimeCodec,
   requester: RoleRequestRequesterSchema,
   currentRole: RoleRequestRoleSchema,
   targetRole: RoleRequestRoleSchema,

@@ -1,5 +1,6 @@
 import { ORDER_STATUS, SERVICE_TYPE } from 'src/common/constants/order.constant'
 import { PaginationQuerySchema } from 'src/common/dtos/request.dto'
+import { IsoDateTimeCodec } from 'src/common/utils/date-codec.util'
 import { DecimalNumberSchema } from 'src/common/utils/decimal.util'
 import z from 'zod'
 
@@ -51,11 +52,11 @@ export const OrderSchema = z.object({
   estimatedCo2Saved: DecimalNumberSchema.nullable().optional(),
   currentHubId: z.number().nullable().optional(),
   currentTripId: z.number().nullable().optional(),
-  preferredDeliveryTimeStart: z.coerce.date().nullable().optional(),
-  preferredDeliveryTimeEnd: z.coerce.date().nullable().optional(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  deletedAt: z.date().optional(),
+  preferredDeliveryTimeStart: IsoDateTimeCodec.nullable().optional(),
+  preferredDeliveryTimeEnd: IsoDateTimeCodec.nullable().optional(),
+  createdAt: IsoDateTimeCodec,
+  updatedAt: IsoDateTimeCodec,
+  deletedAt: IsoDateTimeCodec.optional(),
   createdById: z.number().optional(),
   updatedById: z.number().optional(),
   deletedById: z.number().optional(),
@@ -74,7 +75,7 @@ export const OrderResponseSchema = OrderSchema.omit({
       amount: DecimalNumberSchema,
       method: PaymentMethodSchema,
       orderId: z.number().int().positive(),
-      paidAt: z.date().nullable().optional(),
+      paidAt: IsoDateTimeCodec.nullable().optional(),
       status: PaymentStatusSchema,
       transactionId: z.string().nullable().optional(),
     })
@@ -123,8 +124,8 @@ export const CreateOrderBodySchema = z.object({
   receiverLat: z.number(),
   receiverLng: z.number(),
 
-  preferredDeliveryTimeStart: z.coerce.date().optional(),
-  preferredDeliveryTimeEnd: z.coerce.date().optional(),
+  preferredDeliveryTimeStart: IsoDateTimeCodec.optional(),
+  preferredDeliveryTimeEnd: IsoDateTimeCodec.optional(),
 
   serviceType: ServiceTypeSchema.default(SERVICE_TYPE.STANDARD),
   paymentMethod: PaymentMethodSchema.default('STRIPE'),
