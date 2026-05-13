@@ -1,0 +1,14 @@
+ node_modules
+ dist
+ .git
+ .gitignore
+ .env
+ .env.*
+ tmp
+ coverage
+ *.log
+ *.md
+ docs
+ generated
+ .codex
+ .agents

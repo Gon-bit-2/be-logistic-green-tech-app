@@ -75,8 +75,10 @@ export class ResourceAccessGuard implements CanActivate {
       hub: async (resourceId) => this.toResourceRecord(await this.prisma.hub.findUnique({ where: { id: resourceId } })),
       order: async (resourceId) =>
         this.toResourceRecord(await this.prisma.order.findUnique({ where: { id: resourceId } })),
-      trip: async (resourceId) => this.toResourceRecord(await this.prisma.trip.findUnique({ where: { id: resourceId } })),
-      user: async (resourceId) => this.toResourceRecord(await this.prisma.user.findUnique({ where: { id: resourceId } })),
+      trip: async (resourceId) =>
+        this.toResourceRecord(await this.prisma.trip.findUnique({ where: { id: resourceId } })),
+      user: async (resourceId) =>
+        this.toResourceRecord(await this.prisma.user.findUnique({ where: { id: resourceId } })),
       vehicle: async (resourceId) =>
         this.toResourceRecord(await this.prisma.vehicle.findUnique({ where: { id: resourceId } })),
     }
