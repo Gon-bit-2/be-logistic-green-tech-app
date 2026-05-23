@@ -28,7 +28,20 @@ type OsrmTripResponse = {
 }
 
 /**
- * Call OSRM Trip API to optimize route (TSP) for given coordinates
+ * Calls OSRM Trip API to optimize route (TSP) for given coordinates.
+ * Gọi OSRM Trip API để tối ưu hóa tuyến đường (TSP) cho các tọa độ được cung cấp.
+ *
+ * Solves the Traveling Salesperson Problem (TSP) by finding the shortest path that visits
+ * all points starting from the first point in the coordinates array.
+ * Giải bài toán người bán hàng du lịch (TSP) bằng cách tìm đường đi ngắn nhất đi qua
+ * tất cả các điểm, bắt đầu từ điểm đầu tiên trong mảng tọa độ.
+ *
+ * @param {RouteCoordinate[]} coordinates - Array of geographic coordinates to optimize.
+ * @param {RouteCoordinate[]} coordinates - Mảng các tọa độ địa lý cần tối ưu hóa.
+ * @param {boolean} [roundtrip=false] - Whether the route must end at the starting coordinate.
+ * @param {boolean} [roundtrip=false] - Tuyến đường có phải quay lại điểm xuất phát hay không.
+ * @returns {Promise<OptimizedRouteResult>} The optimized sequence of waypoints, total distance, duration, and optional polyline geometry.
+ * @returns {Promise<OptimizedRouteResult>} Trình tự các điểm dừng đã tối ưu hóa, tổng khoảng cách, thời gian và polyline tùy chọn.
  */
 export async function optimizeRouteWithOSRM(
   coordinates: RouteCoordinate[],

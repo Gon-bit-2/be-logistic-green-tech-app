@@ -21,6 +21,15 @@ type TripStopForRoute = {
   stopType: string
 }
 
+/**
+ * Service responsible for delivery route optimization.
+ * Utilizes routing clients (like OSRM) to compute the most efficient stopping sequence
+ * and updates stop sequences in a transaction.
+ *
+ * Dịch vụ chịu trách nhiệm tối ưu hóa lộ trình giao hàng.
+ * Sử dụng các routing client (như OSRM) để tính toán thứ tự điểm dừng tối ưu nhất
+ * và cập nhật thứ tự các điểm dừng trong một transaction.
+ */
 @Injectable()
 export class TripRouteOptimizationService {
   constructor(
@@ -28,6 +37,22 @@ export class TripRouteOptimizationService {
     private readonly routingClient: OsrmRoutingClient,
   ) {}
 
+  /**
+   * Optimizes the stopping sequence of a trip based on geographic coordinates.
+   * Calculates total distance and duration, then updates the stop sequences in the database.
+   *
+   * Tối ưu hóa thứ tự điểm dừng của một chuyến đi dựa trên tọa độ địa lý.
+   * Tính toán tổng quãng đường và thời gian, sau đó cập nhật thứ tự điểm dừng trong cơ sở dữ liệu.
+   *
+   * @param tripId The unique identifier of the trip to optimize.
+   *               Mã định danh duy nhất của chuyến đi cần tối ưu.
+   * @returns A promise resolving to the optimization summary, including stops and total distance.
+   *          Một promise trả về tóm tắt kết quả tối ưu, bao gồm các điểm dừng và tổng quãng đường.
+   * @throws {NotFoundException} If the trip is not found.
+   *                             Nếu không tìm thấy chuyến đi.
+   * @throws {BadRequestException} If coordinates are missing or stops are insufficient.
+   *                               Nếu thiếu tọa độ hoặc không đủ điểm dừng.
+   */
   async optimizeRouteForTrip(tripId: number) {
     const trip = await this.prismaService.trip.findUnique({
       where: { id: tripId },
@@ -137,6 +162,16 @@ export class TripRouteOptimizationService {
     }
   }
 
+  /**
+   * Helper function to build a route waypoint from a trip stop.
+   *
+   * Hàm hỗ trợ tạo điểm định vị tuyến đường từ một điểm dừng chuyến đi.
+   *
+   * @param stop The trip stop data.
+   *             Dữ liệu điểm dừng của chuyến đi.
+   * @returns The formatted route waypoint.
+   *          Điểm định vị lộ trình đã được định dạng.
+   */
   private buildStopWaypoint(stop: TripStopForRoute): RouteWaypoint {
     const coordinates = this.resolveStopCoordinates(stop)
     return {
@@ -147,6 +182,18 @@ export class TripRouteOptimizationService {
     }
   }
 
+  /**
+   * Resolves the latitude and longitude coordinates for a given trip stop based on its type.
+   *
+   * Xác định tọa độ vĩ độ và kinh độ cho một điểm dừng cụ thể dựa trên loại điểm dừng.
+   *
+   * @param stop The trip stop to resolve coordinates for.
+   *             Điểm dừng chuyến đi cần xác định tọa độ.
+   * @returns An object containing resolved lat and lng.
+   *          Đối tượng chứa tọa độ vĩ độ và kinh độ đã xác định.
+   * @throws {BadRequestException} If coordinates cannot be determined for the stop type.
+   *                               Nếu không thể xác định tọa độ cho loại điểm dừng này.
+   */
   private resolveStopCoordinates(stop: TripStopForRoute): { lat: number; lng: number } {
     if (stop.stopType === STOP_TYPE.PICKUP) {
       return this.requireCoordinates(stop.order?.senderLat, stop.order?.senderLng, stop.id, 'sender')
@@ -167,6 +214,24 @@ export class TripRouteOptimizationService {
     throw new BadRequestException(`Stop #${stop.id} thiếu tọa độ để tối ưu tuyến đường.`)
   }
 
+  /**
+   * Asserts that coordinates are valid and throws if they are missing or malformed.
+   *
+   * Kiểm tra tọa độ hợp lệ và ném ra lỗi nếu thiếu hoặc không hợp lệ.
+   *
+   * @param lat Latitude value.
+   *            Giá trị vĩ độ.
+   * @param lng Longitude value.
+   *            Giá trị kinh độ.
+   * @param stopId The ID of the stop (for error logging).
+   *               ID của điểm dừng (để ghi nhật ký lỗi).
+   * @param label The label indicating the role of coordinates (e.g., 'sender', 'receiver').
+   *              Nhãn chỉ ra vai trò của tọa độ (ví dụ: 'người gửi', 'người nhận').
+   * @returns An object containing valid lat and lng.
+   *          Đối tượng chứa vĩ độ và kinh độ hợp lệ.
+   * @throws {BadRequestException} If coordinates are invalid.
+   *                               Nếu tọa độ không hợp lệ.
+   */
   private requireCoordinates(
     lat: number | null | undefined,
     lng: number | null | undefined,
@@ -180,6 +245,16 @@ export class TripRouteOptimizationService {
     return { lat, lng }
   }
 
+  /**
+   * Type guard to check if a hub or location object has valid geographic coordinates.
+   *
+   * Type guard kiểm tra đối tượng hub hoặc địa điểm có tọa độ địa lý hợp lệ hay không.
+   *
+   * @param value The location object.
+   *              Đối tượng địa điểm.
+   * @returns True if both latitude and longitude are valid numbers.
+   *          True nếu cả vĩ độ và kinh độ đều là số hợp lệ.
+   */
   private hasCoordinates(value: { latitude: number | null; longitude: number | null } | null | undefined): value is {
     latitude: number
     longitude: number
@@ -187,6 +262,16 @@ export class TripRouteOptimizationService {
     return this.isValidCoordinate(value?.latitude) && this.isValidCoordinate(value?.longitude)
   }
 
+  /**
+   * Validates whether a value is a valid finite coordinate number.
+   *
+   * Xác thực xem giá trị có phải là số tọa độ hữu hạn hợp lệ hay không.
+   *
+   * @param value The value to check.
+   *              Giá trị cần kiểm tra.
+   * @returns True if value is a valid number.
+   *          True nếu giá trị là số hợp lệ.
+   */
   private isValidCoordinate(value: number | null | undefined): value is number {
     return typeof value === 'number' && Number.isFinite(value)
   }

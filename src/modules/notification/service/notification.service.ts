@@ -37,19 +37,62 @@ export type NotificationDispatchResult = {
   userId: number
 }
 
+/**
+ * Service managing user notifications, channel preferences, and domain event dispatches.
+ * Handles database persistence, preference checks, and creates localized in-app notification records.
+ *
+ * Dịch vụ quản lý thông báo của người dùng, thiết lập kênh ưu tiên và phân phối sự kiện nghiệp vụ (domain event).
+ * Xử lý lưu trữ cơ sở dữ liệu, kiểm tra kênh ưu tiên và tạo các bản ghi thông báo in-app được bản địa hóa.
+ */
 @Injectable()
 export class NotificationService {
   constructor(private readonly notificationRepository: NotificationRepository) {}
 
+  /**
+   * Retrieves a paginated list of notifications for a specific user.
+   *
+   * Lấy danh sách các thông báo có phân trang cho một người dùng cụ thể.
+   *
+   * @param userId The unique identifier of the user.
+   *               ID duy nhất của người dùng.
+   * @param query The filter and pagination options.
+   *              Các tùy chọn bộ lọc và phân trang.
+   * @returns A promise resolving to the user's notifications.
+   *          Một promise trả về danh sách thông báo của người dùng.
+   */
   async findAll(userId: number, query: GetNotificationsQueryType) {
     return await this.notificationRepository.findManyByUser(userId, query)
   }
 
+  /**
+   * Retrieves the total count of unread notifications for a specific user.
+   *
+   * Lấy tổng số lượng thông báo chưa đọc của một người dùng cụ thể.
+   *
+   * @param userId The unique identifier of the user.
+   *               ID duy nhất của người dùng.
+   * @returns A promise resolving to the unread count.
+   *          Một promise trả về số lượng chưa đọc.
+   */
   async getUnreadCount(userId: number) {
     const totalUnread = await this.notificationRepository.countUnreadByUser(userId)
     return { totalUnread }
   }
 
+  /**
+   * Marks a specific notification as read.
+   *
+   * Đánh dấu một thông báo cụ thể là đã đọc.
+   *
+   * @param userId The unique identifier of the user.
+   *               ID duy nhất của người dùng.
+   * @param id The unique identifier of the notification.
+   *           Mã định danh duy nhất của thông báo.
+   * @returns A promise resolving to the operation status.
+   *          Một promise trả về trạng thái hoạt động.
+   * @throws {NotFoundException} If the notification is not found.
+   *                             Nếu không tìm thấy thông báo.
+   */
   async markAsRead(userId: number, id: number) {
     const notification = await this.notificationRepository.findByIdForUser(userId, id)
     if (!notification) {
@@ -62,6 +105,16 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Marks all notifications as read for a specific user.
+   *
+   * Đánh dấu tất cả thông báo là đã đọc cho một người dùng cụ thể.
+   *
+   * @param userId The unique identifier of the user.
+   *               ID duy nhất của người dùng.
+   * @returns A promise resolving to the operation status.
+   *          Một promise trả về trạng thái hoạt động.
+   */
   async markAllAsRead(userId: number) {
     await this.notificationRepository.markAllAsRead(userId)
     return {
@@ -69,21 +122,69 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Retrieves the notification channel preferences for a user.
+   *
+   * Lấy các thiết lập kênh thông báo ưu tiên của một người dùng.
+   *
+   * @param userId The unique identifier of the user.
+   *               ID duy nhất của người dùng.
+   * @returns A promise resolving to the list of preferences.
+   *          Một promise trả về danh sách ưu tiên.
+   */
   async getPreferences(userId: number) {
     const data = await this.notificationRepository.listPreferences(userId)
     return { data }
   }
 
+  /**
+   * Updates or inserts notification preferences for a user.
+   *
+   * Cập nhật hoặc chèn mới thiết lập kênh thông báo ưu tiên cho một người dùng.
+   *
+   * @param userId The unique identifier of the user.
+   *               ID duy nhất của người dùng.
+   * @param payload The updated preferences payload.
+   *                Payload chứa các thiết lập ưu tiên được cập nhật.
+   * @returns A promise resolving to the saved preferences.
+   *          Một promise trả về các ưu tiên đã lưu.
+   */
   async updatePreferences(userId: number, payload: UpdateNotificationPreferencesType) {
     const data = await this.notificationRepository.upsertPreferences(userId, payload.preferences)
     return { data }
   }
 
+  /**
+   * Main entrypoint to dispatch a domain event as a set of notifications.
+   * Maps event name to a generic envelope, performs channel preference checks, and triggers pushes.
+   *
+   * Điểm khởi đầu chính để phân phối sự kiện nghiệp vụ dưới dạng một nhóm thông báo.
+   * Ánh xạ tên sự kiện sang một envelope chung, thực hiện kiểm tra ưu tiên kênh, và kích hoạt đẩy.
+   *
+   * @param eventName Name of the domain event.
+   *                  Tên của sự kiện nghiệp vụ.
+   * @param payload The event payload containing context.
+   *                Payload sự kiện chứa ngữ cảnh.
+   * @param attemptCount The current retry attempt count.
+   *                     Số lần thử lại hiện tại.
+   * @returns A promise resolving to dispatch results for each recipient.
+   *          Một promise trả về kết quả phân phối cho từng người nhận.
+   */
   async dispatchDomainEvent(eventName: string, payload: NotificationDomainEvent, attemptCount = 0) {
     const envelope = this.buildEnvelope(eventName, payload)
     return this.createRealtimeNotifications(envelope, attemptCount)
   }
 
+  /**
+   * Creates notifications when a new user role request is submitted.
+   * Target audience is usually Administrators.
+   *
+   * Tạo các thông báo khi có yêu cầu cấp quyền vai trò người dùng mới được gửi.
+   * Đối tượng nhận thông thường là các Quản trị viên (Admin).
+   *
+   * @param input Detailed parameters including recipients, requester, and role.
+   *              Các tham số chi tiết bao gồm người nhận, người yêu cầu và vai trò.
+   */
   async createRoleRequestSubmittedNotifications(input: {
     recipientUserIds: number[]
     requesterName: string
@@ -104,6 +205,14 @@ export class NotificationService {
     })
   }
 
+  /**
+   * Creates a notification for a user when their role request has been approved or rejected.
+   *
+   * Tạo một thông báo cho người dùng khi yêu cầu cấp quyền vai trò của họ được duyệt hoặc từ chối.
+   *
+   * @param input Approval details including recipient, role, status, and reviewer.
+   *              Chi tiết phê duyệt bao gồm người nhận, vai trò, trạng thái và người phê duyệt.
+   */
   async createRoleRequestReviewedNotification(input: {
     userId: number
     targetRoleName: typeof roleName.DRIVER | typeof roleName.WAREHOUSE_STAFF
@@ -128,6 +237,14 @@ export class NotificationService {
     })
   }
 
+  /**
+   * Creates a notification for a customer when their order is successfully created.
+   *
+   * Tạo một thông báo cho khách hàng khi đơn hàng của họ được tạo thành công.
+   *
+   * @param input Order created metadata.
+   *              Siêu dữ liệu đơn hàng được tạo.
+   */
   async createOrderCreatedNotification(input: { userId: number; orderId: number; trackingCode: string }) {
     await this.notificationRepository.createManyForUsers([input.userId], {
       type: NotificationType.ORDER_CREATED,
@@ -141,6 +258,16 @@ export class NotificationService {
     })
   }
 
+  /**
+   * Creates a notification when an order undergoes a state transition.
+   * Maps statuses like OUT_FOR_DELIVERY, DELIVERED, and CANCELLED to specific messages.
+   *
+   * Tạo một thông báo khi đơn hàng trải qua một chuyển đổi trạng thái.
+   * Ánh xạ các trạng thái như OUT_FOR_DELIVERY, DELIVERED, và CANCELLED sang các tin nhắn cụ thể.
+   *
+   * @param input Order state change parameters.
+   *              Các tham số thay đổi trạng thái đơn hàng.
+   */
   async createOrderStatusNotification(input: {
     userId: number
     orderId: number
@@ -161,6 +288,14 @@ export class NotificationService {
     })
   }
 
+  /**
+   * Creates notifications for hub staff when a driver submits a request to assign themselves to a trip.
+   *
+   * Tạo các thông báo cho nhân viên hub khi một tài xế gửi yêu cầu tự nhận gán vào một chuyến đi.
+   *
+   * @param input Event data including requester and recipients.
+   *              Dữ liệu sự kiện bao gồm người yêu cầu và người nhận.
+   */
   async createDriverAssignmentRequestSubmittedNotifications(input: DriverAssignmentRequestSubmittedEvent) {
     const payload: NotificationPayloadType = {
       assignmentRequestId: input.assignmentRequestId,
@@ -179,6 +314,14 @@ export class NotificationService {
     })
   }
 
+  /**
+   * Creates a notification for a driver when their assignment request has been approved or rejected.
+   *
+   * Tạo một thông báo cho tài xế khi yêu cầu tự nhận đơn của họ được chấp thuận hoặc từ chối.
+   *
+   * @param input Review status parameters.
+   *              Các tham số trạng thái phê duyệt.
+   */
   async createDriverAssignmentRequestReviewedNotification(input: DriverAssignmentRequestReviewedEvent) {
     const isApproved = input.status === DriverAssignmentRequestStatus.APPROVED
 
@@ -203,6 +346,20 @@ export class NotificationService {
     })
   }
 
+  /**
+   * Core helper mapping general envelopes to idempotent database creation and Socket broadcast rooms.
+   * Enforces user channel preferences (filters out if in-app is disabled).
+   *
+   * Hàm hỗ trợ cốt lõi để ánh xạ các envelope chung sang việc tạo DB bất biến và phòng phát sóng Socket.
+   * Áp dụng cài đặt ưu tiên kênh của người dùng (bỏ qua nếu in-app bị tắt).
+   *
+   * @param envelope General notification data envelope.
+   *                 Envelope dữ liệu thông báo chung.
+   * @param attemptCount Attempt index for retries.
+   *                     Chỉ số lần thử để gửi lại.
+   * @returns A promise resolving to dispatch summaries.
+   *          Một promise trả về tóm tắt phân phối.
+   */
   private async createRealtimeNotifications(
     envelope: NotificationEnvelope,
     attemptCount: number,
@@ -243,6 +400,20 @@ export class NotificationService {
     return results
   }
 
+  /**
+   * Helper function mapping abstract domain events to standard in-app notifications envelopes.
+   *
+   * Hàm hỗ trợ ánh xạ các sự kiện nghiệp vụ trừu tượng sang envelope thông báo in-app tiêu chuẩn.
+   *
+   * @param eventName Name of the event.
+   *                  Tên sự kiện.
+   * @param payload The domain event object.
+   *                Đối tượng sự kiện nghiệp vụ.
+   * @returns The constructed notification envelope.
+   *          Envelope thông báo đã tạo.
+   * @throws {Error} If the event type is unsupported.
+   *                 Nếu loại sự kiện không được hỗ trợ.
+   */
   private buildEnvelope(eventName: string, payload: NotificationDomainEvent): NotificationEnvelope {
     switch (eventName) {
       case NotificationEventName.ROLE_REQUEST_SUBMITTED: {
@@ -367,6 +538,18 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Helper function to construct a SLA alert notification envelope.
+   *
+   * Hàm hỗ trợ tạo envelope thông báo cảnh báo SLA.
+   *
+   * @param eventName The event name.
+   *                  Tên sự kiện.
+   * @param event The SLA alert notification event details.
+   *              Chi tiết sự kiện thông báo cảnh báo SLA.
+   * @returns The constructed notification envelope.
+   *          Envelope thông báo đã tạo.
+   */
   private buildSlaEnvelope(eventName: string, event: SlaAlertNotificationEvent): NotificationEnvelope {
     const isResolved = eventName === NotificationEventName.SLA_ALERT_RESOLVED
     return {
@@ -388,6 +571,18 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Helper function to construct a COD collected notification envelope.
+   *
+   * Hàm hỗ trợ tạo envelope thông báo thu hộ COD.
+   *
+   * @param eventName The event name.
+   *                  Tên sự kiện.
+   * @param event The COD collected event details.
+   *              Chi tiết sự kiện thu hộ COD.
+   * @returns The constructed notification envelope.
+   *          Envelope thông báo đã tạo.
+   */
   private buildCodCollectedEnvelope(eventName: string, event: CodCollectedEvent): NotificationEnvelope {
     return {
       dedupeKey: `${eventName}:${event.orderId}`,
@@ -404,6 +599,18 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Helper function to construct a COD batch settlement notification envelope.
+   *
+   * Hàm hỗ trợ tạo envelope thông báo tất toán lô COD.
+   *
+   * @param eventName The event name.
+   *                  Tên sự kiện.
+   * @param event The COD settlement event details.
+   *              Chi tiết sự kiện tất toán COD.
+   * @returns The constructed notification envelope.
+   *          Envelope thông báo đã tạo.
+   */
   private buildCodSettlementEnvelope(eventName: string, event: CodSettlementEvent): NotificationEnvelope {
     const config =
       eventName === NotificationEventName.COD_SETTLEMENT_COMPLETED
@@ -437,6 +644,18 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Helper function to obtain status-specific notification configuration.
+   * Maps statuses like OUT_FOR_DELIVERY, DELIVERED, and CANCELLED to localized texts.
+   *
+   * Hàm hỗ trợ lấy cấu hình thông báo cụ thể cho từng trạng thái đơn hàng.
+   * Ánh xạ các trạng thái như OUT_FOR_DELIVERY, DELIVERED, và CANCELLED sang văn bản được bản địa hóa.
+   *
+   * @param status The target order status.
+   *               Trạng thái đơn hàng đích.
+   * @returns Config object with notification type, title, and message mapper.
+   *          Đối tượng cấu hình chứa loại thông báo, tiêu đề và hàm tạo tin nhắn.
+   */
   private getOrderStatusNotificationConfig(status: OrderNotifiableStatus): {
     type: (typeof NotificationType)[keyof typeof NotificationType]
     title: string

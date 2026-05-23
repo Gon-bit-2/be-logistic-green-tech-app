@@ -3,13 +3,31 @@ import { PrismaService } from 'src/database/prisma.service'
 import { Prisma } from 'generated/prisma'
 import { EmissionLogInput, EmissionAllocationInput, GreenTechDashboardQueryType } from '../model/emission.model'
 
+/**
+ * Repository for managing database queries related to trip carbon emissions logs, sustainability dashboards, and report rows via Prisma.
+ * 
+ * Kho lưu trữ quản lý các truy vấn cơ sở dữ liệu liên quan đến bản ghi phát thải carbon chuyến đi, dashboard bền vững và các hàng báo cáo qua Prisma.
+ */
 @Injectable()
 export class EmissionRepository {
+  /**
+   * Initializes the EmissionRepository.
+   * 
+   * Khởi tạo EmissionRepository.
+   * 
+   * @param prismaService - Prisma service instance / Instance của dịch vụ Prisma.
+   */
   constructor(private readonly prismaService: PrismaService) {}
 
   /**
-   * Truy xuất toàn bộ thông tin gốc của một Trip bao gồm Vehicle và danh sách đơn hàng đã gán
-   * Mục đích: tính tổng tải trọng, cự ly và lấy emission factor của loại xe phục vụ cho ISO 14083 calc.
+   * Retrieves comprehensive original data of a trip, including vehicle properties and nested orders.
+   * Helps calculate payloads, distance and emission rates for GLEC framework.
+   * 
+   * Truy xuất toàn bộ thông tin gốc của một chuyến đi, bao gồm thuộc tính xe và các đơn hàng được gán.
+   * Hỗ trợ tính toán tải trọng, quãng đường và tỷ lệ phát thải phục vụ cho GLEC framework.
+   * 
+   * @param tripId - Trip ID / ID chuyến đi.
+   * @returns Detailed trip entities with vehicle and orders / Chi tiết thực thể chuyến đi kèm xe và các đơn hàng.
    */
   async getTripSourceData(tripId: number) {
     return this.prismaService.trip.findUnique({
@@ -24,8 +42,16 @@ export class EmissionRepository {
   }
 
   /**
-   * Lưu lại file ghi nhận CO2 (EmissionLog) và các phân bổ cho đơn hàng (Allocations) trong một giao dịch.
-   * Đồng thời gỡ bỏ cờ isLatest của version trước (nếu có version cũ).
+   * Saves trip emission logs and distributes carbon footprint allocations to orders in a single transaction block.
+   * Soft deactivates isLatest flag on old log entries.
+   * 
+   * Lưu các bản ghi phát thải carbon của chuyến đi và phân bổ lượng khí thải carbon cho các đơn hàng trong một khối transaction duy nhất.
+   * Đặt cờ isLatest thành false trên các bản ghi log phiên bản cũ.
+   * 
+   * @param tripId - Trip ID / ID chuyến đi.
+   * @param logData - New emission log details / Chi tiết bản ghi phát thải mới.
+   * @param allocationsData - Emission allocation details list / Danh sách chi tiết phân bổ phát thải.
+   * @returns Newly created emission log entity / Thực thể bản ghi phát thải mới được tạo.
    */
   async saveEmissionData(tripId: number, logData: EmissionLogInput, allocationsData: EmissionAllocationInput[]) {
     return this.prismaService.$transaction(async (tx) => {
@@ -56,7 +82,12 @@ export class EmissionRepository {
   }
 
   /**
-   * Lấy lịch sử Logs của chuyến xe, version mới nhất ưu tiên đầu.
+   * Retrieves all historical emission logs for a specific trip, ordered by version descending.
+   * 
+   * Lấy tất cả lịch sử các bản ghi phát thải của một chuyến đi cụ thể, sắp xếp giảm dần theo phiên bản.
+   * 
+   * @param tripId - Trip ID / ID chuyến đi.
+   * @returns Array of emission logs / Mảng các bản ghi phát thải.
    */
   async getTripLogs(tripId: number) {
     return this.prismaService.tripEmissionLog.findMany({
@@ -68,6 +99,14 @@ export class EmissionRepository {
     })
   }
 
+  /**
+   * Helper that resolves timeframe dates based on range codes (e.g. '7d', '30d').
+   * 
+   * Trình hỗ trợ lấy ngày khoảng thời gian tương ứng dựa trên mã phạm vi (ví dụ: '7d', '30d').
+   * 
+   * @param dateRange - Timeframe string / Chuỗi khung thời gian.
+   * @returns Object containing start date and end date / Đối tượng chứa ngày bắt đầu và ngày kết thúc.
+   */
   getDateRange(dateRange: GreenTechDashboardQueryType['dateRange']) {
     const endDate = new Date()
     const startDate = new Date(endDate)
@@ -80,6 +119,14 @@ export class EmissionRepository {
     return { startDate, endDate }
   }
 
+  /**
+   * Computes cumulative totals for green technology dashboard metrics.
+   * 
+   * Tính toán tổng tích lũy cho các số liệu của trang dashboard công nghệ xanh.
+   * 
+   * @param query - Query filters / Các bộ lọc truy vấn.
+   * @returns Cumulative dashboard sustainability metrics / Các số liệu phát triển bền vững tích lũy của trang dashboard.
+   */
   async getGreenDashboard(query: GreenTechDashboardQueryType) {
     const { startDate, endDate } = this.getDateRange(query.dateRange)
 
@@ -113,6 +160,14 @@ export class EmissionRepository {
     }
   }
 
+  /**
+   * Finds carbon footprint allocations linked to an active order.
+   * 
+   * Tìm phân bổ dấu chân carbon liên kết với một đơn hàng đang hoạt động.
+   * 
+   * @param orderId - Order ID / ID đơn hàng.
+   * @returns Order carbon footprint allocations list / Danh sách phân bổ dấu chân carbon của đơn hàng.
+   */
   async getOrderFootprint(orderId: number) {
     return this.prismaService.order.findFirst({
       where: { deletedAt: null, id: orderId },
@@ -149,6 +204,15 @@ export class EmissionRepository {
     })
   }
 
+  /**
+   * Computes carbon savings and green orders totals specifically for a customer.
+   * 
+   * Tính toán tổng lượng carbon tiết kiệm và đơn hàng xanh dành riêng cho một khách hàng.
+   * 
+   * @param customerId - Customer User ID / ID người dùng khách hàng.
+   * @param query - Date range configurations / Cấu hình khoảng thời gian.
+   * @returns Sustainability statistics details / Chi tiết thông số thống kê bền vững.
+   */
   async getCustomerGreenSummary(customerId: number, query: Pick<GreenTechDashboardQueryType, 'dateRange'>) {
     const { startDate, endDate } = this.getDateRange(query.dateRange)
 
@@ -175,6 +239,14 @@ export class EmissionRepository {
     }
   }
 
+  /**
+   * Finds all trip emission records within range filters for reporting.
+   * 
+   * Tìm tất cả các bản ghi phát thải chuyến đi trong phạm vi bộ lọc để làm báo cáo.
+   * 
+   * @param query - Query filters / Các bộ lọc truy vấn.
+   * @returns Array of trip emission logs / Mảng các bản ghi phát thải chuyến đi.
+   */
   async getTripReportRows(query: GreenTechDashboardQueryType) {
     const { startDate, endDate } = this.getDateRange(query.dateRange)
     return this.prismaService.tripEmissionLog.findMany({
@@ -193,6 +265,14 @@ export class EmissionRepository {
     })
   }
 
+  /**
+   * Finds order allocation records within range filters for reporting.
+   * 
+   * Tìm tất cả bản ghi phân bổ đơn hàng trong phạm vi bộ lọc phục vụ làm báo cáo.
+   * 
+   * @param query - Query filters / Các bộ lọc truy vấn.
+   * @returns Array of order allocation details / Mảng chi tiết phân bổ đơn hàng.
+   */
   async getOrderReportRows(query: GreenTechDashboardQueryType) {
     const { startDate, endDate } = this.getDateRange(query.dateRange)
     return this.prismaService.orderEmissionAllocation.findMany({
@@ -207,6 +287,14 @@ export class EmissionRepository {
     })
   }
 
+  /**
+   * Aggregates emission saving rows grouped by customer ID for reporting.
+   * 
+   * Tổng hợp các hàng dữ liệu carbon tiết kiệm được nhóm theo ID khách hàng phục vụ làm báo cáo.
+   * 
+   * @param query - Query filters / Các bộ lọc truy vấn.
+   * @returns Array of aggregated customer reporting statistics / Mảng thống kê báo cáo khách hàng tổng hợp.
+   */
   async getCustomerReportRows(query: GreenTechDashboardQueryType) {
     const { startDate, endDate } = this.getDateRange(query.dateRange)
     const rows = await this.prismaService.orderEmissionAllocation.groupBy({
@@ -243,6 +331,16 @@ export class EmissionRepository {
     return [...customerTotals.entries()].map(([customerId, value]) => ({ customerId, ...value }))
   }
 
+  /**
+   * Builds the conditional SQL Prisma where clause for trip emissions.
+   * 
+   * Xây dựng mệnh đề điều kiện SQL Prisma where cho lượng khí phát thải của chuyến đi.
+   * 
+   * @param query - Query filters / Các bộ lọc truy vấn.
+   * @param startDate - Start date boundary / Mốc thời gian bắt đầu.
+   * @param endDate - End date boundary / Mốc thời gian kết thúc.
+   * @returns Prisma WHERE configuration / Cấu hình WHERE của Prisma.
+   */
   private buildEmissionWhere(query: GreenTechDashboardQueryType, startDate: Date, endDate: Date) {
     return {
       calculatedAt: { gte: startDate, lte: endDate },
@@ -264,6 +362,16 @@ export class EmissionRepository {
     } satisfies Prisma.TripEmissionLogWhereInput
   }
 
+  /**
+   * Builds the conditional SQL Prisma where clause for order allocations.
+   * 
+   * Xây dựng mệnh đề điều kiện SQL Prisma where cho phân bổ đơn hàng.
+   * 
+   * @param query - Query filters / Các bộ lọc truy vấn.
+   * @param startDate - Start date boundary / Mốc thời gian bắt đầu.
+   * @param endDate - End date boundary / Mốc thời gian kết thúc.
+   * @returns Prisma WHERE configuration / Cấu hình WHERE của Prisma.
+   */
   private buildAllocationWhere(query: GreenTechDashboardQueryType, startDate: Date, endDate: Date) {
     return {
       emissionLog: {
@@ -279,6 +387,16 @@ export class EmissionRepository {
     } satisfies Prisma.OrderEmissionAllocationWhereInput
   }
 
+  /**
+   * Gathers information on the top 10 sustainability efficient vehicles (maximum CO2 saved) inside memory.
+   * 
+   * Thu thập thông tin của 10 phương tiện hiệu suất bền vững hàng đầu (tiết kiệm nhiều CO2 nhất) trong bộ nhớ.
+   * 
+   * @param query - Query filters / Các bộ lọc truy vấn.
+   * @param startDate - Start date / Ngày bắt đầu.
+   * @param endDate - End date / Ngày kết thúc.
+   * @returns Top 10 vehicles sorted by CO2 savings / Danh sách 10 xe hàng đầu sắp xếp theo lượng CO2 tiết kiệm.
+   */
   private async getTopVehicles(query: GreenTechDashboardQueryType, startDate: Date, endDate: Date) {
     const logs = await this.prismaService.tripEmissionLog.findMany({
       where: this.buildEmissionWhere(query, startDate, endDate),

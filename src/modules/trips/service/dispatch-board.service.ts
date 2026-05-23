@@ -24,6 +24,14 @@ import type { AccessTokenPayload } from 'src/common/types/jwt.type'
  * - getDispatchBoard: Bảng điều phối cho Admin/Warehouse Staff
  * - getDriverDispatchBoard: Bảng điều phối cho Driver
  */
+/**
+ * Service providing dispatch board data visualization for staff and drivers.
+ * Service cung cấp hình ảnh hóa dữ liệu bảng điều phối cho nhân viên và tài xế.
+ *
+ * Handles advanced administrative dashboards query mapping and driver-specific
+ * workspace queries.
+ * Xử lý ánh xạ truy vấn bảng điều khiển quản trị nâng cao và truy vấn không gian làm việc của tài xế.
+ */
 @Injectable()
 export class DispatchBoardService {
   constructor(
@@ -34,8 +42,15 @@ export class DispatchBoardService {
   ) {}
 
   /**
-   * Lấy dữ liệu Dispatch Board cho Admin/Staff.
-   * Bao gồm: đơn chờ dispatch, tài xế, xe, và chuyến PENDING.
+   * Retrieves paginated pending orders, active drivers, fleets, and pending trips for Hub Staff view.
+   * Lấy danh sách phân trang các đơn hàng chờ, tài xế hoạt động, đội xe và chuyến pending cho nhân viên Hub.
+   *
+   * @param {DispatchBoardQueryType} query - Page limits and Hub ID filter parameters.
+   * @param {DispatchBoardQueryType} query - Các tham số lọc giới hạn trang và ID Hub.
+   * @param {AccessTokenPayload} actor - Authenticated administrator session payload.
+   * @param {AccessTokenPayload} actor - Payload phiên quản trị viên đã xác thực.
+   * @returns {Promise<DispatchBoardResType>} Detailed overview of Hub resources.
+   * @returns {Promise<DispatchBoardResType>} Tổng quan chi tiết về tài nguyên của Hub.
    */
   async getDispatchBoard(query: DispatchBoardQueryType, actor: AccessTokenPayload): Promise<DispatchBoardResType> {
     const hubId = await this.hubHelper.resolveDispatchHub(query.hubId, actor)
@@ -284,8 +299,15 @@ export class DispatchBoardService {
   }
 
   /**
-   * Lấy dữ liệu Dispatch Board cho Driver.
-   * Bao gồm: chuyến đang chạy, đơn có thể nhận, yêu cầu nhận đơn gần đây.
+   * Retrieves available cargo orders, active trips, and recent requests for Driver App workspace view.
+   * Lấy các đơn hàng có thể nhận, chuyến đi hoạt động và yêu cầu gần đây cho giao diện tài xế.
+   *
+   * @param {DriverDispatchBoardQueryType} query - Query filter parameters.
+   * @param {DriverDispatchBoardQueryType} query - Các tham số bộ lọc truy vấn.
+   * @param {AccessTokenPayload} actor - Authenticated driver session payload.
+   * @param {AccessTokenPayload} actor - Payload phiên tài xế đã xác thực.
+   * @returns {Promise<DriverDispatchBoardResType>} Mapped driver workspace information.
+   * @returns {Promise<DriverDispatchBoardResType>} Thông tin không gian làm việc của tài xế đã ánh xạ.
    */
   async getDriverDispatchBoard(
     query: DriverDispatchBoardQueryType,

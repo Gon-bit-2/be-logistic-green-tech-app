@@ -16,10 +16,30 @@ export type OutstandingCodOrder = {
   transactionId: number
 }
 
+/**
+ * Repository handling database operations for Driver Wallets, transactions, and COD financial settlement batches via Prisma.
+ * 
+ * Kho lưu trữ xử lý các hoạt động cơ sở dữ liệu cho Ví tài xế, giao dịch và các lô quyết toán tài chính COD thông qua Prisma.
+ */
 @Injectable()
 export class WalletRepository {
+  /**
+   * Initializes the WalletRepository.
+   * 
+   * Khởi tạo WalletRepository.
+   * 
+   * @param prisma - Prisma Service instance / Instance của dịch vụ Prisma.
+   */
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Creates a new wallet record in the database for a driver.
+   * 
+   * Tạo một bản ghi ví mới trong cơ sở dữ liệu cho tài xế.
+   * 
+   * @param userId - Driver User ID / ID người dùng của tài xế.
+   * @returns Created wallet record / Bản ghi ví được tạo.
+   */
   async createWallet(userId: number) {
     return this.prisma.wallet.create({
       data: {
@@ -28,6 +48,14 @@ export class WalletRepository {
     })
   }
 
+  /**
+   * Retrieves a driver's wallet. Automatically creates one if it does not exist.
+   * 
+   * Lấy ví điện tử của một tài xế. Tự động tạo mới nếu ví chưa tồn tại.
+   * 
+   * @param userId - Driver User ID / ID người dùng của tài xế.
+   * @returns Driver wallet record / Bản ghi ví tài xế.
+   */
   async getWalletByUserId(userId: number) {
     let wallet = await this.prisma.wallet.findUnique({
       where: { userId },
@@ -41,6 +69,17 @@ export class WalletRepository {
     return wallet
   }
 
+  /**
+   * Adds collected COD cash to a driver's wallet and creates a transaction record in a secure transaction block.
+   * 
+   * Thêm tiền COD đã thu vào ví của tài xế và tạo bản ghi giao dịch trong một khối transaction an toàn.
+   * 
+   * @param userId - Driver User ID / ID người dùng của tài xế.
+   * @param amount - Collected amount / Số tiền đã thu.
+   * @param referenceId - Matching transaction reference / Mã tham chiếu giao dịch phù hợp.
+   * @param description - Details description / Mô tả chi tiết.
+   * @returns Updated driver wallet details / Chi tiết ví tài xế đã cập nhật.
+   */
   async addCodToWallet(userId: number, amount: number, referenceId: string, description: string) {
     const wallet = await this.getWalletByUserId(userId)
 
@@ -69,6 +108,18 @@ export class WalletRepository {
     })
   }
 
+  /**
+   * Reconciles driver's collected cash. Decrements the outstanding COD balance in a secure transaction block.
+   * 
+   * Quyết toán và đối soát số tiền mặt thu được của tài xế. Giảm số dư COD đang tồn đọng trong một khối transaction an toàn.
+   * 
+   * @param userId - Driver User ID / ID người dùng của tài xế.
+   * @param amount - Reconciled amount / Số tiền đối soát.
+   * @param referenceId - Reference key / Khóa tham chiếu.
+   * @param description - Description notes / Ghi chú mô tả.
+   * @returns Updated driver wallet details / Chi tiết ví tài xế đã cập nhật.
+   * @throws Error if the driver has insufficient COD balance to reconcile / Error nếu tài xế không đủ số dư COD tồn đọng để đối soát.
+   */
   async reconcileCod(userId: number, amount: number, referenceId: string, description: string) {
     const wallet = await this.getWalletByUserId(userId)
 
@@ -101,6 +152,14 @@ export class WalletRepository {
     })
   }
 
+  /**
+   * Finds outstanding COD orders for a specific driver that haven't been locked in active settlement batches.
+   * 
+   * Tìm kiếm các đơn hàng COD tồn đọng của tài xế cụ thể chưa bị khóa trong các đợt quyết toán đang hoạt động.
+   * 
+   * @param input - Driver ID and optional date range / ID tài xế và khoảng thời gian tùy chọn.
+   * @returns List of outstanding COD orders / Danh sách các đơn hàng COD tồn đọng.
+   */
   async findOutstandingCodOrders(input: { driverId: number; from?: Date; to?: Date }) {
     const createdAt: Prisma.DateTimeFilter = {}
     if (input.from) createdAt.gte = input.from
@@ -183,6 +242,14 @@ export class WalletRepository {
       .sort((a, b) => a.collectedAt.getTime() - b.collectedAt.getTime())
   }
 
+  /**
+   * Creates a new COD settlement batch along with nested order list items.
+   * 
+   * Tạo lô quyết toán COD mới cùng với các mục danh sách đơn hàng lồng nhau.
+   * 
+   * @param input - Batch code, creator ID, driver ID, and order details / Mã lô, ID người tạo, ID tài xế và chi tiết đơn hàng.
+   * @returns Created settlement batch with nested orders / Lô quyết toán được tạo kèm danh sách đơn hàng.
+   */
   async createSettlementBatch(input: {
     batchCode: string
     createdById: number
@@ -238,6 +305,14 @@ export class WalletRepository {
     })
   }
 
+  /**
+   * Retrieves a specific settlement batch by ID with deep nested entities.
+   * 
+   * Lấy một lô quyết toán cụ thể theo ID cùng các thực thể lồng sâu.
+   * 
+   * @param batchId - Settlement batch ID / ID lô quyết toán.
+   * @returns Found settlement batch details / Chi tiết lô quyết toán được tìm thấy.
+   */
   async findSettlementBatchById(batchId: number) {
     return this.prisma.codSettlementBatch.findUnique({
       where: { id: batchId },
@@ -263,6 +338,14 @@ export class WalletRepository {
     })
   }
 
+  /**
+   * Lists COD settlement batches matching query filters.
+   * 
+   * Liệt kê danh sách các lô quyết toán COD khớp với các bộ lọc truy vấn.
+   * 
+   * @param input - Driver ID, page, limit, status, and optional dates / ID tài xế, trang, giới hạn, trạng thái và ngày tùy chọn.
+   * @returns Paginated lists of batches and total count / Danh sách các lô quyết toán phân trang và tổng số lượng.
+   */
   async listSettlementBatches(input: {
     driverId?: number
     from?: Date
@@ -300,6 +383,15 @@ export class WalletRepository {
     return { data, page: input.page, limit: input.limit, totalItems }
   }
 
+  /**
+   * Approves and completes a COD settlement batch. Deducts cash outstanding balance and registers internal transactions.
+   * 
+   * Phê duyệt và hoàn tất lô quyết toán COD. Khấu trừ số dư tiền mặt tồn đọng và đăng ký các giao dịch nội bộ.
+   * 
+   * @param input - Batch ID, completion admin user ID, and notes / ID lô, ID admin hoàn tất và ghi chú.
+   * @returns Completed settlement batch details / Chi tiết lô quyết toán đã hoàn tất.
+   * @throws Error if driver has insufficient wallet COD balance / Error nếu tài xế không đủ số dư COD trong ví.
+   */
   async completeSettlementBatch(input: { batchId: number; completedById: number; note?: string }) {
     return this.prisma.$transaction(async (tx) => {
       const batch = await tx.codSettlementBatch.findUnique({
@@ -363,6 +455,14 @@ export class WalletRepository {
     })
   }
 
+  /**
+   * Marks batch entries as disputed.
+   * 
+   * Đánh dấu các mục lô quyết toán là đang tranh chấp.
+   * 
+   * @param input - Batch ID, specific items list, and dispute reason / ID lô, danh sách các mục cụ thể và lý do tranh chấp.
+   * @returns Disputed settlement batch details / Chi tiết lô quyết toán đang tranh chấp.
+   */
   async disputeSettlementBatch(input: { batchId: number; itemIds?: number[]; reason: string }) {
     return this.prisma.$transaction(async (tx) => {
       const batch = await tx.codSettlementBatch.findUnique({ where: { id: input.batchId }, include: { items: true } })
@@ -387,6 +487,14 @@ export class WalletRepository {
     })
   }
 
+  /**
+   * Helper that parses Order ID from a standard transaction reference code string.
+   * 
+   * Trình hỗ trợ phân tích Order ID từ chuỗi mã tham chiếu giao dịch tiêu chuẩn.
+   * 
+   * @param referenceId - Reference key string / Chuỗi khóa tham chiếu.
+   * @returns Order ID number or null / Số ID đơn hàng hoặc null.
+   */
   private parseOrderReference(referenceId: string | null) {
     const match = /^ORDER_(\d+)$/i.exec(referenceId?.trim() ?? '')
     return match ? Number(match[1]) : null

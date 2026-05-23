@@ -74,6 +74,15 @@ const SYSTEM_STATUS_TRANSITIONS: Record<string, string[]> = {
   [ORDER_STATUS.ARRIVED_AT_HUB]: [ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_TRANSIT],
 }
 
+/**
+ * Service that manages state transitions and lifecycle of orders.
+ * Service quản lý chuyển đổi trạng thái và vòng đời của đơn hàng.
+ *
+ * Handles status validation, audit logging, proof-of-delivery (POD) attachments,
+ * COD collection triggers, tracking events, and user notifications.
+ * Xử lý xác thực trạng thái, ghi log kiểm toán, đính kèm chứng thực giao hàng (POD),
+ * kích hoạt thu hộ COD, ghi nhận sự kiện hành trình và thông báo cho người dùng.
+ */
 @Injectable()
 export class OrderStateService {
   constructor(
@@ -83,6 +92,18 @@ export class OrderStateService {
     @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
+  /**
+   * Transitions the status of a single order and emits notifications.
+   * Chuyển đổi trạng thái của một đơn hàng duy nhất và phát thông báo.
+   *
+   * Automatically manages transaction boundaries if no active transaction `tx` is provided.
+   * Tự động quản lý biên giao dịch nếu không cung cấp giao dịch hoạt động `tx`.
+   *
+   * @param {TransitionOrderStatusInput} input - Data needed for the state transition.
+   * @param {TransitionOrderStatusInput} input - Dữ liệu cần thiết cho việc chuyển đổi trạng thái.
+   * @returns {Promise<{ event: any; order: any }>} Resolved transition event and order information.
+   * @returns {Promise<{ event: any; order: any }>} Thông tin sự kiện hành trình và đơn hàng sau chuyển đổi.
+   */
   async transitionOrderStatus(input: TransitionOrderStatusInput) {
     const result = input.tx
       ? await this.transitionSingleWithClient(input.tx, input)
@@ -92,6 +113,18 @@ export class OrderStateService {
     return result
   }
 
+  /**
+   * Helper method to record state transitions triggered automatically by the system.
+   * Phương thức bổ trợ để ghi nhận chuyển đổi trạng thái được kích hoạt tự động bởi hệ thống.
+   *
+   * Uses 'system' validation mode and bypasses user-specific actor checks.
+   * Sử dụng chế độ xác thực 'system' và bỏ qua các kiểm tra tác nhân người dùng cụ thể.
+   *
+   * @param {Omit<TransitionOrderStatusInput, 'createdById' | 'source' | 'validationMode'>} input - Transition input excluding actor details.
+   * @param {Omit<TransitionOrderStatusInput, 'createdById' | 'source' | 'validationMode'>} input - Dữ liệu đầu vào chuyển đổi không bao gồm chi tiết tác nhân.
+   * @returns {Promise<any>} The resolved transition result.
+   * @returns {Promise<any>} Kết quả chuyển đổi đã phân giải.
+   */
   async recordSystemTransition(input: Omit<TransitionOrderStatusInput, 'createdById' | 'source' | 'validationMode'>) {
     return this.transitionOrderStatus({
       ...input,
@@ -101,6 +134,22 @@ export class OrderStateService {
     })
   }
 
+  /**
+   * Transitions statuses of multiple orders within a single active transaction.
+   * Chuyển đổi trạng thái của nhiều đơn hàng trong một giao dịch hoạt động duy nhất.
+   *
+   * Performs uniqueness checks, queries existing statuses, validates transitions, and records
+   * bulk tracking events and audit logs.
+   * Thực hiện kiểm tra tính duy nhất, truy vấn trạng thái hiện tại, xác thực chuyển đổi, và ghi nhận
+   * hàng loạt sự kiện hành trình cũng như nhật ký kiểm toán.
+   *
+   * @param {TransitionOrdersInTransactionInput} input - Bulk transition parameters.
+   * @param {TransitionOrdersInTransactionInput} input - Các tham số chuyển đổi hàng loạt.
+   * @returns {Promise<{ count: number }>} Number of successfully transitioned orders.
+   * @returns {Promise<{ count: number }>} Số lượng đơn hàng chuyển đổi trạng thái thành công.
+   * @throws {BadRequestException} If duplicate IDs are found, orders are missing, or transition fails.
+   * @throws {BadRequestException} Nếu phát hiện ID trùng lặp, thiếu đơn hàng hoặc chuyển đổi thất bại.
+   */
   async transitionOrdersInTransaction(input: TransitionOrdersInTransactionInput) {
     const orderIds = this.assertUniqueOrderIds(input.orderIds)
     const baseWhere: Prisma.OrderWhereInput = {
@@ -176,6 +225,17 @@ export class OrderStateService {
     return { count: orderUpdate.count }
   }
 
+  /**
+   * Records an arbitrary tracking event for an order without changing its main status.
+   * Ghi nhận một sự kiện hành trình tùy ý cho đơn hàng mà không thay đổi trạng thái chính của nó.
+   *
+   * @param {RecordTrackingEventInput} input - Tracking event details.
+   * @param {RecordTrackingEventInput} input - Chi tiết sự kiện hành trình.
+   * @returns {Promise<any>} The created tracking event record.
+   * @returns {Promise<any>} Bản ghi sự kiện hành trình đã tạo.
+   * @throws {NotFoundException} If the order does not exist.
+   * @throws {NotFoundException} Nếu đơn hàng không tồn tại.
+   */
   async recordTrackingEvent(input: RecordTrackingEventInput) {
     const run = async (tx: OrderStateTransaction) => {
       const order = await tx.order.findFirst({
@@ -191,6 +251,26 @@ export class OrderStateService {
     return input.tx ? run(input.tx) : this.prismaService.$transaction(run)
   }
 
+  /**
+   * Performs the core business logic of transitioning a single order using a Prisma transaction client.
+   * Thực hiện logic nghiệp vụ cốt lõi của việc chuyển đổi một đơn hàng sử dụng client giao dịch Prisma.
+   *
+   * Verifies transitions, checks POD requirement, updates order database record, registers audit logs,
+   * and conditionally triggers COD collection service.
+   * Xác minh chuyển đổi, kiểm tra yêu cầu POD, cập nhật bản ghi CSDL đơn hàng, đăng ký nhật ký kiểm toán,
+   * và kích hoạt dịch vụ thu hộ COD dưới điều kiện phù hợp.
+   *
+   * @param {OrderStateTransaction} tx - The Prisma transaction client.
+   * @param {OrderStateTransaction} tx - Client giao dịch Prisma.
+   * @param {TransitionOrderStatusInput} input - Single transition inputs.
+   * @param {TransitionOrderStatusInput} input - Dữ liệu đầu vào chuyển đổi đơn lẻ.
+   * @returns {Promise<{ event: any; order: any }>} The created tracking event and updated order database record.
+   * @returns {Promise<{ event: any; order: any }>} Sự kiện hành trình đã tạo và bản ghi đơn hàng đã cập nhật trong CSDL.
+   * @throws {NotFoundException} If the order does not exist.
+   * @throws {NotFoundException} Nếu đơn hàng không tồn tại.
+   * @throws {BadRequestException} If transition is illegal or POD is missing for DELIVERED status.
+   * @throws {BadRequestException} Nếu chuyển đổi không hợp lệ hoặc thiếu POD cho trạng thái DELIVERED.
+   */
   private async transitionSingleWithClient(tx: OrderStateTransaction, input: TransitionOrderStatusInput) {
     const order = await tx.order.findFirst({
       where: { deletedAt: null, id: input.orderId },
@@ -279,6 +359,17 @@ export class OrderStateService {
     return { event, order: updatedOrder }
   }
 
+  /**
+   * Helper utility to insert a tracking event record and optional Proof of Delivery (POD) attachments.
+   * Tiện ích bổ trợ để chèn bản ghi sự kiện hành trình và đính kèm Proof of Delivery (POD) tùy chọn.
+   *
+   * @param {OrderStateTransaction} tx - The Prisma transaction client.
+   * @param {OrderStateTransaction} tx - Client giao dịch Prisma.
+   * @param {object} input - Properties of the tracking event and POD payload.
+   * @param {object} input - Các thuộc tính của sự kiện hành trình và payload POD.
+   * @returns {Promise<any>} The created tracking event database record.
+   * @returns {Promise<any>} Bản ghi sự kiện hành trình CSDL đã tạo.
+   */
   private async createTrackingEvent(
     tx: OrderStateTransaction,
     input: TrackingEventInput & {
@@ -327,6 +418,22 @@ export class OrderStateService {
     return event
   }
 
+  /**
+   * Standardizes transition validation rules under strict or system modes.
+   * Tiêu chuẩn hóa các quy tắc xác thực chuyển đổi dưới chế độ strict hoặc system.
+   *
+   * Checks if transition from current to new status is allowed based on the system state machine.
+   * Kiểm tra xem việc chuyển từ trạng thái hiện tại sang trạng thái mới có được phép dựa trên máy trạng thái hệ thống không.
+   *
+   * @param {string} currentStatus - The current status of the order.
+   * @param {string} currentStatus - Trạng thái hiện tại của đơn hàng.
+   * @param {string} newStatus - The targeted new status.
+   * @param {string} newStatus - Trạng thái mới nhắm tới.
+   * @param {TransitionValidationMode} validationMode - 'strict', 'system' or 'none'.
+   * @param {TransitionValidationMode} validationMode - Chế độ xác thực: 'strict', 'system' hoặc 'none'.
+   * @throws {BadRequestException} If transition is invalid or attempt is redundant.
+   * @throws {BadRequestException} Nếu chuyển đổi không hợp lệ hoặc thao tác bị thừa.
+   */
   private validateStatusTransition(
     currentStatus: string,
     newStatus: string,
@@ -353,6 +460,14 @@ export class OrderStateService {
     }
   }
 
+  /**
+   * Helper to emit push/realtime updates when order status changes to a user-notifiable state.
+   * Bổ trợ để phát các cập nhật push/realtime khi trạng thái đơn hàng thay đổi sang trạng thái cần báo cho người dùng.
+   *
+   * @param {object} order - The basic order properties.
+   * @param {object} order - Các thuộc tính cơ bản của đơn hàng.
+   * @returns {Promise<void>}
+   */
   private async emitOrderStatusNotification(order: {
     customerId: number
     id: number
@@ -369,6 +484,17 @@ export class OrderStateService {
     })
   }
 
+  /**
+   * Validates array of order IDs for uniqueness and non-emptiness.
+   * Xác thực mảng ID đơn hàng để đảm bảo tính duy nhất và không trống rỗng.
+   *
+   * @param {number[]} orderIds - Array of order IDs.
+   * @param {number[]} orderIds - Mảng ID các đơn hàng.
+   * @returns {number[]} The array of unique order IDs.
+   * @returns {number[]} Mảng các ID đơn hàng duy nhất.
+   * @throws {BadRequestException} If duplicate IDs are found or array is empty.
+   * @throws {BadRequestException} Nếu phát hiện ID trùng lặp hoặc mảng trống.
+   */
   private assertUniqueOrderIds(orderIds: number[]) {
     const uniqueOrderIds = [...new Set(orderIds)]
     if (uniqueOrderIds.length !== orderIds.length) {

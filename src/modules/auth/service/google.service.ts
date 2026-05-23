@@ -11,6 +11,15 @@ import { AuthService } from 'src/modules/auth/service/auth.service'
 import { RoleRepository } from 'src/modules/role/repository/role.repo'
 import type { RoleNameType } from 'src/common/constants/role.constant'
 
+/**
+ * Service that handles Google OAuth2 flow and session token management.
+ * Service xử lý luồng Google OAuth2 và quản lý session token.
+ *
+ * Provides methods to generate Google auth links, process callback tokens, register or resolve
+ * users from their Google profiles, and exchange session keys for permanent JWT credentials.
+ * Cung cấp các phương thức để tạo liên kết đăng nhập Google, xử lý callback token, đăng ký hoặc phân giải
+ * người dùng từ hồ sơ Google của họ và đổi khóa phiên lấy thông tin xác thực JWT vĩnh viễn.
+ */
 @Injectable()
 export class GoogleService {
   private readonly logger = new Logger(GoogleService.name)
@@ -32,14 +41,32 @@ export class GoogleService {
     )
   }
 
+  /**
+   * Generates the cache key for Google OAuth state verification.
+   */
   private getGoogleStateCacheKey(stateToken: string) {
     return `google_oauth:state:${stateToken}`
   }
 
+  /**
+   * Generates the cache key for temporary Google login sessions.
+   */
   private getGoogleSessionCacheKey(sessionToken: string) {
     return `google_oauth:session:${sessionToken}`
   }
 
+  /**
+   * Generates a Google OAuth authorization URL for client redirection.
+   * Tạo URL ủy quyền Google OAuth để chuyển hướng client.
+   *
+   * Stores the unique state token in the cache to validate the callback.
+   * Lưu trữ state token duy nhất vào cache để xác thực callback sau đó.
+   *
+   * @param {GoogleAuthStateType} state - The client context (userAgent, IP).
+   * @param {GoogleAuthStateType} state - Ngữ cảnh của client (userAgent, IP).
+   * @returns {Promise<{ url: string }>} The generated Google OAuth URL.
+   * @returns {Promise<{ url: string }>} URL Google OAuth đã được tạo.
+   */
   async getAuthorizationUrl({ userAgent, ip }: GoogleAuthStateType) {
     const scopes = [
       'https://www.googleapis.com/auth/userinfo.email',
@@ -66,6 +93,23 @@ export class GoogleService {
     return { url }
   }
 
+  /**
+   * Handles Google OAuth callback code and state verification.
+   * Xử lý callback của Google OAuth để xác thực code và state.
+   *
+   * Contacts Google APIs to exchange code for tokens, fetches user profile (email, name, picture),
+   * creates user in the database if not exists, registers their device session, and issues a temporary
+   * short-lived session token.
+   * Liên hệ với Google API để đổi code lấy token, lấy thông tin người dùng (email, name, picture),
+   * tạo người dùng trong cơ sở dữ liệu nếu chưa tồn tại, đăng ký phiên thiết bị và cấp session token tạm thời.
+   *
+   * @param {object} params - State and authorization code from Google.
+   * @param {object} params - State và mã ủy quyền từ Google.
+   * @returns {Promise<{ sessionToken: string }>} The temporary session token key.
+   * @returns {Promise<{ sessionToken: string }>} Khóa session token tạm thời.
+   * @throws {UnauthorizedException} If state is invalid or expired.
+   * @throws {UnauthorizedException} Nếu state không hợp lệ hoặc đã hết hạn.
+   */
   async googleCallback({ state, code }: { state: string; code: string }) {
     try {
       if (!code) {
@@ -141,6 +185,20 @@ export class GoogleService {
     }
   }
 
+  /**
+   * Exchanges a temporary session token for standard JWT auth tokens.
+   * Đổi một session token tạm thời lấy cặp token xác thực JWT tiêu chuẩn.
+   *
+   * Destroys the session token in the cache upon redemption to prevent replay attacks.
+   * Hủy session token trong cache ngay sau khi đổi để ngăn chặn các cuộc tấn công phát lại (replay attacks).
+   *
+   * @param {string} sessionToken - The temporary session token key.
+   * @param {string} sessionToken - Khóa session token tạm thời.
+   * @returns {Promise<LoginResType>} The active JWT access and refresh token pair.
+   * @returns {Promise<LoginResType>} Cặp token JWT access và refresh đang hoạt động.
+   * @throws {BadRequestException} If session token is invalid or expired.
+   * @throws {BadRequestException} Nếu session token không hợp lệ hoặc đã hết hạn.
+   */
   async redeemGoogleSession(sessionToken: string): Promise<LoginResType> {
     const sessionCacheKey = this.getGoogleSessionCacheKey(sessionToken)
     const authTokens = (await this.cacheManager.get<LoginResType>(sessionCacheKey)) ?? null

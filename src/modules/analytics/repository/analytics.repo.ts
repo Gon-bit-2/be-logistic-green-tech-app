@@ -2,10 +2,30 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from 'src/database/prisma.service'
 import { GetAnalyticsQueryType } from '../model/analytics.model'
 
+/**
+ * Repository for handling complex analytics data aggregation, sustainability (CO2) statistics, and operational KPIs via SQL raw queries.
+ * 
+ * Kho lưu trữ xử lý việc tổng hợp dữ liệu phân tích phức tạp, thống kê bền vững (CO2) và các chỉ số KPI vận hành thông qua các truy vấn SQL thô.
+ */
 @Injectable()
 export class AnalyticsRepository {
+  /**
+   * Initializes the AnalyticsRepository.
+   * 
+   * Khởi tạo AnalyticsRepository.
+   * 
+   * @param prismaService - Prisma Database Service / Dịch vụ cơ sở dữ liệu Prisma.
+   */
   constructor(private readonly prismaService: PrismaService) {}
 
+  /**
+   * Helper that resolves the appropriate start date according to selected timeframe (e.g. '7d', '30d').
+   * 
+   * Trình hỗ trợ phân tích ngày bắt đầu phù hợp theo khung thời gian đã chọn (ví dụ: '7d', '30d').
+   * 
+   * @param dateRange - Timeframe code string / Chuỗi mã khung thời gian.
+   * @returns Object containing resolved start date and end date (now) / Đối tượng chứa ngày bắt đầu đã phân tích và ngày kết thúc (hiện tại).
+   */
   private getDateRangeCondition(dateRange: string) {
     const now = new Date()
     const startDate = new Date()
@@ -30,12 +50,29 @@ export class AnalyticsRepository {
     return { startDate, endDate: now }
   }
 
+  /**
+   * Helper resolving appropriate trunc granularity string for PostgreSQL DATE_TRUNC.
+   * 
+   * Trình hỗ trợ lấy độ phân giải làm tròn ngày phù hợp cho PostgreSQL DATE_TRUNC.
+   * 
+   * @param dateRange - Timeframe code string / Chuỗi mã khung thời gian.
+   * @returns Granularity keyword (e.g. 'month', 'week', 'day') / Từ khóa độ phân giải (ví dụ: 'month', 'week', 'day').
+   */
   private getTruncFormat(dateRange: string) {
     if (dateRange === '1y') return 'month'
     if (dateRange === '90d') return 'week'
     return 'day'
   }
 
+  /**
+   * Helper that formats a Date string to appropriate localized weekday/month labels.
+   * 
+   * Trình hỗ trợ định dạng chuỗi Ngày thành các nhãn ngày trong tuần/tháng được định vị phù hợp.
+   * 
+   * @param dateRange - Timeframe code string / Chuỗi mã khung thời gian.
+   * @param date - Date object / Đối tượng Date.
+   * @returns Short localized date/month label / Nhãn tên ngày/tháng viết tắt được định vị.
+   */
   private getPeriodName(dateRange: string, date: Date) {
     if (dateRange === '1y') {
       return date.toLocaleString('en-US', { month: 'short' })
@@ -43,12 +80,31 @@ export class AnalyticsRepository {
     return date.toLocaleString('en-US', { weekday: 'short' })
   }
 
+  /**
+   * Helper to round float metrics to specific fraction digits.
+   * 
+   * Trình hỗ trợ làm tròn các chỉ số dấu phẩy động đến chữ số thập phân cụ thể.
+   * 
+   * @param value - Float number / Số dấu phẩy động.
+   * @param fractionDigits - Decimals counts / Số lượng chữ số thập phân.
+   * @returns Rounded float number / Số dấu phẩy động đã làm tròn.
+   */
   private roundMetric(value: number | null | undefined, fractionDigits = 2) {
     const numericValue = Number(value ?? 0)
     if (!Number.isFinite(numericValue)) return 0
     return Number(numericValue.toFixed(fractionDigits))
   }
 
+  /**
+   * Retrieves overall dashboard summary analytics, including CO2 savings and delivery time metrics.
+   * Uses raw SQL queries for complex aggregate performance.
+   * 
+   * Lấy dữ liệu phân tích tóm tắt toàn bộ dashboard, bao gồm lượng CO2 tiết kiệm và chỉ số thời gian giao hàng.
+   * Sử dụng truy vấn SQL thô cho các hoạt động tổng hợp phức tạp để tối ưu hiệu suất.
+   * 
+   * @param query - Timeframe settings / Thiết lập khung thời gian.
+   * @returns Object containing absolute operational statistics / Đối tượng chứa các thống kê vận hành tuyệt đối.
+   */
   async getDashboardSummary(query: GetAnalyticsQueryType) {
     const { startDate, endDate } = this.getDateRangeCondition(query.dateRange || '30d')
 
@@ -123,6 +179,14 @@ export class AnalyticsRepository {
     }
   }
 
+  /**
+   * Aggregates daily/weekly/monthly orders count, revenue, and delivery performance over a date range.
+   * 
+   * Tổng hợp số lượng đơn hàng, doanh thu và hiệu suất giao hàng theo ngày/tuần/tháng trong một khoảng thời gian.
+   * 
+   * @param query - Timeframe settings / Thiết lập cấu hình thời gian.
+   * @returns Array of order metrics over time periods / Mảng các chỉ số đơn hàng theo từng chu kỳ.
+   */
   async getOrdersAnalytics(query: GetAnalyticsQueryType) {
     const { startDate, endDate } = this.getDateRangeCondition(query.dateRange || '30d')
     const truncFormat = this.getTruncFormat(query.dateRange || '30d')
@@ -165,6 +229,14 @@ export class AnalyticsRepository {
     }))
   }
 
+  /**
+   * Aggregates CO2 emission outputs and savings details over time periods.
+   * 
+   * Tổng hợp chi tiết lượng khí thải CO2 thực tế và lượng CO2 tiết kiệm được theo từng chu kỳ thời gian.
+   * 
+   * @param query - Timeframe settings / Thiết lập cấu hình thời gian.
+   * @returns Array of sustainability emission metrics over time periods / Mảng các chỉ số phát thải bền vững theo từng chu kỳ.
+   */
   async getEmissionsAnalytics(query: GetAnalyticsQueryType) {
     const { startDate, endDate } = this.getDateRangeCondition(query.dateRange || '30d')
     const truncFormat = this.getTruncFormat(query.dateRange || '30d')
@@ -196,6 +268,14 @@ export class AnalyticsRepository {
     }))
   }
 
+  /**
+   * Analyzes top performing active fleet vehicles, including their operational efficiency and CO2 saved.
+   * 
+   * Phân tích hoạt động của các phương tiện hàng đầu trong đội xe, gồm hiệu suất vận hành và lượng CO2 tiết kiệm được.
+   * 
+   * @param query - Timeframe settings / Thiết lập cấu hình thời gian.
+   * @returns Array of fleet vehicle operational efficiency statistics / Mảng thống kê hiệu suất vận hành của các xe.
+   */
   async getFleetPerformance(query: GetAnalyticsQueryType) {
     const { startDate, endDate } = this.getDateRangeCondition(query.dateRange || '30d')
 
@@ -264,6 +344,16 @@ export class AnalyticsRepository {
     }))
   }
 
+  /**
+   * Retrieves Service Level Agreement (SLA) metrics from pre-calculated alarm logs.
+   * Avoids querying entire history logs to ensure high database response speed.
+   * 
+   * Lấy các chỉ số SLA từ nhật ký cảnh báo đã được tính toán sẵn.
+   * Tránh việc quét toàn bộ nhật ký lịch sử nhằm đảm bảo tốc độ phản hồi tối đa của cơ sở dữ liệu.
+   * 
+   * @param query - Timeframe settings / Thiết lập cấu hình thời gian.
+   * @returns General SLA alert and delays stats / Các số liệu thống kê cảnh báo SLA và chậm trễ chung.
+   */
   async getSlaAnalytics(query: GetAnalyticsQueryType) {
     const { startDate, endDate } = this.getDateRangeCondition(query.dateRange || '30d')
 

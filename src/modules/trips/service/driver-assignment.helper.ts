@@ -55,17 +55,28 @@ export type DriverAssignmentRequestWithDetails = Prisma.DriverAssignmentRequestG
 type DriverAssignmentTripSummary = NonNullable<DriverAssignmentRequestWithDetails['order']['currentTrip']>
 
 /**
- * Helper chứa các hàm mapping và include config
- * dùng chung cho DriverAssignment workflow (Service + Board).
+ * Helper utility facilitating mappings and include database configs for DriverAssignment workflow.
+ * Tiện ích hỗ trợ tạo ánh xạ và cấu hình truy vấn cơ sở dữ liệu cho luồng DriverAssignment.
  */
 @Injectable()
 export class DriverAssignmentHelper {
-  /** Prisma include config cho DriverAssignmentRequest queries */
+  /**
+   * Retrieves the standard Prisma include configuration query fields for driver assignment request.
+   * Lấy cấu hình các trường bao gồm (include) của Prisma cho các yêu cầu phân công tài xế.
+   *
+   * @returns Prisma include object mapping.
+   */
   getDriverAssignmentRequestInclude() {
     return driverAssignmentRequestInclude
   }
 
-  /** Map raw Prisma DriverAssignmentRequest sang response DTO */
+  /**
+   * Maps a raw database assignment request entity into structured DTO properties.
+   * Ánh xạ thực thể yêu cầu phân công thô từ CSDL sang các thuộc tính cấu trúc DTO.
+   *
+   * @param {DriverAssignmentRequestWithDetails} request - DB entity record.
+   * @returns Mapped structured DTO.
+   */
   mapDriverAssignmentRequest(request: DriverAssignmentRequestWithDetails): DriverAssignmentRequestResType {
     return {
       createdAt: request.createdAt,
@@ -83,7 +94,13 @@ export class DriverAssignmentHelper {
     }
   }
 
-  /** Map raw Trip sang summary nhỏ (dùng trong assignment request response) */
+  /**
+   * Constructs small condensed summary details for assigned trips.
+   * Xây dựng tóm tắt rút gọn cho chuyến đi được phân công.
+   *
+   * @param {DriverAssignmentTripSummary | null} trip - DB trip stop model.
+   * @returns Trimmed trip summary object or null.
+   */
   mapTripSummary(trip: DriverAssignmentTripSummary | null) {
     if (!trip?.vehicle) {
       return null

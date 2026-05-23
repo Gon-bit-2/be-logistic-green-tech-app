@@ -1,3 +1,11 @@
+/**
+ * Configuration module that parses and validates environment variables.
+ * Module cấu hình phân tích và kiểm chứng các biến môi trường.
+ *
+ * Uses Zod schema validation to ensure all required configuration keys are present
+ * and correctly formatted before the application starts. If validation fails,
+ * it logs the missing/invalid keys and terminates the process with code 1.
+ */
 import z from 'zod'
 import 'dotenv/config'
 import { Logger } from '@nestjs/common'

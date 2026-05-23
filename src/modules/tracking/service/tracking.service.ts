@@ -12,6 +12,15 @@ import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import { OrderStateService } from 'src/common/services/order-state.service'
 import { TrackingAccessService } from './tracking-access.service'
 
+/**
+ * Service managing package tracking operations and history.
+ * Handles tracking event registration, state machine validations, public/authenticated timeline queries,
+ * and automatically transitions trips and triggers green-tech emissions calculation when all orders are delivered.
+ *
+ * Dịch vụ quản lý các hoạt động theo dõi đơn hàng và lịch sử hành trình.
+ * Xử lý đăng ký sự kiện định vị, xác thực máy trạng thái, truy vấn dòng thời gian công khai/đã xác thực,
+ * và tự động hoàn thành chuyến đi cùng kích hoạt tính toán khí thải green-tech khi tất cả đơn hàng đã được giao.
+ */
 @Injectable()
 export class TrackingService {
   private readonly logger = new Logger(TrackingService.name)
@@ -25,8 +34,26 @@ export class TrackingService {
   ) {}
 
   /**
-   * Tạo tracking event mới
-   * Bao gồm: validate state machine, kiểm tra POD, kiểm tra failed attempts
+   * Registers a new tracking event for a specific package.
+   * Validates access permissions, delivery failure attempts, updates order states,
+   * processes COD collections, and triggers trip completions.
+   *
+   * Ghi nhận một sự kiện định vị mới cho một gói hàng cụ thể.
+   * Xác thực quyền truy cập, số lần giao hàng thất bại, cập nhật trạng thái đơn hàng,
+   * xử lý thu hộ COD và kích hoạt hoàn thành chuyến đi.
+   *
+   * @param actor The token payload of the user creating the event.
+   *              Thông tin token của người dùng tạo sự kiện.
+   * @param payload The data transfer object containing event type, status, and metadata.
+   *                Đối tượng truyền dữ liệu chứa loại sự kiện, trạng thái và siêu dữ liệu.
+   * @returns A promise resolving to the created tracking event entity.
+   *          Một promise trả về thực thể sự kiện định vị đã tạo.
+   * @throws {NotFoundException} If the order does not exist.
+   *                             Nếu đơn hàng không tồn tại.
+   * @throws {BadRequestException} If failed delivery attempts exceed the maximum allowed threshold.
+   *                               Nếu số lần giao hàng thất bại vượt quá ngưỡng tối đa cho phép.
+   * @throws {ForbiddenException} If COD collection is triggered by a non-driver user.
+   *                              Nếu thu hộ COD được thực hiện bởi người dùng không phải tài xế.
    */
   async createEvent(actor: AccessTokenPayload, payload: CreateTrackingEventType) {
     const createdById = actor.userId
@@ -135,8 +162,16 @@ export class TrackingService {
   }
 
   /**
-   * Kiểm tra Trip: nếu tất cả đơn trên Trip đều DELIVERED → tự động chuyển Trip sang COMPLETED
-   * Đây là trigger tự nhiên để Green Tech module tính CO₂
+   * Evaluates if all orders on a trip have been processed (DELIVERED or CANCELLED).
+   * If complete, automatically marks the Trip as COMPLETED and enqueues BullMQ job for CO2 calculation.
+   *
+   * Đánh giá xem tất cả các đơn hàng trong chuyến đi đã được xử lý xong hay chưa (DELIVERED hoặc CANCELLED).
+   * Nếu đã hoàn tất, tự động đánh dấu Chuyến đi là COMPLETED và đẩy job tính lượng khí thải CO2 vào hàng đợi BullMQ.
+   *
+   * @param tripId The unique identifier of the trip to verify.
+   *               Mã định danh duy nhất của chuyến đi cần kiểm tra.
+   * @returns A promise resolving when the evaluation and updates are done.
+   *          Một promise hoàn tất khi việc đánh giá và cập nhật hoàn thành.
    */
   private async checkAndCompleteTrip(tripId: number): Promise<void> {
     const trip = await this.prismaService.trip.findUnique({
@@ -177,7 +212,18 @@ export class TrackingService {
   }
 
   /**
-   * Lấy timeline tracking của 1 đơn hàng (cần login)
+   * Retrieves the comprehensive tracking timeline of an order for authenticated actors.
+   *
+   * Lấy dòng thời gian định vị chi tiết của một đơn hàng cho người dùng đã xác thực.
+   *
+   * @param orderId The unique identifier of the order.
+   *                Mã định danh duy nhất của đơn hàng.
+   * @param actor The token payload of the authenticated user.
+   *              Thông tin token của người dùng đã xác thực.
+   * @returns A promise resolving to the order's status, timeline events, and ETA details.
+   *          Một promise trả về trạng thái đơn hàng, các sự kiện dòng thời gian và chi tiết ETA.
+   * @throws {NotFoundException} If the order does not exist.
+   *                             Nếu đơn hàng không tồn tại.
    */
   async getTimeline(orderId: number, actor: AccessTokenPayload) {
     await this.trackingAccessService.assertCanViewOrderTimeline(actor, orderId)
@@ -203,8 +249,18 @@ export class TrackingService {
   }
 
   /**
-   * Lấy timeline tracking công khai bằng mã vận đơn (không cần login)
-   * Ẩn thông tin nhạy cảm (createdById, coordinates nội bộ)
+   * Retrieves a public-safe simplified timeline using the package's public tracking code.
+   * Sanitizes sensitive fields such as internal coordinates, creators, and internal damage logs.
+   *
+   * Lấy dòng thời gian rút gọn an toàn công khai bằng mã vận đơn của gói hàng.
+   * Làm sạch các trường nhạy cảm như tọa độ nội bộ, người tạo và nhật ký hư hỏng nội bộ.
+   *
+   * @param trackingCode The unique public tracking code of the order.
+   *                     Mã vận đơn công khai duy nhất của đơn hàng.
+   * @returns A promise resolving to the sanitized public tracking timeline.
+   *          Một promise trả về dòng thời gian định vị công khai đã được làm sạch.
+   * @throws {NotFoundException} If no order matches the tracking code.
+   *                             Nếu không tìm thấy đơn hàng nào khớp với mã vận đơn.
    */
   async getPublicTimeline(trackingCode: string) {
     const order = await this.prismaService.order.findFirst({
@@ -246,6 +302,16 @@ export class TrackingService {
     }
   }
 
+  /**
+   * Fetches the estimated time of arrival (ETA) details associated with the active trip stop of the order.
+   *
+   * Lấy thông tin thời gian dự kiến đến (ETA) liên quan đến điểm dừng chuyến đi đang hoạt động của đơn hàng.
+   *
+   * @param orderId The unique identifier of the order.
+   *                Mã định danh duy nhất của đơn hàng.
+   * @returns A promise resolving to ETA metrics and associated trip ID or null.
+   *          Một promise trả về các số đo ETA và ID chuyến đi liên quan hoặc null.
+   */
   private async getOrderEta(orderId: number) {
     const stop = await this.prismaService.tripStop.findFirst({
       where: {
@@ -270,6 +336,16 @@ export class TrackingService {
     }
   }
 
+  /**
+   * Maps an authenticated user's role to its respective tracking event source.
+   *
+   * Ánh xạ vai trò của người dùng đã xác thực với nguồn sự kiện định vị tương ứng của họ.
+   *
+   * @param actor The token payload of the authenticated user.
+   *              Thông tin token của người dùng đã xác thực.
+   * @returns The resolved EventSource string value.
+   *          Giá trị chuỗi EventSource được xác định.
+   */
   private resolveActorSource(actor: AccessTokenPayload) {
     if (actor.roleName === roleName.DRIVER) return EVENT_SOURCE.DRIVER_APP
     if (actor.roleName === roleName.WAREHOUSE_STAFF) return EVENT_SOURCE.HUB_SCANNER

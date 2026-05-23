@@ -31,12 +31,26 @@ const REUSABLE_PAYMENT_INTENT_STATUSES = new Set<string>([
   'requires_capture',
 ])
 
+/**
+ * Service managing payment gateway integrations (Stripe) and Cash-On-Delivery (COD) processing.
+ * 
+ * Dịch vụ quản lý tích hợp cổng thanh toán (Stripe) và xử lý thanh toán tiền mặt khi giao hàng (COD).
+ */
 @Injectable()
 export class PaymentService {
   private stripe: InstanceType<typeof Stripe>
   private readonly logger = new Logger(PaymentService.name)
   private readonly stripeZeroDecimalCurrencies = new Set(['vnd'])
 
+  /**
+   * Initializes the PaymentService with a configured Stripe client.
+   * 
+   * Khởi tạo PaymentService với Stripe client đã cấu hình.
+   * 
+   * @param paymentRepo - Payment Repository / Repository quản lý thanh toán.
+   * @param prisma - Prisma Database Service / Dịch vụ cơ sở dữ liệu Prisma.
+   * @param codSettlementService - COD Settlement Service / Dịch vụ quyết toán COD.
+   */
   constructor(
     private readonly paymentRepo: PaymentRepository,
     private readonly prisma: PrismaService,
@@ -50,7 +64,17 @@ export class PaymentService {
   }
 
   /**
-   * Khởi tạo Stripe Payment Intent cho khách hàng (Khách hàng gõ thẻ thanh toán)
+   * Creates a new Stripe PaymentIntent for an order, or retrieves a reusable pending one.
+   * Ensures idempotency and logs the pending transaction inside the database.
+   * 
+   * Tạo Stripe PaymentIntent mới cho đơn hàng, hoặc tái sử dụng một intent đang chờ xử lý.
+   * Đảm bảo tính idempotent và lưu lại giao dịch đang chờ trong cơ sở dữ liệu.
+   * 
+   * @param orderId - Order ID / ID đơn hàng.
+   * @param userId - ID of the active customer performing checkout / ID của khách hàng đang thực hiện checkout.
+   * @returns Client secret, transaction ID, and final payment amount / Client secret, ID giao dịch và số tiền thanh toán cuối cùng.
+   * @throws NotFoundException if the order does not exist / NotFoundException nếu đơn hàng không tồn tại.
+   * @throws BadRequestException if permissions mismatch or order status is inappropriate / BadRequestException nếu sai quyền sở hữu hoặc trạng thái đơn hàng không hợp lệ.
    */
   async createPaymentIntent(orderId: number, userId: number) {
     const order = await this.prisma.order.findUnique({
@@ -124,7 +148,15 @@ export class PaymentService {
   }
 
   /**
-   * Tài xế xác nhận đã nhận tiền mặt từ khách hàng khi giao hàng
+   * Confirms a Cash-on-Delivery (COD) payment collection by a driver.
+   * Integrates with COD Settlement service.
+   * 
+   * Xác nhận thu tiền mặt (COD) thành công bởi tài xế.
+   * Tích hợp với dịch vụ Quyết toán COD.
+   * 
+   * @param orderId - Order ID / ID đơn hàng.
+   * @param driverId - Driver User ID / ID người dùng của tài xế.
+   * @returns Detailed COD collection response / Phản hồi chi tiết lượt thu COD.
    */
   async confirmCOD(orderId: number, driverId: number) {
     const result = await this.codSettlementService.collectCodForOrder(orderId, driverId)
@@ -133,8 +165,15 @@ export class PaymentService {
   }
 
   /**
-   * Xử lý Stripe Webhook từ xa gửi về
-   * Cập nhật trạng thái tự động thành COMPLETED khi khách quẹt thẻ thành công
+   * Processes a Stripe webhook callback. Verifies signatures and updates transaction states.
+   * 
+   * Xử lý webhook gọi lại từ Stripe. Xác minh chữ ký và cập nhật trạng thái giao dịch.
+   * 
+   * @param signature - Stripe HMAC signature string / Chuỗi chữ ký HMAC của Stripe.
+   * @param payload - Raw request body buffer / Buffer request thô.
+   * @returns Object confirming webhook receipt / Đối tượng xác nhận đã nhận webhook.
+   * @throws ServiceUnavailableException if Stripe webhook secret is unconfigured / ServiceUnavailableException nếu cấu hình webhook secret bị thiếu.
+   * @throws BadRequestException if signature verification fails / BadRequestException nếu xác minh chữ ký thất bại.
    */
   async handleStripeWebhook(signature: string, payload: Buffer) {
     let event: StripePaymentIntentEvent
@@ -176,6 +215,17 @@ export class PaymentService {
     return { received: true }
   }
 
+  /**
+   * Finds payment record by its associated Order ID. Validates user ownership for customers.
+   * 
+   * Tìm bản ghi thanh toán theo ID đơn hàng liên kết. Xác thực quyền sở hữu đối với khách hàng.
+   * 
+   * @param orderId - Order ID / ID đơn hàng.
+   * @param user - Active user JWT payload / Payload JWT của người dùng đang đăng nhập.
+   * @returns Found payment record / Bản ghi thanh toán được tìm thấy.
+   * @throws NotFoundException if order or payment is missing / NotFoundException nếu không tìm thấy đơn hàng hoặc thanh toán.
+   * @throws ForbiddenException if a customer tries to access another user's order / ForbiddenException nếu khách hàng cố tình truy cập đơn hàng của người khác.
+   */
   async getPaymentByOrderId(orderId: number, user?: AccessTokenPayload) {
     if (user?.roleName === roleName.CUSTOMER) {
       const order = await this.prisma.order.findUnique({
@@ -200,6 +250,14 @@ export class PaymentService {
     return payment
   }
 
+  /**
+   * Retrieves an existing pending Stripe PaymentIntent that can be safely reused.
+   * 
+   * Lấy một PaymentIntent Stripe đang chờ xử lý hiện có để có thể tái sử dụng một cách an toàn.
+   * 
+   * @param transactionId - Stripe transaction ID / ID giao dịch Stripe.
+   * @returns Retrieved Stripe PaymentIntent or null / PaymentIntent Stripe tìm thấy hoặc null.
+   */
   private async getReusablePaymentIntent(transactionId: string) {
     try {
       const paymentIntent = await this.stripe.paymentIntents.retrieve(transactionId)
@@ -214,6 +272,15 @@ export class PaymentService {
     return null
   }
 
+  /**
+   * Builds a secure idempotency key for creating Stripe PaymentIntents.
+   * 
+   * Xây dựng khóa idempotent an toàn cho việc tạo các Stripe PaymentIntent.
+   * 
+   * @param orderId - Order ID / ID đơn hàng.
+   * @param previousTransactionId - Previous pending transaction ID / ID giao dịch đang chờ xử lý trước đó.
+   * @returns Generated idempotency key string / Chuỗi khóa idempotent được tạo.
+   */
   private buildPaymentIntentIdempotencyKey(orderId: number, previousTransactionId: string | null) {
     if (!previousTransactionId) {
       return `payment-intent-order-${orderId}`
@@ -222,6 +289,16 @@ export class PaymentService {
     return `payment-intent-order-${orderId}-retry-${previousTransactionId}`
   }
 
+  /**
+   * Normalizes standard currency amount to values appropriate for Stripe API (e.g. cents vs whole amounts).
+   * 
+   * Chuẩn hóa số tiền tệ tiêu chuẩn thành giá trị thích hợp cho Stripe API (ví dụ: cent vs số tiền nguyên).
+   * 
+   * @param amount - Raw payment amount / Số tiền thanh toán thô.
+   * @param currency - Target currency string / Chuỗi đơn vị tiền tệ đích.
+   * @returns Stripe-compatible normalized amount / Số tiền chuẩn hóa tương thích với Stripe.
+   * @throws BadRequestException if amount is invalid / BadRequestException nếu số tiền không hợp lệ.
+   */
   private normalizeStripeAmount(amount: unknown, currency: string): number {
     const numericAmount = Number(amount)
 

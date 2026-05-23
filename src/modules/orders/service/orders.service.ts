@@ -33,6 +33,15 @@ const ACTIVE_HUBS_GEO_CACHE_KEY = 'orders:active-hubs:geo'
 const HUBS_CACHE_TTL_MS = 5 * 60 * 1000
 type ActiveHubGeo = { id: number; latitude: number; longitude: number; name: string }
 
+/**
+ * Service managing shipping logic and the lifecycle of orders.
+ * Service quản lý logic vận chuyển và vòng đời của đơn hàng.
+ *
+ * Implements fee quotes, nearest hub geospatial fencings, bulk listings,
+ * and order state transformations.
+ * Triển khai báo giá phí, xác định geo-fencing hub gần nhất, danh sách đơn hàng
+ * và chuyển đổi trạng thái đơn hàng.
+ */
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name)
@@ -47,10 +56,18 @@ export class OrdersService {
   ) {}
 
   /**
+   * Calculates shared order metrics used by both quote() and create().
    * Tính toán các chỉ số đơn hàng dùng chung cho cả quote() và create().
    *
+   * DRY: Prevents duplicated calculation logic for weights, volumes, fees, and carbon.
    * DRY: Tránh duplicate logic tính weight, volume, phí vận chuyển, CO2.
-   * Khi thay đổi công thức phí hoặc CO2, chỉ cần sửa 1 chỗ duy nhất.
+   *
+   * @param {OrderQuoteBodyType['items']} items - Order item payloads containing dimensions.
+   * @param {OrderQuoteBodyType['items']} items - Payload các mặt hàng chứa kích thước.
+   * @param {number} distanceKm - Estimated route distance in kilometers.
+   * @param {number} distanceKm - Khoảng cách lộ trình ước tính tính bằng km.
+   * @returns Calculated weight, volume, fee, and estimated CO2 saved.
+   * @returns Trọng lượng, thể tích, phí và lượng CO2 tiết kiệm ước tính.
    */
   private calculateOrderMetrics(items: OrderQuoteBodyType['items'], distanceKm: number) {
     let totalWeight = 0
@@ -83,6 +100,15 @@ export class OrdersService {
     return { totalWeight, totalVolume, shippingFee, estimatedCo2Saved }
   }
 
+  /**
+   * Estimates shipping routes, costs, and carbon offsets for mock bookings.
+   * Ước tính lộ trình, chi phí vận chuyển và lượng CO2 tiết kiệm khi báo giá.
+   *
+   * @param {OrderQuoteBodyType} payload - Route coordinates and item properties.
+   * @param {OrderQuoteBodyType} payload - Tọa độ lộ trình và thông tin các mặt hàng.
+   * @returns {Promise<any>} Shipping metrics including route polyline.
+   * @returns {Promise<any>} Các chỉ số vận chuyển bao gồm polyline đường đi.
+   */
   async quote(payload: OrderQuoteBodyType) {
     const distanceKm = calculateHaversineDistance(
       payload.senderLat,
@@ -113,9 +139,21 @@ export class OrdersService {
   // ====== #10: HUB GEOSPATIAL CACHE ======
   // Cache list Hub qua CacheModule/Redis để các instance dùng chung cùng một dữ liệu.
   /**
-   * Tìm Hub gần nhất với tọa độ người gửi (Geo-Fencing Assignment).
-   * Sử dụng Haversine Distance để so sánh khoảng cách chim bay từ sender tới toàn bộ Hub.
-   * Giải quyết bài toán "Đơn mồ côi" - đơn hàng mới tạo không thuộc Hub nào.
+   * Resolves the nearest active hub utilizing geospatial distance equations.
+   * Tìm Hub hoạt động gần nhất dựa trên tính toán khoảng cách tọa độ (Geo-Fencing Assignment).
+   *
+   * Utilizes Haversine Distance to compare geographic space distances from the sender to all hubs.
+   * Sử dụng Haversine Distance để so sánh khoảng cách địa lý từ sender tới toàn bộ Hub.
+   *
+   * Prevents "orphaned orders" by automatically assigning them to hubs.
+   * Giải quyết bài toán "đơn mồ côi" - đơn hàng mới tạo không thuộc Hub nào bằng cách tự động gán.
+   *
+   * @param {number} senderLat - Sender's latitude.
+   * @param {number} senderLat - Vĩ độ của người gửi.
+   * @param {number} senderLng - Sender's longitude.
+   * @param {number} senderLng - Kinh độ của người gửi.
+   * @returns {Promise<number | null>} Nearest active Hub ID or null.
+   * @returns {Promise<number | null>} ID của Hub gần nhất đang hoạt động hoặc null.
    */
   private async findNearestHubId(senderLat: number, senderLng: number): Promise<number | null> {
     let activeHubs = (await this.cacheManager?.get<ActiveHubGeo[]>(ACTIVE_HUBS_GEO_CACHE_KEY)) ?? null
@@ -151,6 +189,22 @@ export class OrdersService {
     return nearestHubId
   }
 
+  /**
+   * Initializes a new order, binds it to the nearest hub, and emits notifications.
+   * Khởi tạo đơn hàng mới, gán vào Hub gần nhất, và phát đi thông báo hệ thống.
+   *
+   * Calculates Haversine distance, resolves metrics, determines hub, and commits database writes.
+   * Tính khoảng cách Haversine, phân giải chỉ số, xác định hub và thực hiện ghi cơ sở dữ liệu.
+   *
+   * @param {number} createdById - Authenticated creator ID.
+   * @param {number} createdById - ID của người tạo đã xác thực.
+   * @param {number} customerId - Target customer ID.
+   * @param {number} customerId - ID khách hàng mục tiêu.
+   * @param {CreateOrderBodyType} payload - Creation fields and items.
+   * @param {CreateOrderBodyType} payload - Trường khởi tạo đơn hàng và các mặt hàng.
+   * @returns {Promise<{ order: any }>} The newly created order record.
+   * @returns {Promise<{ order: any }>} Bản ghi đơn hàng mới được tạo.
+   */
   async create(createdById: number, customerId: number, payload: CreateOrderBodyType) {
     // 1. Tính Khoảng cách (Haversine Formula) bằng km
     const distanceKm = calculateHaversineDistance(
@@ -187,6 +241,17 @@ export class OrdersService {
     }
   }
 
+  /**
+   * Computes the final shipping fee based on distance and weight thresholds.
+   * Tính toán phí vận chuyển cuối cùng dựa trên ngưỡng khoảng cách và trọng lượng.
+   *
+   * @param {number} distanceKm - Travel distance in kilometers.
+   * @param {number} distanceKm - Khoảng cách di chuyển tính bằng km.
+   * @param {number} totalWeight - Cargo weight in kilograms.
+   * @param {number} totalWeight - Tổng trọng lượng hàng hóa tính bằng kg.
+   * @returns {number} Rounded shipping fee in VND.
+   * @returns {number} Phí vận chuyển đã làm tròn tính bằng VND.
+   */
   private calculateShippingFee(distanceKm: number, totalWeight: number): number {
     const baseFee = 15000
     let distanceFee = 0
@@ -206,6 +271,20 @@ export class OrdersService {
     return Math.round(baseFee + distanceFee + heavyFee)
   }
 
+  /**
+   * Queries orders matching criteria with pagination and role constraints.
+   * Truy vấn các đơn hàng khớp điều kiện kèm phân trang và ràng buộc vai trò.
+   *
+   * Limits warehouse staff visibility to their assigned hub orders.
+   * Giới hạn hiển thị của nhân viên kho đối với các đơn thuộc hub mà họ được phân công.
+   *
+   * @param {GetOrderListQueryType & { customerId?: number; currentHubId?: number }} query - Query options (limit, page, search).
+   * @param {GetOrderListQueryType & { customerId?: number; currentHubId?: number }} query - Tùy chọn truy vấn (giới hạn, trang, tìm kiếm).
+   * @param {AccessTokenPayload} actor - Access token of the authenticated actor.
+   * @param {AccessTokenPayload} actor - Access token của tác nhân đã xác thực.
+   * @returns Paginated order results.
+   * @returns Kết quả danh sách đơn hàng phân trang.
+   */
   async findAll(
     query: GetOrderListQueryType & { customerId?: number; currentHubId?: number },
     actor?: AccessTokenPayload,
@@ -233,10 +312,34 @@ export class OrdersService {
     return this.orderRepo.findAll(nextQuery)
   }
 
+  /**
+   * Locates a single order by database ID.
+   * Tìm kiếm một đơn hàng duy nhất bằng ID cơ sở dữ liệu.
+   *
+   * @param {number} id - Order ID.
+   * @param {number} id - ID đơn hàng.
+   * @returns {Promise<any>} Order record with details.
+   * @returns {Promise<any>} Bản ghi đơn hàng kèm theo chi tiết.
+   */
   async findById(id: number) {
     return this.orderRepo.findById(id)
   }
 
+  /**
+   * Modifies an order's status and transitions its lifecycle state safely.
+   * Sửa đổi trạng thái của đơn hàng và chuyển đổi trạng thái vòng đời an toàn.
+   *
+   * @param {number} id - Order ID.
+   * @param {number} id - ID đơn hàng.
+   * @param {UpdateOrderStatusType} payload - Target status.
+   * @param {UpdateOrderStatusType} payload - Trạng thái đích.
+   * @param {AccessTokenPayload} actor - Authenticated actor.
+   * @param {AccessTokenPayload} actor - Tác nhân thực hiện đã xác thực.
+   * @returns {Promise<any>} The updated order.
+   * @returns {Promise<any>} Đơn hàng đã được cập nhật.
+   * @throws {NotFoundException} If order is not found after status change.
+   * @throws {NotFoundException} Nếu không tìm thấy đơn hàng sau khi đổi trạng thái.
+   */
   async update(id: number, payload: UpdateOrderStatusType, actor?: AccessTokenPayload) {
     await this.orderStateService.transitionOrderStatus({
       createdById: actor?.userId ?? null,
@@ -255,6 +358,26 @@ export class OrdersService {
     return updatedOrder
   }
 
+  /**
+   * Transition order status to CANCELLED with strict role checking.
+   * Chuyển trạng thái đơn hàng sang CANCELLED kèm kiểm tra vai trò nghiêm ngặt.
+   *
+   * Warehouse staff can only cancel orders belonging to their assigned hub.
+   * Nhân viên kho chỉ có thể hủy đơn thuộc Hub mà họ quản lý.
+   *
+   * @param {number} id - Target order ID.
+   * @param {number} id - ID đơn hàng mục tiêu.
+   * @param {AccessTokenPayload} actor - Authenticated actor payload.
+   * @param {AccessTokenPayload} actor - Payload tác nhân đã xác thực.
+   * @returns {Promise<any>} The cancelled order.
+   * @returns {Promise<any>} Đơn hàng đã được hủy.
+   * @throws {NotFoundException} If order is not found.
+   * @throws {NotFoundException} Nếu không tìm thấy đơn hàng.
+   * @throws {ForbiddenException} If warehouse staff cancels outside their hub.
+   * @throws {ForbiddenException} Nếu nhân viên kho hủy đơn ngoài Hub của họ.
+   * @throws {BadRequestException} If order is in a non-cancellable status.
+   * @throws {BadRequestException} Nếu đơn hàng ở trạng thái không thể hủy.
+   */
   async cancel(id: number, actor: AccessTokenPayload) {
     const order = await this.orderRepo.findById(id)
 
@@ -320,10 +443,30 @@ export class OrdersService {
     return cancelledOrder
   }
 
+  /**
+   * Soft deletes an order from the database.
+   * Xóa mềm đơn hàng khỏi cơ sở dữ liệu.
+   *
+   * @param {number} id - Target order ID.
+   * @param {number} id - ID đơn hàng mục tiêu.
+   * @param {number} deletedById - Actor ID requesting deletion.
+   * @param {number} deletedById - ID tác nhân yêu cầu xóa đơn hàng.
+   * @returns {Promise<any>} Deleted order info.
+   * @returns {Promise<any>} Thông tin đơn hàng đã bị xóa.
+   */
   async delete(id: number, deletedById: number) {
     return this.orderRepo.delete({ id, deletedById })
   }
 
+  /**
+   * Standardizes tracking event sources based on user roles.
+   * Tiêu chuẩn hóa nguồn gốc sự kiện hành trình dựa trên vai trò người dùng.
+   *
+   * @param {AccessTokenPayload} actor - User token payload.
+   * @param {AccessTokenPayload} actor - Payload token người dùng.
+   * @returns {string} Tracking event source code.
+   * @returns {string} Mã nguồn sự kiện hành trình.
+   */
   private resolveOrderEventSource(actor: AccessTokenPayload) {
     if (actor.roleName === roleName.WAREHOUSE_STAFF) return EVENT_SOURCE.HUB_SCANNER
     if (actor.roleName === roleName.CUSTOMER) return EVENT_SOURCE.CUSTOMER_APP

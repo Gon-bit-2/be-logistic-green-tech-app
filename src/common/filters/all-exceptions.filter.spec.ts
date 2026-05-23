@@ -1,4 +1,5 @@
 import { ArgumentsHost, ForbiddenException } from '@nestjs/common'
+import { createErrorResponse, ErrorCode } from 'src/common/errors/error-codes'
 import { AllExceptionsFilter } from './all-exceptions.filter'
 
 function createHttpHost() {
@@ -62,6 +63,24 @@ describe('AllExceptionsFilter', () => {
         statusCode: 500,
       }),
       500,
+    )
+  })
+
+  it('preserves explicit machine-readable errorCode responses', () => {
+    const { host, httpAdapterHost } = createHttpHost()
+    const filter = new AllExceptionsFilter(httpAdapterHost as any)
+
+    filter.catch(new ForbiddenException(createErrorResponse(ErrorCode.Forbidden)), host)
+
+    expect(httpAdapterHost.httpAdapter.reply).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        errorCode: ErrorCode.Forbidden,
+        message: ErrorCode.Forbidden,
+        requestId: 'req-1',
+        statusCode: 403,
+      }),
+      403,
     )
   })
 })

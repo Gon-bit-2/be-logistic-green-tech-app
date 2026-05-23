@@ -51,6 +51,15 @@ const DriverLocationSchema = z.object({
 //
 // CORS: Giới hạn origin thay vì cho phép tất cả ('*') để tránh bị exploit
 // Authentication: JWT token bắt buộc khi connect qua handshake auth
+/**
+ * Real-time Socket.IO Gateway for package tracking and GPS location streaming.
+ * Provides pub-sub namespaces for GPS coordinates, manages authorization check cache,
+ * and pushes location coordinates from drivers to subscribed clients (customers, warehouse staff, admins) in real-time.
+ *
+ * Gateway Socket.IO thời gian thực phục vụ theo dõi gói hàng và truyền tọa độ định vị GPS.
+ * Cung cấp không gian tên (namespace) pub-sub cho tọa độ GPS, quản lý bộ nhớ đệm kiểm tra quyền,
+ * và đẩy tọa độ vị trí từ tài xế đến các client đã đăng ký (khách hàng, nhân viên kho, admin) trong thời gian thực.
+ */
 @WebSocketGateway({
   cors: {
     origin: parseCorsOrigins(envConfig.CORS_ORIGINS) ?? ['http://localhost:3000'],
@@ -73,16 +82,14 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   ) {}
 
   /**
-   * Handle client connections — BẮT BUỘC xác thực JWT token.
+   * Handles real-time client connection events. Enforces strict JWT validation from connection handshakes.
+   * If authentication fails, the socket connection is rejected immediately.
    *
-   * Client phải gửi token khi kết nối:
-   *   io('/tracking', { auth: { token: accessToken } })
+   * Xử lý các sự kiện kết nối của client thời gian thực. Bắt buộc xác thực JWT nghiêm ngặt từ handshake kết nối.
+   * Nếu xác thực thất bại, kết nối socket sẽ bị từ chối ngay lập tức.
    *
-   * Nếu token không hợp lệ hoặc hết hạn, socket sẽ bị disconnect ngay lập tức.
-   * Điều này ngăn chặn:
-   *   - Kẻ tấn công gửi fake GPS data giả mạo tài xế
-   *   - Người lạ join tracking room để theo dõi vị trí trái phép
-   *   - Spam fake location updates gây nhiễu hệ thống
+   * @param client The authenticated socket instance.
+   *               Đối tượng socket đã được xác thực.
    */
   async handleConnection(client: AuthenticatedSocket) {
     // Xác thực JWT token từ handshake auth
@@ -118,7 +125,12 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   /**
-   * Handle client disconnections
+   * Handles real-time client disconnection events.
+   *
+   * Xử lý sự kiện ngắt kết nối của client thời gian thực.
+   *
+   * @param client The authenticated socket instance.
+   *               Đối tượng socket đã được xác thực.
    */
   handleDisconnect(client: AuthenticatedSocket) {
     const user = client.data.user
@@ -128,11 +140,18 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   /**
-   * Kiểm tra quyền truy cập Trip theo role:
-   * - ADMIN: được xem tất cả trips
-   * - WAREHOUSE_STAFF: chỉ xem trip thuộc hub của mình
-   * - DRIVER: chỉ xem trip mình đang lái
-   * - CUSTOMER: chỉ xem trip chứa đơn hàng của mình
+   * Helper function to verify trip access permissions with cache scoping.
+   * Prevents database query spam during frequent tracking room handshakes.
+   *
+   * Hàm hỗ trợ xác thực quyền truy cập chuyến đi kết hợp bộ đệm cache.
+   * Ngăn chặn truy vấn database liên tục trong các phiên bắt tay tham gia phòng theo dõi tần suất cao.
+   *
+   * @param user The token payload of the user.
+   *             Thông tin token của người dùng.
+   * @param tripId The unique identifier of the trip.
+   *               Mã định danh duy nhất của chuyến đi.
+   * @returns True if authorized, false otherwise.
+   *          True nếu được ủy quyền, ngược lại false.
    */
   private async verifyTripAccess(user: AccessTokenPayload, tripId: number): Promise<boolean> {
     const cacheKey = `${user.userId}:${user.roleName}:${tripId}`
@@ -154,15 +173,18 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   /**
-   * TÀI XẾ (DRIVER) gửi cập nhật vị trí GPS liên tục
+   * Listens to incoming GPS coordinate updates from authenticated drivers.
+   * Validates coordinate bounds, asserts trip driver authorization, and broadcasts position data to trip room.
    *
-   * Payload: { tripId: number, lat: number, lng: number }
-   * System sẽ tự động broadcast (Publish) vị trí này cho tất cả những ai đang Subscribe room của tripId đó.
+   * Lắng nghe các bản cập nhật tọa độ GPS liên tục từ tài xế đã xác thực.
+   * Xác thực giới hạn tọa độ, kiểm tra quyền lái chuyến đi của tài xế và phát sóng dữ liệu vị trí vào phòng của chuyến đi.
    *
-   * Bảo mật:
-   * - Validate input (lat/lng range, tripId > 0) bằng Zod
-   * - Chỉ DRIVER đúng chuyến mới được gửi location update
-   * - Ngăn Driver A giả mạo GPS cho trip của Driver B
+   * @param data The GPS coordinates and trip ID update payload.
+   *             Payload cập nhật tọa độ GPS và ID chuyến đi.
+   * @param client The driver's socket instance.
+   *               Đối tượng socket của tài xế.
+   * @returns Acknowledge status response object.
+   *          Đối tượng phản hồi xác nhận trạng thái.
    */
   @SubscribeMessage('driverLocationUpdate')
   async handleLocationUpdate(
@@ -214,13 +236,18 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   /**
-   * KHÁCH HÀNG (CUSTOMER) tham gia room để nhận live tracking
+   * Subscribes a client to a specific trip's live GPS broadcast room.
+   * Validates trip scope access permissions before joining the room.
    *
-   * Bảo mật:
-   * - Validate tripId input
-   * - Kiểm tra quyền: Customer chỉ join room của trip chứa đơn mình
-   * - Driver chỉ join room trip mình đang lái
-   * - Admin/Staff join bất kỳ
+   * Đăng ký một client vào phòng phát sóng GPS trực tiếp của một chuyến đi cụ thể.
+   * Xác thực quyền truy cập phạm vi chuyến đi trước khi tham gia phòng.
+   *
+   * @param data Object containing the target trip ID.
+   *             Đối tượng chứa ID chuyến đi mục tiêu.
+   * @param client The subscribing client's socket instance.
+   *               Đối tượng socket của client đăng ký.
+   * @returns Success or error message.
+   *          Thông điệp thành công hoặc báo lỗi.
    */
   @SubscribeMessage('joinTripTracking')
   async handleJoinRoom(@MessageBody() data: { tripId: number }, @ConnectedSocket() client: AuthenticatedSocket) {
@@ -250,7 +277,16 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   /**
-   * KHÁCH HÀNG rời room tracking (tối ưu bộ nhớ trên Socket server)
+   * Unsubscribes a client from a specific trip's live tracking room to free memory resources.
+   *
+   * Hủy đăng ký một client khỏi phòng theo dõi trực tiếp của một chuyến đi cụ thể để giải phóng tài nguyên bộ nhớ.
+   *
+   * @param data Object containing the target trip ID.
+   *             Đối tượng chứa ID chuyến đi mục tiêu.
+   * @param client The unsubscribing client's socket instance.
+   *               Đối tượng socket của client hủy đăng ký.
+   * @returns Success or error message.
+   *          Thông điệp thành công hoặc báo lỗi.
    */
   @SubscribeMessage('leaveTripTracking')
   handleLeaveRoom(@MessageBody() data: { tripId: number }, @ConnectedSocket() client: AuthenticatedSocket) {
@@ -271,12 +307,30 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
     return { event: 'left', message: `Successfully left trip_${parsed.data.tripId}` }
   }
 
+  /**
+   * Broadcasts a 'trip.created' business event to the active monitoring dashboards.
+   *
+   * Phát sóng sự kiện nghiệp vụ 'trip.created' (tạo chuyến đi) tới bảng điều khiển giám sát hoạt động.
+   *
+   * @param payload Object containing trip details.
+   *                Payload chứa thông tin chuyến đi.
+   */
   @OnEvent('trip.created')
   handleTripCreatedEvent(payload: { trip: { id: number; [key: string]: unknown } }) {
     this.logger.log(`🚀 Chuyến xe mới được tạo: Trip ID #${payload.trip?.id}. Đang broadcast tới dashboard...`)
     this.server.emit('dashboard.tripCreated', payload.trip)
   }
 
+  /**
+   * Listens to 'eta.updated' events and broadcasts revised arrival times directly to the active trip room.
+   * Enables seamless UI updates for clients without requiring manual timeline polling.
+   *
+   * Lắng nghe các sự kiện 'eta.updated' (cập nhật ETA) và phát sóng thời gian đến điều chỉnh trực tiếp vào phòng chuyến đi hoạt động.
+   * Cho phép cập nhật giao diện mượt mà cho khách hàng mà không cần polling thủ công timeline.
+   *
+   * @param payload The ETA update payload.
+   *                Payload cập nhật ETA.
+   */
   @OnEvent('eta.updated')
   handleEtaUpdatedEvent(payload: {
     stops: { eta: Date; orderId: number | null; stopId: number; stopSequence: number }[]
