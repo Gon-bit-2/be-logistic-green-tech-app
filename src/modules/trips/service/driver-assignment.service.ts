@@ -40,6 +40,15 @@ type PendingAssignmentTrip = Prisma.TripGetPayload<{
  * - Warehouse Staff duyệt/từ chối yêu cầu
  * - Liệt kê yêu cầu theo role (Driver/Staff)
  */
+/**
+ * Service managing driver trip assignment requests.
+ * Service quản lý các yêu cầu phân công chuyến đi của tài xế.
+ *
+ * Implements driver-initiated requests, staff approval/rejection workflows,
+ * auto-cancelling duplicate pending requests, and transactional database updates.
+ * Triển khai các yêu cầu do tài xế tự đề xuất, quy trình phê duyệt/từ chối của nhân viên,
+ * tự động hủy các yêu cầu đang chờ trùng lặp và cập nhật giao dịch cơ sở dữ liệu.
+ */
 @Injectable()
 export class DriverAssignmentService {
   private readonly logger = new Logger(DriverAssignmentService.name)
@@ -54,7 +63,15 @@ export class DriverAssignmentService {
     private readonly orderStateService: OrderStateService,
   ) {}
 
-  /** Liệt kê yêu cầu nhận đơn của tài xế hiện tại */
+  /**
+   * Retrieves active assignment requests submitted by the driver.
+   * Lấy danh sách các yêu cầu phân công đang hoạt động do tài xế gửi lên.
+   *
+   * @param {AccessTokenPayload} actor - Driver session token payload.
+   * @param {AccessTokenPayload} actor - Payload token phiên tài xế.
+   * @returns {Promise<DriverAssignmentRequestListResType>} Paginated list of requests.
+   * @returns {Promise<DriverAssignmentRequestListResType>} Danh sách phân trang các yêu cầu.
+   */
   async listDriverAssignmentRequests(actor: AccessTokenPayload): Promise<DriverAssignmentRequestListResType> {
     await this.hubHelper.getDriverScopeUser(actor)
 
@@ -70,7 +87,21 @@ export class DriverAssignmentService {
     }
   }
 
-  /** Tài xế gửi yêu cầu nhận đơn hàng */
+  /**
+   * Creates a driver assignment request for a cargo order.
+   * Tạo yêu cầu phân công tài xế cho một đơn hàng vận chuyển.
+   *
+   * @param {CreateDriverAssignmentRequestType} dto - Target Order ID.
+   * @param {CreateDriverAssignmentRequestType} dto - ID đơn hàng mục tiêu.
+   * @param {AccessTokenPayload} actor - Driver session token payload.
+   * @param {AccessTokenPayload} actor - Payload token phiên tài xế.
+   * @returns {Promise<DriverAssignmentRequestResType>} Created request details.
+   * @returns {Promise<DriverAssignmentRequestResType>} Chi tiết yêu cầu đã tạo.
+   * @throws {ForbiddenException} If driver is not assigned to a hub.
+   * @throws {ForbiddenException} Nếu tài xế chưa được gán vào Hub nào.
+   * @throws {BadRequestException} If order is not available or duplicate request exists.
+   * @throws {BadRequestException} Nếu đơn hàng không khả dụng hoặc đã gửi yêu cầu rồi.
+   */
   async createDriverAssignmentRequest(
     dto: CreateDriverAssignmentRequestType,
     actor: AccessTokenPayload,
@@ -147,7 +178,15 @@ export class DriverAssignmentService {
     return this.assignmentHelper.mapDriverAssignmentRequest(request)
   }
 
-  /** Liệt kê yêu cầu nhận đơn chờ xử lý (cho Warehouse Staff) */
+  /**
+   * Retrieves active assignment requests inside the hub for review.
+   * Lấy danh sách các yêu cầu phân công hoạt động trong Hub để xem xét.
+   *
+   * @param {AccessTokenPayload} actor - Staff session token payload.
+   * @param {AccessTokenPayload} actor - Payload token phiên nhân viên kho.
+   * @returns {Promise<AssignmentRequestInboxResType>} List of pending requests.
+   * @returns {Promise<AssignmentRequestInboxResType>} Danh sách các yêu cầu đang chờ.
+   */
   async listAssignmentRequests(actor: AccessTokenPayload): Promise<AssignmentRequestInboxResType> {
     const hubId = await this.hubHelper.resolveHubScope(undefined, actor)
     const requests = await this.prismaService.driverAssignmentRequest.findMany({
@@ -205,7 +244,24 @@ export class DriverAssignmentService {
     }
   }
 
-  /** Warehouse Staff duyệt yêu cầu nhận đơn */
+  /**
+   * Approves a driver's trip assignment request.
+   * Phê duyệt yêu cầu phân công chuyến đi của tài xế.
+   *
+   * Automatically adds the order to the driver's pending trip, or prompts for selection,
+   * or creates a new trip if the driver has no pending trip.
+   * Tự động thêm đơn vào chuyến đi đang chờ của tài xế, hoặc yêu cầu chọn chuyến cụ thể,
+   * hoặc khởi tạo chuyến đi mới nếu tài xế chưa có chuyến đi nào đang chờ.
+   *
+   * @param {number} requestId - Request database ID.
+   * @param {number} requestId - ID yêu cầu trong cơ sở dữ liệu.
+   * @param {ApproveDriverAssignmentRequestType} dto - Vehicle ID and Trip ID.
+   * @param {ApproveDriverAssignmentRequestType} dto - ID phương tiện và ID chuyến đi.
+   * @param {AccessTokenPayload} actor - Staff session token payload.
+   * @param {AccessTokenPayload} actor - Payload token phiên nhân viên kho.
+   * @returns {Promise<DriverAssignmentRequestResType>} Approved request details.
+   * @returns {Promise<DriverAssignmentRequestResType>} Chi tiết yêu cầu đã phê duyệt.
+   */
   async approveAssignmentRequest(
     requestId: number,
     dto: ApproveDriverAssignmentRequestType,
@@ -337,7 +393,19 @@ export class DriverAssignmentService {
     return this.assignmentHelper.mapDriverAssignmentRequest(approvedRequest)
   }
 
-  /** Warehouse Staff từ chối yêu cầu nhận đơn */
+  /**
+   * Rejects a driver's trip assignment request.
+   * Từ chối yêu cầu phân công chuyến đi của tài xế.
+   *
+   * @param {number} requestId - Request database ID.
+   * @param {number} requestId - ID yêu cầu trong cơ sở dữ liệu.
+   * @param {RejectDriverAssignmentRequestType} dto - Rejection reason comments.
+   * @param {RejectDriverAssignmentRequestType} dto - Nhận xét lý do từ chối.
+   * @param {AccessTokenPayload} actor - Staff session token payload.
+   * @param {AccessTokenPayload} actor - Payload token phiên nhân viên kho.
+   * @returns {Promise<DriverAssignmentRequestResType>} Rejected request details.
+   * @returns {Promise<DriverAssignmentRequestResType>} Chi tiết yêu cầu đã từ chối.
+   */
   async rejectAssignmentRequest(
     requestId: number,
     dto: RejectDriverAssignmentRequestType,
@@ -383,7 +451,18 @@ export class DriverAssignmentService {
     return this.assignmentHelper.mapDriverAssignmentRequest(rejectedRequest)
   }
 
-  /** Thêm đơn vào chuyến có sẵn khi duyệt assignment request */
+  /**
+   * Utility to attach an order to an existing pending trip inside a database transaction.
+   * Tiện ích đính kèm một đơn hàng vào một chuyến đi đang chờ hiện có trong một giao dịch.
+   *
+   * @param {PendingAssignmentTrip} trip - Target pending trip.
+   * @param {PendingAssignmentTrip} trip - Chuyến đi đang chờ mục tiêu.
+   * @param {DriverAssignmentRequestWithDetails} request - Request details.
+   * @param {DriverAssignmentRequestWithDetails} request - Chi tiết yêu cầu.
+   * @param {number} reviewedById - Actor ID reviewing the request.
+   * @param {number} reviewedById - ID tác nhân phê duyệt yêu cầu.
+   * @returns {Promise<DriverAssignmentRequestWithDetails>} Mapped approved request details.
+   */
   private async addOrderToApprovedAssignmentRequest(
     trip: PendingAssignmentTrip,
     request: DriverAssignmentRequestWithDetails,

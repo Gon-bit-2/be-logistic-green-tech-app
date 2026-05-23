@@ -31,6 +31,15 @@ import { LoggingMiddleware } from './common/middlewares/logging.middleware'
 import { RequestIdMiddleware } from './common/middlewares/request-id.middleware'
 import { buildRedisUrl } from './common/utils/buildRedisUrl.util'
 
+/**
+ * Root module of the application.
+ * Module gốc của ứng dụng.
+ *
+ * Imports all feature modules, sets up global providers, and configures external services
+ * like Throttler, BullMQ, Redis-based Cache Manager, and event emitters.
+ * Nhập tất cả các module tính năng, thiết lập global providers và cấu hình các dịch vụ bên ngoài
+ * như Throttler, BullMQ, Cache Manager dựa trên Redis và event emitters.
+ */
 @Module({
   imports: [
     AuthModule,
@@ -94,6 +103,16 @@ import { buildRedisUrl } from './common/utils/buildRedisUrl.util'
   ],
 })
 export class AppModule implements NestModule {
+  /**
+   * Configures global middlewares for the application.
+   * Cấu hình các middleware toàn cục cho ứng dụng.
+   *
+   * Applies `RequestIdMiddleware` and `LoggingMiddleware` to all routes.
+   * Áp dụng `RequestIdMiddleware` và `LoggingMiddleware` cho tất cả các tuyến đường (routes).
+   *
+   * @param {MiddlewareConsumer} consumer - NestJS middleware consumer to apply middlewares.
+   * @param {MiddlewareConsumer} consumer - Bộ tiêu thụ middleware NestJS để áp dụng các middleware.
+   */
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(RequestIdMiddleware, LoggingMiddleware).forRoutes('*')
   }

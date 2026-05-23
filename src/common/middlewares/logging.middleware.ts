@@ -4,7 +4,13 @@ import { RequestWithId } from './request-id.middleware'
 import { PrismaService } from 'src/database/prisma.service'
 
 /**
+ * Middleware that provides structured logging for every incoming HTTP request.
  * Middleware ghi log structured cho mỗi HTTP request.
+ *
+ * Adds compared to the old version:
+ * - Content-Length (body size) to detect unusually large payloads.
+ * - User ID (if authenticated) to trace issues by user.
+ * - User-Agent summary to identify request sources (web/mobile/bot).
  *
  * Bổ sung so với phiên bản cũ:
  * - Content-Length (body size) giúp phát hiện payload lớn bất thường
@@ -18,6 +24,20 @@ export class LoggingMiddleware implements NestMiddleware {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Processes the incoming request, measures duration, and logs response statistics on finish.
+   * Xử lý request gửi đến, đo lường thời gian xử lý và ghi log thống kê phản hồi khi hoàn thành.
+   *
+   * Persists logs to the database if the request is deemed slow based on `SLOW_REQUEST_MS` config.
+   * Lưu log vào cơ sở dữ liệu nếu request được coi là chậm dựa trên cấu hình `SLOW_REQUEST_MS`.
+   *
+   * @param {RequestWithId} req - The incoming request with ID.
+   * @param {RequestWithId} req - Request gửi đến kèm theo ID.
+   * @param {Response} res - The outgoing express response.
+   * @param {Response} res - Phản hồi express gửi đi.
+   * @param {NextFunction} next - The next middleware handler function.
+   * @param {NextFunction} next - Hàm xử lý middleware tiếp theo.
+   */
   use(req: RequestWithId, res: Response, next: NextFunction) {
     const startedAt = Date.now()
 
@@ -63,7 +83,9 @@ export class LoggingMiddleware implements NestMiddleware {
             },
           })
           .catch((error) => {
-            this.logger.warn(`Failed to persist slow request log: ${error instanceof Error ? error.message : String(error)}`)
+            this.logger.warn(
+              `Failed to persist slow request log: ${error instanceof Error ? error.message : String(error)}`,
+            )
           })
       }
     })

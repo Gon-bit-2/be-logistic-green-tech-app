@@ -1,10 +1,17 @@
 /**
- * Tính khoảng cách đường chim bay giữa 2 điểm bằng thuật toán Haversine
- * @param lat1 Vĩ độ điểm đi
- * @param lon1 Kinh độ điểm đi
- * @param lat2 Vĩ độ điểm đến
- * @param lon2 Kinh độ điểm đến
- * @returns Khoảng cách theo kilometer (km)
+ * Calculates the great-circle (crow-flies) distance between two points using the Haversine formula.
+ * Tính khoảng cách đường chim bay giữa 2 điểm bằng thuật toán Haversine.
+ *
+ * @param {number} lat1 - Latitude of starting point in degrees.
+ * @param {number} lat1 - Vĩ độ điểm đi tính bằng độ.
+ * @param {number} lon1 - Longitude of starting point in degrees.
+ * @param {number} lon1 - Kinh độ điểm đi tính bằng độ.
+ * @param {number} lat2 - Latitude of destination point in degrees.
+ * @param {number} lat2 - Vĩ độ điểm đến tính bằng độ.
+ * @param {number} lon2 - Longitude of destination point in degrees.
+ * @param {number} lon2 - Kinh độ điểm đến tính bằng độ.
+ * @returns {number} Distance in kilometers (km).
+ * @returns {number} Khoảng cách theo kilometer (km).
  */
 export function calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371 // Bán kính Trái Đất (km)

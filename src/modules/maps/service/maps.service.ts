@@ -9,12 +9,27 @@ import {
   GoongPlaceDetailResponseSchema,
 } from '../model/map.model'
 
+/**
+ * Service managing integration with external mapping services (e.g. Goong API) to handle geocoding, autocomplete, and routing.
+ * 
+ * Dịch vụ quản lý tích hợp với các dịch vụ bản đồ bên ngoài (ví dụ: Goong API) để xử lý geocoding, tự động hoàn thành địa điểm và chỉ đường.
+ */
 @Injectable()
 export class MapsService {
   private readonly logger = new Logger(MapsService.name)
   private readonly baseUrl = envConfig.GOONG_BASE_URL || 'https://rsapi.goong.io'
   private readonly apiKey = envConfig.GOONG_MAPS_API_KEY
 
+  /**
+   * Helper that parses and validates mapping API responses against a Zod schema.
+   * 
+   * Trình hỗ trợ phân tích và xác thực dữ liệu phản hồi từ Maps API dựa trên một Zod schema.
+   * 
+   * @param schema - Target validation Zod schema / Zod schema xác thực đích.
+   * @param data - Raw response object / Đối tượng dữ liệu phản hồi thô.
+   * @returns Validated schema object / Đối tượng dữ liệu sau xác thực.
+   * @throws BadRequestException if the schema validation fails / BadRequestException nếu xác thực dữ liệu thất bại.
+   */
   private parseGoongResponse<T>(schema: ZodSchema<T>, data: unknown): T {
     const result = schema.safeParse(data)
     if (!result.success) {
@@ -25,7 +40,13 @@ export class MapsService {
   }
 
   /**
-   * 1. Gợi ý địa chỉ từ từ khóa (Autocomplete)
+   * Queries autocomplete predictions for locations or places from Goong API.
+   * 
+   * Truy vấn gợi ý tự động hoàn thành địa điểm hoặc khu vực địa lý từ Goong API.
+   * 
+   * @param query - Input keyword and optional lat/lng proximity / Từ khóa tìm kiếm và tọa độ vị trí gần đó tùy chọn.
+   * @returns Array of autocomplete predictions / Mảng danh sách các gợi ý tự động hoàn thành địa điểm.
+   * @throws BadRequestException if mapping API returns error status / BadRequestException nếu Maps API trả về lỗi.
    */
   async autocomplete(query: AutocompleteQueryDTO) {
     const params = new URLSearchParams({
@@ -64,7 +85,13 @@ export class MapsService {
   }
 
   /**
-   * 2. Lấy chi tiết địa điểm và tọa độ từ placeId (Place Detail)
+   * Retrieves detailed geographic coordinates and metadata of a place by its unique Place ID.
+   * 
+   * Lấy chi tiết tọa độ địa lý và thông tin liên quan của một địa điểm theo Place ID duy nhất.
+   * 
+   * @param query - Target place ID and optional session token / ID địa điểm đích và token phiên tùy chọn.
+   * @returns Place details containing coordinates and formatted address / Chi tiết địa điểm chứa tọa độ và địa chỉ chuẩn hóa.
+   * @throws BadRequestException if place is missing or API fails / BadRequestException nếu thiếu địa điểm hoặc API thất bại.
    */
   async placeDetail(query: PlaceDetailQueryDTO) {
     const params = new URLSearchParams({
@@ -101,7 +128,13 @@ export class MapsService {
   }
 
   /**
-   * 3. Phân tích địa chỉ text thành tọa độ (Geocode)
+   * Performs forward geocoding (translates string address to geographic coordinates).
+   * 
+   * Thực hiện geocoding xuôi (chuyển đổi địa chỉ văn bản thành tọa độ địa lý).
+   * 
+   * @param query - Input target address string / Chuỗi văn bản địa chỉ đích đầu vào.
+   * @returns Array of matching geocoded places containing coordinates / Mảng danh sách các địa điểm phù hợp chứa tọa độ.
+   * @throws BadRequestException if geocoding fails / BadRequestException nếu geocode thất bại.
    */
   async geocode(query: GeocodeQueryDTO) {
     const params = new URLSearchParams({
@@ -136,7 +169,13 @@ export class MapsService {
   }
 
   /**
-   * 4. Tính toán quãng đường và thời gian (Directions)
+   * Computes driving/riding routes, distances and travel durations between origin and destination coordinates.
+   * 
+   * Tính toán các lộ trình di chuyển, khoảng cách và thời gian đi lại giữa tọa độ xuất phát và điểm đích.
+   * 
+   * @param body - Origin, destination and vehicle parameters / Điểm đi, điểm đến và các tham số loại xe.
+   * @returns Calculated route geometries, distance, and duration / Hình học tuyến đường, khoảng cách và thời gian tính toán.
+   * @throws BadRequestException if routing calculations fail / BadRequestException nếu tính toán định tuyến thất bại.
    */
   async directions(body: DirectionsBodyDTO) {
     const params = new URLSearchParams({

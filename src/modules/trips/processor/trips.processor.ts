@@ -11,6 +11,15 @@ import { acquireLock, releaseLock } from 'src/common/utils/redis-lock.util'
 import Redis from 'ioredis'
 import envConfig from 'src/config/config'
 
+/**
+ * BullMQ processor responsible for automated trip dispatching.
+ * Listens to auto-dispatch queues, executes local dispatching algorithms (Bin Packing & nearest-neighbor route optimization),
+ * and handles concurrency using distributed Redis locks.
+ *
+ * BullMQ processor chịu trách nhiệm điều phối chuyến đi tự động.
+ * Lắng nghe các queue điều phối tự động, thực thi thuật toán điều phối cục bộ (Bin Packing & tối ưu hóa lộ trình Nearest Neighbor),
+ * và xử lý tranh chấp đồng thời bằng distributed lock Redis.
+ */
 @Processor(AUTO_DISPATCH_QUEUE_NAME)
 export class TripsProcessor extends WorkerHost {
   private readonly logger = new Logger(TripsProcessor.name)
@@ -30,6 +39,20 @@ export class TripsProcessor extends WorkerHost {
     })
   }
 
+  /**
+   * Main entrypoint for processing queued auto-dispatch jobs.
+   * Acquires a distributed lock for the specified hub to prevent duplicate dispatch runs,
+   * then triggers execution and safely releases the lock.
+   *
+   * Điểm khởi đầu chính để xử lý các job điều phối tự động trong hàng đợi.
+   * Lấy distributed lock cho hub được chỉ định để ngăn chặn việc chạy điều phối trùng lặp,
+   * sau đó kích hoạt thực thi và giải phóng lock một cách an sau khi hoàn tất.
+   *
+   * @param job The BullMQ job containing hub scope details.
+   *            Job BullMQ chứa chi tiết phạm vi hub.
+   * @returns A promise resolving to the execution result metadata.
+   *          Một promise trả về siêu dữ liệu kết quả thực thi.
+   */
   async process(
     job: Job<{ hubId?: number }, { status: string; tripsCreated?: number; reason?: string }, string>,
   ): Promise<{ status: string; tripsCreated?: number; reason?: string } | undefined> {
@@ -57,7 +80,18 @@ export class TripsProcessor extends WorkerHost {
   }
 
   /**
-   * Logic điều phối chính (tách ra method riêng để code sạch hơn sau khi thêm lớp lock)
+   * Executes the dispatch algorithm for a specific hub scope.
+   * Matches available EV vehicles and drivers with pending orders using Bin Packing (Fitted-Fit Decreasing),
+   * and runs route optimization (nearest-neighbor PDP with time-window penalty) to generate optimized stops.
+   *
+   * Thực hiện thuật toán điều phối cho một phạm vi hub cụ thể.
+   * So khớp các xe điện và tài xế khả dụng với các đơn hàng đang chờ bằng Bin Packing (Fitted-Fit Decreasing),
+   * và chạy tối ưu hóa lộ trình (nearest-neighbor PDP với phạt thời gian) để tạo các điểm dừng tối ưu.
+   *
+   * @param hubId Optional hub ID to scope resources.
+   *              Hub ID tùy chọn để giới hạn tài nguyên.
+   * @returns A promise resolving to the dispatch success summary.
+   *          Một promise trả về tóm tắt thành công điều phối.
    */
   private async executeDispatch(hubId?: number): Promise<{ status: string; tripsCreated?: number; reason?: string }> {
     this.logger.log(`[BULLMQ] Start processing dispatch-local for Hub ${hubId ?? 'Global'}`)

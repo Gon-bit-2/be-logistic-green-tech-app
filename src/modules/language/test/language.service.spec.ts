@@ -63,7 +63,11 @@ describe('LanguageService', () => {
     it('throw NotFoundException when language not exist', async () => {
       repo.findOne.mockResolvedValue(null)
 
-      await expect(service.findById('notFound')).rejects.toThrow(NotFoundException)
+      await expect(service.findById('notFound')).rejects.toMatchObject({
+        response: expect.objectContaining({
+          errorCode: 'Error.Language.NotFound',
+        }),
+      })
       expect(repo.findOne).toHaveBeenCalledWith('notFound')
     })
   })
@@ -86,7 +90,11 @@ describe('LanguageService', () => {
       repo.findOne.mockResolvedValue({ id: 'en' } as any)
 
       const payload = { id: 'en', name: 'English', icon: '', locale: 'en', isDefault: false }
-      await expect(service.createLanguage({ data: payload, createdById: 1 })).rejects.toThrow(ConflictException)
+      await expect(service.createLanguage({ data: payload, createdById: 1 })).rejects.toMatchObject({
+        response: expect.objectContaining({
+          errorCode: 'Error.Language.Conflict',
+        }),
+      })
     })
   })
 

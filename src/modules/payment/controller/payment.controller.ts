@@ -29,14 +29,34 @@ import {
   StripeWebhookResDto,
 } from '../dto/payment.dto'
 
+/**
+ * Controller for managing online payments (Stripe) and Cash-On-Delivery (COD) confirmations.
+ * 
+ * Controller quản lý các giao dịch thanh toán trực tuyến (Stripe) và xác nhận thu tiền mặt (COD).
+ */
 @Controller('payments')
 export class PaymentController {
+  /**
+   * Initializes the PaymentController.
+   * 
+   * Khởi tạo PaymentController.
+   * 
+   * @param paymentService - The Payment service instance / Instance của dịch vụ thanh toán.
+   */
   constructor(private readonly paymentService: PaymentService) {}
 
   /**
-   * Tạo PaymentIntent (Khách hàng bấm thanh toán qua mạng).
-   * Rate limit: 3 request / 60 giây — ngăn spam tạo PaymentIntent
-   * (mỗi intent tạo trên Stripe đều tốn resource, không nên bypass throttle).
+   * Creates a Stripe PaymentIntent for a customer to pay online for an order.
+   * Rate Limit: 3 requests / 60 seconds to prevent abuse.
+   * Only accessible by Customer.
+   * 
+   * Tạo Stripe PaymentIntent để khách hàng thực hiện thanh toán trực tuyến cho đơn hàng.
+   * Giới hạn tần suất: 3 yêu cầu / 60 giây để ngăn ngừa lạm dụng.
+   * Chỉ có thể truy cập bởi Khách hàng.
+   * 
+   * @param orderId - Order ID / ID đơn hàng.
+   * @param userId - ID of the active customer user / ID của khách hàng đang đăng nhập.
+   * @returns PaymentIntent client secret details / Chi tiết thông tin client secret của PaymentIntent.
    */
   @Post('create-intent/:orderId')
   @Throttle({ default: { ttl: 60000, limit: 3 } })
@@ -47,7 +67,15 @@ export class PaymentController {
   }
 
   /**
-   * Xác nhận thu tiền mặt (Tài xế bấm sau khi thu COD)
+   * Confirms a Cash-On-Delivery (COD) cash collection for an order.
+   * Only accessible by Driver.
+   * 
+   * Xác nhận thu tiền mặt (COD) thành công cho đơn hàng.
+   * Chỉ có thể truy cập bởi Tài xế.
+   * 
+   * @param orderId - Order ID / ID đơn hàng.
+   * @param driverId - ID of the active driver user / ID của tài xế đang thực hiện.
+   * @returns Confirmation detail status / Chi tiết trạng thái xác nhận.
    */
   @Post('cod-confirm/:orderId')
   @HttpCode(HttpStatus.OK)
@@ -59,7 +87,15 @@ export class PaymentController {
   }
 
   /**
-   * Xem trạng thái thanh toán
+   * Retrieves payment details and status for a specific order.
+   * Accessible by Customer, Driver, Admin, and Warehouse Staff.
+   * 
+   * Lấy chi tiết thông tin và trạng thái thanh toán của một đơn hàng cụ thể.
+   * Có thể truy cập bởi Khách hàng, Tài xế, Admin và Nhân viên kho.
+   * 
+   * @param orderId - Order ID / ID đơn hàng.
+   * @param user - Decoded JWT payload of the active user / Payload JWT của người dùng đang đăng nhập.
+   * @returns Detailed payment status information / Thông tin chi tiết trạng thái thanh toán.
    */
   @Get('order/:orderId')
   @Roles(roleName.CUSTOMER, roleName.DRIVER, roleName.ADMIN, roleName.WAREHOUSE_STAFF)
@@ -69,9 +105,17 @@ export class PaymentController {
   }
 
   /**
-   * Webhook: Nhận callback từ Stripe khi thanh toán thành công
-   * Chú ý: Cần raw body buffer để verify signature. NestJS body-parser thường map JSON object.
-   * Để nhận RawBody trong Nest, ta cần dùng req.rawBody hoặc Buffer xử lý qua Middleware.
+   * Webhook endpoint that receives secure async callback events from Stripe.
+   * Verifies authenticity using the Stripe-Signature header.
+   * 
+   * Endpoint Webhook nhận các sự kiện gọi lại bất đồng bộ an toàn từ Stripe.
+   * Xác thực tính hợp lệ bằng tiêu đề Stripe-Signature.
+   * 
+   * @param signature - Stripe HMAC signature header / Tiêu đề chữ ký HMAC của Stripe.
+   * @param req - Express request holding raw body buffer / Request Express chứa buffer body thô.
+   * @param body - Fallback JSON payload / Payload JSON dự phòng.
+   * @returns Success confirmation payload / Kết quả xác nhận xử lý thành công.
+   * @throws BadRequestException if signature is missing / BadRequestException nếu thiếu chữ ký.
    */
   @Post('webhook')
   @HttpCode(HttpStatus.OK)

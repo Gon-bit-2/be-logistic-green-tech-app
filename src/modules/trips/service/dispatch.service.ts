@@ -22,6 +22,15 @@ import { EVENT_SOURCE } from 'src/common/constants/tracking.constant'
  * - previewDispatch: Xem trước kết quả gom chuyến (Bin Packing preview)
  * - approveDispatch: Duyệt gợi ý dispatch thành Trip thực tế
  */
+/**
+ * Service managing automated and previewed trip dispatches.
+ * Service quản lý việc điều phối chuyến đi tự động và xem trước.
+ *
+ * Implements BullMQ background queues scheduling, bin-packing dispatch previews,
+ * and suggested dispatch approvals into persistent database models.
+ * Triển khai lập lịch hàng đợi chạy ngầm BullMQ, xem trước điều phối bin-packing,
+ * và phê duyệt các gợi ý điều phối thành các chuyến đi lưu vào cơ sở dữ liệu.
+ */
 @Injectable()
 export class DispatchService {
   private readonly logger = new Logger(DispatchService.name)
@@ -36,8 +45,16 @@ export class DispatchService {
   ) {}
 
   /**
-   * Truyền 1 Hub id vào Queue để worker ngầm xử lý riêng cho cụm Hub này.
-   * Sử dụng jobId cố định theo hubId để BullMQ tự chặn duplicate job.
+   * Pushes a local hub auto-dispatch optimization request into BullMQ.
+   * Đẩy yêu cầu tối ưu hóa điều phối tự động của Hub cục bộ vào BullMQ.
+   *
+   * Enforces single-active job constraints per hub utilizing unique hub-specific job IDs.
+   * Áp đặt ràng buộc một tác vụ hoạt động duy nhất cho mỗi Hub bằng cách sử dụng ID tác vụ duy nhất.
+   *
+   * @param {number} hubId - Hub ID.
+   * @param {number} hubId - ID của Hub.
+   * @returns {Promise<{ message: string; jobId: string }>} Queued job details.
+   * @returns {Promise<{ message: string; jobId: string }>} Chi tiết tác vụ đã đưa vào hàng đợi.
    */
   async autoDispatchLocalTask(hubId: number) {
     const jobId = `dispatch-hub-${hubId}`
@@ -50,8 +67,13 @@ export class DispatchService {
   }
 
   /**
-   * Khi gọi trigger Global, Service đẩy (fan-out) N jobs cho N hubs tương ứng để chạy song song.
-   * Mỗi job dùng jobId riêng theo hubId để tránh duplicate.
+   * Fan-outs independent auto-dispatch jobs for all active hubs concurrently.
+   * Phân tách và đẩy đồng thời các tác vụ điều phối tự động cho tất cả các Hub đang hoạt động.
+   *
+   * @returns {Promise<{ message: string; jobId: string }>} Triggered global task details.
+   * @returns {Promise<{ message: string; jobId: string }>} Chi tiết các tác vụ toàn cầu đã kích hoạt.
+   * @throws {NotFoundException} If no active hubs are available.
+   * @throws {NotFoundException} Nếu không có Hub nào đang hoạt động trong hệ thống.
    */
   async autoDispatchGlobalTask() {
     const activeHubs = await this.prismaService.hub.findMany({
@@ -78,8 +100,20 @@ export class DispatchService {
   }
 
   /**
-   * Xem trước kết quả gom chuyến (Bin Packing preview) cho 1 Hub.
-   * Trả về danh sách gợi ý: mỗi xe chở đơn nào, stops thế nào.
+   * Evaluates available fleet, packages, and drivers to construct preview dispatch suggestions.
+   * Đánh giá đội xe, hàng hóa và tài xế khả dụng để xây dựng các gợi ý xem trước điều phối.
+   *
+   * Implements a greedy bin-packing algorithm matching cargo constraints to electric van capacities.
+   * Triển khai thuật toán bin-packing tham lam khớp các ràng buộc hàng hóa với sức chứa xe điện.
+   *
+   * @param {number | undefined} requestedHubId - Target Hub scope filter.
+   * @param {number | undefined} requestedHubId - Bộ lọc phạm vi Hub mục tiêu.
+   * @param {AccessTokenPayload} actor - Session request actor.
+   * @param {AccessTokenPayload} actor - Tác nhân yêu cầu phiên.
+   * @returns {Promise<any>} Suggested group dispatches and unassigned items.
+   * @returns {Promise<any>} Gợi ý các nhóm điều phối và các đơn hàng chưa gán.
+   * @throws {NotFoundException} If no active hubs found for Admin scope.
+   * @throws {NotFoundException} Nếu không tìm thấy Hub hoạt động cho phạm vi Admin.
    */
   async previewDispatch(requestedHubId: number | undefined, actor: AccessTokenPayload) {
     let hubId: number
@@ -198,7 +232,15 @@ export class DispatchService {
   }
 
   /**
-   * Duyệt gợi ý dispatch: Tạo Trip thực tế từ gợi ý đã được Admin/Staff chấp thuận.
+   * Confirms suggested dispatches, verifies availability, and commits trip records.
+   * Xác nhận các gợi ý điều phối, kiểm tra tính khả dụng và lưu các bản ghi chuyến đi.
+   *
+   * @param {DispatchApproveType} dto - Tripping stops and resources parameters.
+   * @param {DispatchApproveType} dto - Các tham số điểm dừng chuyến đi và tài nguyên.
+   * @param {AccessTokenPayload} actor - Administrative actor session.
+   * @param {AccessTokenPayload} actor - Phiên tác nhân quản trị xác thực.
+   * @returns Created trip database record details.
+   * @returns Chi tiết bản ghi chuyến đi cơ sở dữ liệu đã tạo.
    */
   async approveDispatch(dto: DispatchApproveType, actor: AccessTokenPayload) {
     const hubId = await this.hubHelper.resolveHubScope(dto.hubId, actor)
@@ -217,6 +259,17 @@ export class DispatchService {
     })
   }
 
+  /**
+   * Normalizes and validates incoming stop data configurations.
+   * Chuẩn hóa và xác thực các cấu hình dữ liệu điểm dừng gửi lên.
+   *
+   * @param {DispatchApproveType} dto - Approved dispatch parameters.
+   * @param {DispatchApproveType} dto - Các tham số điều phối đã duyệt.
+   * @returns Normalized stops arrays.
+   * @returns Mảng điểm dừng đã được chuẩn hóa.
+   * @throws {BadRequestException} If stop contains orders not in dispatch or has missing items.
+   * @throws {BadRequestException} Nếu điểm dừng chứa đơn không thuộc dispatch hoặc bị thiếu.
+   */
   private normalizeAndValidateApproveStops(dto: DispatchApproveType) {
     const orderIdSet = new Set(dto.orderIds)
     const stops =

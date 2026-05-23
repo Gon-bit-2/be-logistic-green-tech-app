@@ -13,14 +13,34 @@ import type { AccessTokenPayload } from 'src/common/types/jwt.type'
  * Extract ra để tránh duplicate logic resolveHubScope, assertDispatchResourcesBelongToHub,
  * assertDriverAndVehicleAvailability, v.v. ở nhiều nơi.
  */
+/**
+ * Helper utility service containing common validations and scoping functions for Hubs and Trips.
+ * Prevents logic duplication across different sub-services in the Trips module.
+ *
+ * Dịch vụ tiện ích hỗ trợ chứa các xác thực chung và các hàm giới hạn phạm vi cho Hub và Trip.
+ * Ngăn chặn lặp lại logic giữa các dịch vụ con khác nhau trong module Trips.
+ */
 @Injectable()
 export class TripHubHelper {
   constructor(private readonly prismaService: PrismaService) {}
 
   /**
-   * Xác định hubId hợp lệ dựa trên role của actor:
-   * - WAREHOUSE_STAFF: Trả về hubId của staff (bắt buộc phải có)
-   * - ADMIN: Sử dụng requestedHubId (bắt buộc phải truyền)
+   * Resolves a valid hub ID based on the actor's role and requested hub scope.
+   * Enforces warehouse staff to only operate within their assigned hub, and requires admins to explicitly specify one.
+   *
+   * Xác định hub ID hợp lệ dựa trên vai trò của người dùng và phạm vi hub được yêu cầu.
+   * Bắt buộc nhân viên kho chỉ được thao tác trong hub được chỉ định, và yêu cầu admin phải truyền rõ hub ID.
+   *
+   * @param requestedHubId Optional hub ID requested by the user.
+   *                       Hub ID tùy chọn do người dùng yêu cầu.
+   * @param actor The token payload of the user making the request.
+   *              Thông tin token của người dùng thực hiện yêu cầu.
+   * @returns A promise resolving to the authorized hub ID.
+   *          Một promise trả về hub ID được ủy quyền.
+   * @throws {BadRequestException} If admin does not request a specific hub.
+   *                               Nếu admin không chỉ định hub cụ thể.
+   * @throws {ForbiddenException} If warehouse staff has no hub, or requests a hub other than their assigned one.
+   *                              Nếu nhân viên kho không có hub, hoặc yêu cầu một hub khác với hub của họ.
    */
   async resolveHubScope(requestedHubId: number | undefined, actor: AccessTokenPayload): Promise<number> {
     if (actor.roleName !== roleName.WAREHOUSE_STAFF) {
@@ -47,8 +67,20 @@ export class TripHubHelper {
   }
 
   /**
-   * Xác định hubId cho Dispatch Board — Admin không cần truyền hubId,
-   * sẽ tự lấy hub đầu tiên hoạt động.
+   * Resolves the hub ID for the Dispatch Board.
+   * Admins do not need to specify a hub ID; the first active hub in the system is selected by default.
+   *
+   * Xác định hub ID cho Dispatch Board (Bảng điều phối).
+   * Admin không cần chỉ định hub ID; hub hoạt động đầu tiên trong hệ thống sẽ được chọn mặc định.
+   *
+   * @param requestedHubId Optional hub ID requested by the user.
+   *                       Hub ID tùy chọn do người dùng yêu cầu.
+   * @param actor The token payload of the user making the request.
+   *              Thông tin token của người dùng thực hiện yêu cầu.
+   * @returns A promise resolving to the authorized hub ID.
+   *          Một promise trả về hub ID được ủy quyền.
+   * @throws {NotFoundException} If no active hubs are found in the system.
+   *                             Nếu không tìm thấy hub nào hoạt động trong hệ thống.
    */
   async resolveDispatchHub(requestedHubId: number | undefined, actor: AccessTokenPayload): Promise<number> {
     if (actor.roleName === roleName.ADMIN && !requestedHubId) {
@@ -68,7 +100,16 @@ export class TripHubHelper {
     return this.resolveHubScope(requestedHubId, actor)
   }
 
-  /** Suy ra hubId từ thông tin Trip (qua vehicle.hubId hoặc order.currentHubId) */
+  /**
+   * Infers the hub ID associated with a trip by examining its vehicle's hub or its stops' order hubs.
+   *
+   * Suy ra hub ID liên kết với chuyến đi bằng cách kiểm tra hub của xe hoặc hub của các đơn hàng trong điểm dừng.
+   *
+   * @param trip The trip data structure.
+   *             Cấu trúc dữ liệu chuyến đi.
+   * @returns The inferred hub ID, or null if it cannot be determined.
+   *          Hub ID được suy ra, hoặc null nếu không thể xác định.
+   */
   inferTripHubId(trip: {
     stops?: Array<{ order?: { currentHubId?: number | null } | null }>
     vehicle?: { hubId?: number | null } | null
@@ -81,8 +122,24 @@ export class TripHubHelper {
   }
 
   /**
-   * Kiểm tra xe, tài xế, và các đơn hàng đều thuộc cùng Hub.
-   * Đảm bảo tính toàn vẹn dữ liệu khi dispatch.
+   * Asserts that the vehicle, driver, and orders belong to the specified hub.
+   * Enforces data integrity before dispatching a trip.
+   *
+   * Xác minh xe, tài xế và các đơn hàng đều thuộc cùng Hub được chỉ định.
+   * Đảm bảo tính toàn vẹn dữ liệu trước khi điều phối chuyến đi.
+   *
+   * @param hubId The unique identifier of the hub.
+   *              Mã định danh duy nhất của hub.
+   * @param vehicleId The unique identifier of the vehicle.
+   *                  Mã định danh duy nhất của phương tiện.
+   * @param driverId The unique identifier of the driver user.
+   *                 Mã định danh duy nhất của tài xế.
+   * @param orderIds The list of order IDs to verify.
+   *                 Danh sách ID đơn hàng cần xác minh.
+   * @throws {NotFoundException} If vehicle or driver does not exist.
+   *                             Nếu phương tiện hoặc tài xế không tồn tại.
+   * @throws {BadRequestException} If resources do not match the assigned hub or orders are invalid.
+   *                               Nếu tài nguyên không khớp với hub được chỉ định hoặc đơn hàng không hợp lệ.
    */
   async assertDispatchResourcesBelongToHub(
     hubId: number,
@@ -114,7 +171,18 @@ export class TripHubHelper {
     await this.assertOrdersBelongToHub(hubId, orderIds)
   }
 
-  /** Kiểm tra tất cả đơn hàng thuộc cùng Hub */
+  /**
+   * Asserts that all specified order IDs exist, are in a dispatchable state, and belong to the correct hub.
+   *
+   * Xác minh tất cả ID đơn hàng được chỉ định đều tồn tại, ở trạng thái có thể điều phối, và thuộc đúng hub.
+   *
+   * @param hubId The unique identifier of the hub.
+   *              Mã định danh duy nhất của hub.
+   * @param orderIds The list of order IDs.
+   *                 Danh sách ID đơn hàng.
+   * @throws {BadRequestException} If any order is invalid, already assigned, or belongs to another hub.
+   *                               Nếu bất kỳ đơn hàng nào không hợp lệ, đã được gán, hoặc thuộc về hub khác.
+   */
   async assertOrdersBelongToHub(hubId: number, orderIds: number[]): Promise<void> {
     const orders = await this.prismaService.order.findMany({
       where: {
@@ -135,8 +203,18 @@ export class TripHubHelper {
   }
 
   /**
-   * Kiểm tra xe và tài xế không đang bận ở chuyến nào khác.
-   * excludedTripId: loại trừ trip hiện tại (khi reassign vehicle cho trip đó).
+   * Validates that both the driver and the vehicle are not already assigned to active trips (PENDING or IN_PROGRESS).
+   *
+   * Xác minh cả tài xế và phương tiện đều không bị trùng lịch ở chuyến đi đang hoạt động khác (PENDING hoặc IN_PROGRESS).
+   *
+   * @param vehicleId The ID of the vehicle.
+   *                  ID của phương tiện.
+   * @param driverId The ID of the driver.
+   *                 ID của tài xế.
+   * @param excludedTripId Optional trip ID to ignore (used during vehicle/driver reassignments).
+   *                       ID chuyến đi tùy chọn cần bỏ qua (sử dụng khi chỉ định lại xe/tài xế).
+   * @throws {BadRequestException} If driver or vehicle is occupied in another active trip.
+   *                               Nếu tài xế hoặc phương tiện đang bận ở một chuyến đi hoạt động khác.
    */
   async assertDriverAndVehicleAvailability(
     vehicleId: number,
@@ -171,7 +249,18 @@ export class TripHubHelper {
     }
   }
 
-  /** Kiểm tra thanh toán hợp lệ để dispatch */
+  /**
+   * Checks whether the payment status of an order is ready for dispatch.
+   * COD order is always ready, Stripe order requires COMPLETED payment status.
+   *
+   * Kiểm tra xem trạng thái thanh toán của đơn hàng có sẵn sàng để vận chuyển hay không.
+   * Đơn COD luôn sẵn sàng, đơn Stripe yêu cầu trạng thái thanh toán COMPLETED.
+   *
+   * @param order The order's payment details.
+   *              Chi tiết thanh toán của đơn hàng.
+   * @returns True if payment is ready for dispatch, false otherwise.
+   *          True nếu thanh toán đã sẵn sàng để vận chuyển, ngược lại false.
+   */
   isOrderPaymentReadyForDispatch(order: {
     payment?: { method?: string | null; status?: string | null } | null
   }): boolean {
@@ -179,7 +268,16 @@ export class TripHubHelper {
     return order.payment?.method === 'STRIPE' && order.payment.status === 'COMPLETED'
   }
 
-  /** Assert payment sẵn sàng — throw nếu chưa hợp lệ */
+  /**
+   * Asserts that an order payment is ready for dispatch. Throws an exception if not ready.
+   *
+   * Xác minh thanh toán đơn hàng sẵn sàng vận chuyển. Ném ra ngoại lệ nếu chưa sẵn sàng.
+   *
+   * @param order The order data structure.
+   *              Cấu trúc dữ liệu đơn hàng.
+   * @throws {BadRequestException} If payment is not ready or Stripe payment failed.
+   *                               Nếu thanh toán chưa sẵn sàng hoặc thanh toán Stripe không thành công.
+   */
   assertOrderPaymentReadyForDispatch(order: {
     id?: number | null
     trackingCode?: string | null
@@ -196,7 +294,18 @@ export class TripHubHelper {
     }
   }
 
-  /** Lấy thông tin driver (kiểm tra quyền DRIVER) */
+  /**
+   * Retrieves and scopes a driver user. Ensures that the actor is indeed a driver.
+   *
+   * Lấy thông tin và giới hạn tài xế. Đảm bảo người dùng thực sự có vai trò tài xế.
+   *
+   * @param actor The token payload of the user.
+   *              Thông tin token của người dùng.
+   * @returns A promise resolving to the scoped driver details.
+   *          Một promise trả về chi tiết tài xế đã giới hạn phạm vi.
+   * @throws {ForbiddenException} If the actor's role is not DRIVER.
+   *                              Nếu vai trò người dùng không phải DRIVER.
+   */
   async getDriverScopeUser(actor: AccessTokenPayload) {
     if (actor.roleName !== roleName.DRIVER) {
       throw new ForbiddenException('Error.PermissionDenied.NotDriver')
@@ -215,7 +324,16 @@ export class TripHubHelper {
     return { ...driver, hubId: driver?.hubId ?? null }
   }
 
-  /** Kiểm tra tài xế không đang có chuyến IN_PROGRESS */
+  /**
+   * Validates that the driver does not have any ongoing IN_PROGRESS trips.
+   *
+   * Xác minh tài xế không có bất kỳ chuyến đi nào đang thực hiện (IN_PROGRESS).
+   *
+   * @param driverId The ID of the driver.
+   *                 ID của tài xế.
+   * @throws {BadRequestException} If the driver has an active trip.
+   *                               Nếu tài xế đang chạy một chuyến đi khác.
+   */
   async assertDriverHasNoInProgressTrip(driverId: number): Promise<void> {
     const activeTrip = await this.prismaService.trip.findFirst({
       where: { driverId, status: TRIP_STATUS.IN_PROGRESS },

@@ -16,6 +16,13 @@ type EtaStopUpdate = {
   stopSequence: number
 }
 
+/**
+ * Service responsible for calculating and managing the Estimated Time of Arrival (ETA) for delivery trips.
+ * Integrates route optimization, monitors SLA compliance, and creates alerts when delivery windows are breached.
+ *
+ * Dịch vụ chịu trách nhiệm tính toán và quản lý Thời gian dự kiến đến (ETA) cho các chuyến giao hàng.
+ * Tích hợp tối ưu hóa lộ trình, giám sát việc tuân thủ SLA và tạo cảnh báo khi vi phạm khung giờ giao hàng.
+ */
 @Injectable()
 export class EtaService {
   private readonly etaWriteThresholdMs = 5 * 60 * 1000
@@ -26,6 +33,20 @@ export class EtaService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
+  /**
+   * Recalculates ETA for all remaining stops of a trip.
+   * Optimizes stop sequence, updates trip stop times in database, and manages SLA alerts/notifications.
+   *
+   * Tính toán lại ETA cho tất cả các điểm dừng còn lại của một chuyến đi.
+   * Tối ưu hóa thứ tự dừng, cập nhật thời gian dự kiến trong cơ sở dữ liệu và quản lý các cảnh báo/thông báo SLA.
+   *
+   * @param tripId The unique identifier of the trip.
+   *               Mã định danh duy nhất của chuyến đi.
+   * @returns A promise resolving to the list of stops with updated ETAs and counts.
+   *          Một promise trả về danh sách các điểm dừng cùng ETA đã cập nhật và số lượng cập nhật.
+   * @throws {NotFoundException} If the trip is not found.
+   *                             Nếu không tìm thấy chuyến đi.
+   */
   async recalculateTripEta(tripId: number) {
     const optimizedRoute = await this.routeOptimizationService.optimizeRouteForTrip(tripId)
     const trip = await this.prismaService.trip.findUnique({
@@ -155,6 +176,24 @@ export class EtaService {
     }
   }
 
+  /**
+   * Retrieves the current estimated stopping times (ETA) for a specific trip.
+   * Enforces role-based visibility rules (Admin, Driver, Customer, Warehouse Staff).
+   *
+   * Lấy thời gian dự kiến đến (ETA) hiện tại cho một chuyến đi cụ thể.
+   * Áp dụng quy tắc hiển thị theo vai trò người dùng (Admin, Tài xế, Khách hàng, Nhân viên kho).
+   *
+   * @param actor The token payload of the user making the request.
+   *              Thông tin token của người dùng thực hiện yêu cầu.
+   * @param tripId The unique identifier of the trip.
+   *               Mã định danh duy nhất của chuyến đi.
+   * @returns A promise resolving to the trip's stops and their respective arrival times/deadlines.
+   *          Một promise trả về các điểm dừng của chuyến đi cùng thời gian đến và deadline tương ứng.
+   * @throws {NotFoundException} If the trip is not found.
+   *                             Nếu không tìm thấy chuyến đi.
+   * @throws {ForbiddenException} If the user does not have permission to view this trip's ETA.
+   *                              Nếu người dùng không có quyền xem ETA của chuyến đi này.
+   */
   async getTripEta(actor: AccessTokenPayload, tripId: number) {
     const trip = await this.prismaService.trip.findUnique({
       where: { id: tripId },
@@ -202,11 +241,37 @@ export class EtaService {
     }
   }
 
+  /**
+   * Evaluates if the change in ETA is significant enough to warrant a database write operation.
+   * Prevents database thrashing by filtering out small time variations (below a specific threshold).
+   *
+   * Đánh giá xem thay đổi ETA có đủ lớn để thực hiện ghi cơ sở dữ liệu hay không.
+   * Ngăn chặn ghi DB liên tục bằng cách bỏ qua các thay đổi thời gian nhỏ (dưới ngưỡng quy định).
+   *
+   * @param currentEta The current ETA in database.
+   *                   ETA hiện tại trong cơ sở dữ liệu.
+   * @param nextEta The newly calculated ETA.
+   *                ETA mới được tính toán.
+   * @returns True if the new ETA should be written.
+   *          True nếu nên ghi ETA mới.
+   */
   private shouldWriteEta(currentEta: Date | null, nextEta: Date) {
     if (!currentEta) return true
     return Math.abs(currentEta.getTime() - nextEta.getTime()) >= this.etaWriteThresholdMs
   }
 
+  /**
+   * Asserts that a user has permission to view a trip's ETA information.
+   *
+   * Xác minh người dùng có quyền xem thông tin ETA của chuyến đi.
+   *
+   * @param actor The token payload of the user.
+   *              Thông tin token của người dùng.
+   * @param trip The trip data with driver and scoped entities.
+   *             Dữ liệu chuyến đi với tài xế và các thực thể liên quan.
+   * @throws {ForbiddenException} If the user is not authorized.
+   *                              Nếu người dùng không được ủy quyền.
+   */
   private assertCanViewTripEta(
     actor: AccessTokenPayload,
     trip: {
@@ -224,6 +289,20 @@ export class EtaService {
     throw new ForbiddenException('Error.Forbidden')
   }
 
+  /**
+   * Synchronizes SLA breach alerts. Creates an active alert if the ETA exceeds preferred delivery time,
+   * or resolves an existing active alert if the ETA is back within the deadline.
+   *
+   * Đồng bộ hóa cảnh báo vi phạm SLA. Tạo cảnh báo nếu ETA vượt quá thời gian giao hàng ưu tiên,
+   * hoặc hoàn thành cảnh báo hiện có nếu ETA trở lại trong thời hạn cho phép.
+   *
+   * @param tx The Prisma Transaction Client.
+   *           Prisma Transaction Client.
+   * @param input Object containing the deadline, calculated ETA, order ID, and trip ID.
+   *              Đối tượng chứa deadline, ETA đã tính, mã đơn hàng và mã chuyến đi.
+   * @returns A promise resolving to the alert status change object or null.
+   *          Một promise trả về đối tượng thay đổi trạng thái cảnh báo hoặc null.
+   */
   private async syncSlaAlert(
     tx: Prisma.TransactionClient,
     input: { deadlineAt: Date; etaAt: Date; orderId: number; tripId: number },
@@ -275,6 +354,20 @@ export class EtaService {
     return null
   }
 
+  /**
+   * Resolves list of users who should receive notification about an SLA alert.
+   * Includes the customer, admins, and warehouse staff associated with the hub.
+   *
+   * Xác định danh sách người dùng sẽ nhận thông báo về cảnh báo SLA.
+   * Bao gồm khách hàng, quản trị viên và nhân viên kho liên kết với hub.
+   *
+   * @param customerId The ID of the customer.
+   *                   ID của khách hàng.
+   * @param hubId The ID of the hub.
+   *              ID của kho bãi.
+   * @returns A promise resolving to an array of recipient user IDs.
+   *          Một promise trả về mảng chứa ID của những người nhận.
+   */
   private async resolveSlaRecipients(customerId: number, hubId: number | null) {
     const users = await this.prismaService.user.findMany({
       where: {

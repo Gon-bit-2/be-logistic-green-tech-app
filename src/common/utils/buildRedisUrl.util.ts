@@ -1,8 +1,16 @@
 import envConfig from 'src/config/config'
 
 /**
- * Build Redis URL from environment variables
- * @returns string
+ * Builds a standardized Redis connection URL from configuration parameters.
+ * Xây dựng URL kết nối Redis tiêu chuẩn hóa từ các tham số cấu hình.
+ *
+ * If `REDIS_URL` env variable is already present, it is returned directly. Otherwise,
+ * it formats username, password, host, and port appropriately.
+ * Nếu biến môi trường `REDIS_URL` đã có sẵn, nó sẽ trả về trực tiếp. Ngược lại,
+ * nó định dạng tài khoản, mật khẩu, host và port một cách phù hợp.
+ *
+ * @returns {string} The formatted Redis connection URL.
+ * @returns {string} URL kết nối Redis đã định dạng.
  */
 function buildRedisUrl(): string {
   if (envConfig.REDIS_URL) {

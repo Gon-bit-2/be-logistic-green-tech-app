@@ -22,11 +22,11 @@ import { OrderStateService } from 'src/common/services/order-state.service'
 import { AuditLogService } from 'src/common/services/audit-log.service'
 
 /**
- * Service xử lý vòng đời (lifecycle) của Trip:
- * - getTrips, getTripById: Query
- * - manualCreateTrip: Tạo Trip thủ công
- * - reassignTripVehicle: Chuyển xe cho Trip
- * - startTrip, cancelTrip: Thay đổi trạng thái Trip
+ * Trip execution service managing the complete lifecycle of delivery trips.
+ * Handles querying, manual creation, vehicle reassignment, and status transitions (start, cancel, complete).
+ *
+ * Dịch vụ thực thi chuyến đi quản lý toàn bộ vòng đời của các chuyến giao hàng.
+ * Xử lý truy vấn, tạo thủ công, phân bổ lại phương tiện và chuyển đổi trạng thái (bắt đầu, hủy, hoàn thành).
  */
 @Injectable()
 export class TripExecutionService {
@@ -42,13 +42,39 @@ export class TripExecutionService {
     @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
-  /** Lấy danh sách chuyến (phân trang, filter) */
+  /**
+   * Retrieves a paginated list of trips filtered by criteria and scoped by user permissions.
+   *
+   * Lấy danh sách chuyến đi được phân trang, lọc theo tiêu chí và giới hạn theo quyền hạn của người dùng.
+   *
+   * @param query The query parameters containing filters, sorting, and pagination options.
+   *              Các tham số truy vấn chứa bộ lọc, sắp xếp và tùy chọn phân trang.
+   * @param actor The token payload of the user making the request.
+   *              Thông tin token của người dùng thực hiện yêu cầu.
+   * @returns A promise resolving to the list of trips and pagination metadata.
+   *          Một promise trả về danh sách các chuyến đi và dữ liệu phân trang.
+   */
   async getTrips(query: GetTripsQueryType, actor: AccessTokenPayload) {
     const hubId = await this.hubHelper.resolveHubScope(query.hubId, actor)
     return this.tripRepo.findAll({ ...query, hubId })
   }
 
-  /** Lấy chi tiết 1 chuyến */
+  /**
+   * Retrieves a single trip's details by its ID, enforcing hub-level access control for warehouse staff.
+   *
+   * Lấy chi tiết của một chuyến đi theo ID, áp dụng kiểm soát quyền truy cập cấp kho bãi đối với nhân viên kho.
+   *
+   * @param id The unique identifier of the trip.
+   *           Mã định danh duy nhất của chuyến đi.
+   * @param actor The token payload of the user making the request.
+   *              Thông tin token của người dùng thực hiện yêu cầu.
+   * @returns A promise resolving to the trip details with stops.
+   *          Một promise trả về chi tiết chuyến đi cùng các điểm dừng.
+   * @throws {NotFoundException} If the trip with the specified ID does not exist.
+   *                             Nếu chuyến đi với ID chỉ định không tồn tại.
+   * @throws {ForbiddenException} If a warehouse staff tries to access a trip belonging to another hub.
+   *                              Nếu nhân viên kho cố gắng truy cập chuyến đi thuộc về kho khác.
+   */
   async getTripById(id: number, actor: AccessTokenPayload) {
     const trip = await this.tripRepo.findById(id)
     if (!trip) throw new NotFoundException(`Không tìm thấy chuyến #${id}`)
@@ -64,7 +90,22 @@ export class TripExecutionService {
     return trip
   }
 
-  /** Tạo Trip thủ công (Admin/Staff) */
+  /**
+   * Manually creates a new trip with assigned vehicle, driver, and orders.
+   * Validates hub scoping, resource availability, and vehicle capacity.
+   *
+   * Tạo chuyến đi thủ công với phương tiện, tài xế và các đơn hàng được chỉ định.
+   * Xác thực phạm vi kho bãi, tính khả dụng của tài nguyên và tải trọng phương tiện.
+   *
+   * @param dto The data transfer object containing vehicle, driver, orders, and hub details.
+   *            Đối tượng truyền dữ liệu chứa thông tin phương tiện, tài xế, đơn hàng và kho bãi.
+   * @param actor The token payload of the user making the request.
+   *              Thông tin token của người dùng thực hiện yêu cầu.
+   * @returns A promise resolving to the newly created trip.
+   *          Một promise trả về chuyến đi mới được tạo.
+   * @throws {BadRequestException} If resources do not belong to the hub or driver/vehicle is unavailable.
+   *                               Nếu tài nguyên không thuộc kho bãi hoặc tài xế/phương tiện không khả dụng.
+   */
   async manualCreateTrip(dto: ManualCreateTripType, actor: AccessTokenPayload) {
     const hubId = await this.hubHelper.resolveHubScope(dto.hubId, actor)
     await this.hubHelper.assertDispatchResourcesBelongToHub(hubId, dto.vehicleId, dto.driverId, dto.orderIds)
@@ -87,7 +128,26 @@ export class TripExecutionService {
     })
   }
 
-  /** Chuyển xe cho Trip PENDING */
+  /**
+   * Reassigns a new vehicle and/or driver to an existing trip in PENDING status.
+   *
+   * Chỉ định lại phương tiện và/hoặc tài xế mới cho một chuyến đi đang ở trạng thái PENDING.
+   *
+   * @param tripId The unique identifier of the trip to modify.
+   *               Mã định danh duy nhất của chuyến đi cần sửa đổi.
+   * @param dto The data transfer object containing new vehicle and optional driver ID.
+   *            Đối tượng truyền dữ liệu chứa phương tiện mới và ID tài xế (tùy chọn).
+   * @param actor The token payload of the user making the request.
+   *              Thông tin token của người dùng thực hiện yêu cầu.
+   * @returns A promise resolving to the updated trip details.
+   *          Một promise trả về chi tiết chuyến đi đã được cập nhật.
+   * @throws {NotFoundException} If the trip, vehicle, or driver is not found.
+   *                             Nếu không tìm thấy chuyến đi, phương tiện hoặc tài xế.
+   * @throws {BadRequestException} If the trip is not PENDING, resources do not belong to the same hub, or capacity is exceeded.
+   *                               Nếu chuyến đi không ở trạng thái PENDING, tài nguyên không thuộc cùng kho, hoặc vượt quá tải trọng.
+   * @throws {ForbiddenException} If warehouse staff attempts to reassign resources for a trip belonging to another hub.
+   *                              Nếu nhân viên kho cố gắng phân bổ lại tài nguyên cho chuyến đi thuộc kho khác.
+   */
   async reassignTripVehicle(tripId: number, dto: ReassignTripVehicleType, actor: AccessTokenPayload) {
     const trip = await this.tripRepo.findById(tripId)
     if (!trip) throw new NotFoundException(`Không tìm thấy chuyến #${tripId}`)
@@ -160,7 +220,26 @@ export class TripExecutionService {
     return updatedTrip
   }
 
-  /** Tài xế bắt đầu chuyến */
+  /**
+   * Starts a trip by transitioning its status from PENDING to IN_PROGRESS.
+   * Also transitions all associated orders to IN_TRANSIT status.
+   *
+   * Bắt đầu chuyến đi bằng cách chuyển trạng thái từ PENDING sang IN_PROGRESS.
+   * Đồng thời chuyển tất cả đơn hàng liên quan sang trạng thái IN_TRANSIT (đang vận chuyển).
+   *
+   * @param tripId The unique identifier of the trip to start.
+   *               Mã định danh duy nhất của chuyến đi cần bắt đầu.
+   * @param actor The token payload of the driver starting the trip.
+   *              Thông tin token của tài xế bắt đầu chuyến đi.
+   * @returns A promise resolving to the updated trip.
+   *          Một promise trả về chuyến đi đã được cập nhật.
+   * @throws {NotFoundException} If the trip is not found.
+   *                             Nếu không tìm thấy chuyến đi.
+   * @throws {ForbiddenException} If the actor is not the assigned driver of this trip.
+   *                              Nếu người dùng không phải tài xế được chỉ định của chuyến đi này.
+   * @throws {BadRequestException} If the trip is not in PENDING status or order payments are not ready.
+   *                               Nếu chuyến đi không ở trạng thái PENDING hoặc thanh toán đơn hàng chưa sẵn sàng.
+   */
   async startTrip(tripId: number, actor: AccessTokenPayload) {
     const trip = await this.prismaService.trip.findUnique({
       where: { id: tripId },
@@ -234,7 +313,24 @@ export class TripExecutionService {
     return updatedTrip
   }
 
-  /** Hủy chuyến PENDING và trả lại trạng thái đơn hàng */
+  /**
+   * Cancels a PENDING trip, releasing its driver, vehicle, and returning all associated orders back to PENDING status.
+   *
+   * Hủy chuyến đi đang ở trạng thái PENDING, giải phóng tài xế, phương tiện và đưa tất cả đơn hàng liên quan trở lại trạng thái PENDING.
+   *
+   * @param tripId The unique identifier of the trip to cancel.
+   *               Mã định danh duy nhất của chuyến đi cần hủy.
+   * @param dto The data transfer object containing the cancellation reason.
+   *            Đối tượng truyền dữ liệu chứa lý do hủy chuyến.
+   * @param actor The token payload of the user cancelling the trip.
+   *              Thông tin token của người dùng thực hiện hủy chuyến.
+   * @returns A promise resolving to the cancelled trip.
+   *          Một promise trả về chuyến đi đã hủy.
+   * @throws {NotFoundException} If the trip is not found.
+   *                             Nếu không tìm thấy chuyến đi.
+   * @throws {BadRequestException} If the trip is not in PENDING status.
+   *                               Nếu chuyến đi không ở trạng thái PENDING.
+   */
   async cancelTrip(tripId: number, dto: CancelTripBodyType, actor: AccessTokenPayload) {
     const trip = await this.prismaService.trip.findUnique({
       where: { id: tripId },
@@ -298,6 +394,26 @@ export class TripExecutionService {
     return cancelledTrip
   }
 
+  /**
+   * Completes an IN_PROGRESS trip. Calculates total distance, transitions status to COMPLETED,
+   * and triggers gamification/emission calculation for eco-friendly vehicles.
+   *
+   * Hoàn thành một chuyến đi đang thực hiện (IN_PROGRESS). Tính toán tổng quãng đường,
+   * chuyển trạng thái sang COMPLETED và kích hoạt tính toán giảm phát thải/trò chơi hóa cho xe thân thiện môi trường.
+   *
+   * @param tripId The unique identifier of the trip to complete.
+   *               Mã định danh duy nhất của chuyến đi cần hoàn thành.
+   * @param actor The token payload of the driver completing the trip.
+   *              Thông tin token của tài xế hoàn thành chuyến đi.
+   * @returns A promise resolving to the completed trip.
+   *          Một promise trả về chuyến đi đã hoàn thành.
+   * @throws {NotFoundException} If the trip is not found.
+   *                             Nếu không tìm thấy chuyến đi.
+   * @throws {ForbiddenException} If the actor is not the assigned driver of this trip.
+   *                              Nếu người dùng không phải tài xế được chỉ định của chuyến đi này.
+   * @throws {BadRequestException} If the trip is not IN_PROGRESS, or if there are unfinished/undelivered orders on this trip.
+   *                               Nếu chuyến đi không ở trạng thái IN_PROGRESS, hoặc còn đơn hàng chưa giao xong.
+   */
   async completeTrip(tripId: number, actor: AccessTokenPayload) {
     const trip = await this.prismaService.trip.findUnique({
       where: { id: tripId },
@@ -384,6 +500,28 @@ export class TripExecutionService {
     return completedTrip
   }
 
+  /**
+   * Adds multiple orders to an existing PENDING trip.
+   * Validates capacity constraints, hub scope, and payment status of added orders.
+   *
+   * Thêm nhiều đơn hàng vào một chuyến đi đang ở trạng thái PENDING.
+   * Xác thực ràng buộc tải trọng, phạm vi kho bãi và trạng thái thanh toán của các đơn hàng được thêm.
+   *
+   * @param tripId The unique identifier of the trip.
+   *               Mã định danh duy nhất của chuyến đi.
+   * @param dto The data transfer object containing the order IDs to add.
+   *            Đối tượng truyền dữ liệu chứa danh sách ID đơn hàng cần thêm.
+   * @param actor The token payload of the user performing the action.
+   *              Thông tin token của người dùng thực hiện hành động.
+   * @returns A promise resolving to the updated trip details including stops.
+   *          Một promise trả về chi tiết chuyến đi đã cập nhật gồm các điểm dừng.
+   * @throws {NotFoundException} If the trip is not found.
+   *                             Nếu không tìm thấy chuyến đi.
+   * @throws {BadRequestException} If the trip is not PENDING, orders do not belong to the same hub, or vehicle capacity is exceeded.
+   *                               Nếu chuyến đi không ở trạng thái PENDING, đơn hàng không thuộc cùng kho, hoặc vượt quá tải trọng xe.
+   * @throws {ForbiddenException} If warehouse staff attempts to add orders to a trip belonging to another hub.
+   *                              Nếu nhân viên kho cố gắng thêm đơn hàng vào chuyến đi thuộc kho khác.
+   */
   async addOrdersToTrip(tripId: number, dto: AddOrdersToTripType, actor: AccessTokenPayload) {
     const trip = await this.tripRepo.findById(tripId)
     if (!trip) throw new NotFoundException(`Không tìm thấy chuyến #${tripId}`)
@@ -482,6 +620,20 @@ export class TripExecutionService {
     })
   }
 
+  /**
+   * Cancels/removes a specific order from an active or pending trip.
+   *
+   * Hủy hoặc gỡ bỏ một đơn hàng cụ thể ra khỏi một chuyến đi đang hoạt động hoặc đang chờ.
+   *
+   * @param tripId The unique identifier of the trip.
+   *               Mã định danh duy nhất của chuyến đi.
+   * @param orderId The unique identifier of the order to remove.
+   *                Mã định danh duy nhất của đơn hàng cần gỡ bỏ.
+   * @returns A promise resolving to the trip after order removal.
+   *          Một promise trả về thông tin chuyến đi sau khi gỡ bỏ đơn hàng.
+   * @throws {NotFoundException} If the trip is not found.
+   *                             Nếu không tìm thấy chuyến đi.
+   */
   async cancelOrderFromTrip(tripId: number, orderId: number) {
     const trip = await this.tripRepo.findById(tripId)
     if (!trip) throw new NotFoundException(`Không tìm thấy chuyến #${tripId}`)

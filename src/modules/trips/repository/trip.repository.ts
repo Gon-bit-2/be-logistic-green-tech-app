@@ -8,6 +8,13 @@ import { DISPATCHABLE_PAYMENT_FILTER } from 'src/common/constants/order-query.co
 import { OrderStateService } from 'src/common/services/order-state.service'
 import { EVENT_SOURCE, EventSourceValue } from 'src/common/constants/tracking.constant'
 
+/**
+ * Data repository class for managing Trips and stops.
+ * Integrates directly with Prisma for DB CRUD and coordinates transactional state transitions.
+ *
+ * Lớp repository dữ liệu chịu trách nhiệm quản lý Chuyến đi và Điểm dừng.
+ * Tích hợp trực tiếp với Prisma để CRUD DB và điều phối các chuyển đổi trạng thái trong transaction.
+ */
 @Injectable()
 export class TripRepository {
   constructor(
@@ -16,10 +23,14 @@ export class TripRepository {
   ) {}
 
   /**
-   * Truy vấn các đơn hàng sẵn sàng để gom chuyến:
-   * - PENDING: Đơn mới tạo, chờ chuyến First-mile.
-   * - ARRIVED_AT_HUB: Đơn liên tỉnh đã hoàn thành First-mile, về đến Hub đích,
-   *   chờ dispatch Last-mile giao tận nhà người nhận.
+   * Helper function to build a Prisma query filter for pending/dispatchable orders.
+   *
+   * Hàm hỗ trợ xây dựng bộ lọc truy vấn Prisma cho các đơn hàng đang chờ hoặc có thể điều phối.
+   *
+   * @param hubId Optional hub ID to scope the query.
+   *              Hub ID tùy chọn để giới hạn truy vấn.
+   * @returns The Prisma order where input query object.
+   *          Đối tượng truy vấn Prisma order where.
    */
   private buildPendingOrdersWhere(hubId?: number): Prisma.OrderWhereInput {
     return {
@@ -31,12 +42,34 @@ export class TripRepository {
     }
   }
 
+  /**
+   * Counts pending, dispatchable orders.
+   *
+   * Đếm số lượng đơn hàng đang chờ, có thể điều phối.
+   *
+   * @param hubId Optional hub ID.
+   *              Hub ID tùy chọn.
+   * @returns A promise resolving to the total count.
+   *          Một promise trả về tổng số lượng.
+   */
   async countPendingOrders(hubId?: number) {
     return this.prismaService.order.count({
       where: this.buildPendingOrdersWhere(hubId),
     })
   }
 
+  /**
+   * Finds pending, dispatchable orders sorted by creation time.
+   *
+   * Tìm kiếm các đơn hàng đang chờ, có thể điều phối được sắp xếp theo thời gian tạo.
+   *
+   * @param hubId Optional hub ID.
+   *              Hub ID tùy chọn.
+   * @param limit Optional limit for pagination/take.
+   *              Giới hạn tùy chọn cho phân trang/lấy dữ liệu.
+   * @returns A promise resolving to an array of orders.
+   *          Một promise trả về mảng các đơn hàng.
+   */
   async findPendingOrders(hubId?: number, limit?: number) {
     return this.prismaService.order.findMany({
       where: this.buildPendingOrdersWhere(hubId),
@@ -48,8 +81,16 @@ export class TripRepository {
   }
 
   /**
-   * Truy vấn các xe rảnh rỗi (không bị vướng vào Trip nào đang PENDING/IN_PROGRESS)
-   * và sắp xếp ưu tiên xe tải điện (ELECTRIC_VAN).
+   * Retrieves active, available vehicles not currently assigned to any active trip.
+   * Prioritizes EVs (Electric Vans) and larger capacity weights.
+   *
+   * Lấy danh sách phương tiện đang hoạt động, khả dụng và không bị gán vào bất kỳ chuyến đi nào.
+   * Ưu tiên các dòng xe điện (Electric Van) và xe có tải trọng lớn hơn.
+   *
+   * @param hubId Optional hub ID.
+   *              Hub ID tùy chọn.
+   * @returns A promise resolving to available vehicles.
+   *          Một promise trả về các phương tiện khả dụng.
    */
   async findAvailableVehicles(hubId?: number) {
     return this.prismaService.vehicle.findMany({
@@ -84,11 +125,14 @@ export class TripRepository {
   }
 
   /**
-   * Truy vấn các Tài xế rảnh rỗi:
-   * - Có role = DRIVER
-   * - Thuộc cùng Hub (nếu có hubId)
-   * - Chưa bị xóa
-   * - Không đang vướng chuyến xe nào (PENDING/IN_PROGRESS)
+   * Retrieves active drivers not currently driving any ongoing trips.
+   *
+   * Lấy danh sách tài xế đang hoạt động, rảnh rỗi và không lái bất kỳ chuyến đi nào.
+   *
+   * @param hubId Optional hub ID.
+   *              Hub ID tùy chọn.
+   * @returns A promise resolving to the list of available drivers.
+   *          Một promise trả về danh sách các tài xế khả dụng.
    */
   async findAvailableDrivers(hubId?: number) {
     return this.prismaService.user.findMany({
@@ -119,12 +163,28 @@ export class TripRepository {
   }
 
   /**
-   * Khi Bin Packing xong và ra được kế hoạch di chuyển,
-   * Lưu DB trong 1 Transaction để đảm bảo tính toàn vẹn dữ liệu.
+   * Creates a Trip with multiple stops and links the orders in a secure Prisma transaction.
+   * Performs an Optimistic Concurrency Check inside the transaction to verify orders are still pending.
    *
-   * LỚP 3 (OPTIMISTIC CONCURRENCY CHECK):
-   * Bên trong Transaction, re-verify lại rằng các Order vẫn ở trạng thái PENDING.
-   * Nếu worker khác đã kịp gán trước (race condition), chỉ xử lý những đơn còn hợp lệ.
+   * Tạo chuyến đi với nhiều điểm dừng và liên kết các đơn hàng trong một giao dịch Prisma an toàn.
+   * Thực hiện Kiểm tra đồng thời lạc quan (Optimistic Concurrency Check) trong transaction để xác minh đơn hàng vẫn đang chờ.
+   *
+   * @param vehicleId Unique identifier of the vehicle.
+   *                  Mã định danh duy nhất của phương tiện.
+   * @param driverId Unique identifier of the driver user.
+   *                 Mã định danh duy nhất của tài xế.
+   * @param orderIds Array of order IDs to dispatch.
+   *                 Mảng các ID đơn hàng cần điều phối.
+   * @param stopsData Sequence of stop points to create.
+   *                  Chuỗi các điểm dừng cần tạo.
+   * @param totalDistance Total path distance in kilometers.
+   *                      Tổng khoảng cách tuyến đường bằng kilomet.
+   * @param options Transactional execution settings (e.g., partial assignment approvals, actors).
+   *                Cài đặt thực thi giao dịch (ví dụ: duyệt gán bán phần, người dùng thực hiện).
+   * @returns A promise resolving to the created trip or null.
+   *          Một promise trả về chuyến đi đã tạo hoặc null.
+   * @throws {BadRequestException} If data overlaps, order lists are empty, stops are mismatched, or race conditions occur.
+   *                               Nếu trùng lặp dữ liệu, danh sách đơn trống, điểm dừng không khớp hoặc xảy ra xung đột tranh chấp.
    */
   async createTripWithStops(
     vehicleId: number,
@@ -273,7 +333,14 @@ export class TripRepository {
   }
 
   /**
-   * Lấy danh sách Trip (có phân trang)
+   * Retrieves a paginated list of trips, filtered by status, vehicle, driver, or hub.
+   *
+   * Lấy danh sách chuyến đi có phân trang, được lọc theo trạng thái, phương tiện, tài xế, hoặc hub.
+   *
+   * @param query The paginated filter query parameters.
+   *              Các tham số truy vấn bộ lọc phân trang.
+   * @returns A promise resolving to paginated trips metadata.
+   *          Một promise trả về siêu dữ liệu phân trang các chuyến đi.
    */
   async findAll(query: GetTripListQueryType) {
     const { limit, page, status, vehicleId, driverId, hubId } = query
@@ -352,7 +419,14 @@ export class TripRepository {
   }
 
   /**
-   * Lấy chi tiết Trip
+   * Retrieves details of a single trip, including driver, vehicle, and sorted stop sequences.
+   *
+   * Lấy chi tiết của một chuyến đi đơn lẻ, bao gồm tài xế, phương tiện và chuỗi các điểm dừng đã được sắp xếp.
+   *
+   * @param id The unique identifier of the trip.
+   *           Mã định danh duy nhất của chuyến đi.
+   * @returns A promise resolving to the complete trip data or null.
+   *          Một promise trả về dữ liệu chuyến đi đầy đủ hoặc null.
    */
   async findById(id: number) {
     return this.prismaService.trip.findUnique({
@@ -382,7 +456,18 @@ export class TripRepository {
   }
 
   /**
-   * Cập nhật trạng thái chuyến xe (và có thể trigger event qua Service sau)
+   * Updates a trip's status and includes execution metadata.
+   *
+   * Cập nhật trạng thái chuyến đi cùng siêu dữ liệu thực thi.
+   *
+   * @param id Unique identifier of the trip.
+   *           Mã định danh duy nhất của chuyến đi.
+   * @param status The target TRIP_STATUS value.
+   *               Giá trị TRIP_STATUS mục tiêu.
+   * @param extraData Additional DB columns to update in the trip.
+   *                  Các cột DB bổ sung cần cập nhật trong chuyến đi.
+   * @returns A promise resolving to the updated trip details.
+   *          Một promise trả về chi tiết chuyến đi đã cập nhật.
    */
   async updateTripStatus(id: number, status: keyof typeof TRIP_STATUS, extraData?: Prisma.TripUpdateInput) {
     return this.prismaService.trip.update({
@@ -442,13 +527,20 @@ export class TripRepository {
   }
 
   /**
-   * Hủy đơn hàng giữa chuyến xe (Mid-Trip Cancellation).
+   * Cancels a specific order from an active trip (Mid-Trip Cancellation).
+   * Inside transaction, deletes associated stops, sets order to CANCELLED/detached,
+   * reindexes remaining stop sequences, and cancels the entire trip if no orders remain.
    *
-   * Logic xử lý trong Transaction:
-   * 1. Xóa các TripStop liên quan tới orderId bị hủy
-   * 2. Reset Order: status → CANCELLED, currentTripId → null
-   * 3. Reindex lại stopSequence cho các stop còn lại (tránh lỗ sequence 1,2,_,4)
-   * 4. Nếu Trip không còn order nào → tự hủy Trip luôn
+   * Hủy một đơn hàng cụ thể khỏi một chuyến đi đang hoạt động (Hủy giữa chặng).
+   * Trong giao dịch transaction, xóa các điểm dừng liên quan, đưa đơn về CANCELLED/tháo gỡ khỏi chuyến,
+   * đánh lại thứ tự các điểm dừng còn lại và hủy toàn bộ chuyến đi nếu không còn đơn hàng nào.
+   *
+   * @param tripId The unique identifier of the trip.
+   *               Mã định danh duy nhất của chuyến đi.
+   * @param orderId The unique identifier of the order to remove.
+   *                Mã định danh duy nhất của đơn hàng cần loại bỏ.
+   * @returns A promise resolving to cancellation status metadata.
+   *          Một promise trả về siêu dữ liệu trạng thái hủy chuyến.
    */
   async cancelOrderFromTrip(tripId: number, orderId: number) {
     return this.prismaService.$transaction(async (tx) => {
