@@ -1,28 +1,28 @@
-# Backend performance va xu ly loi
+# Backend performance và xử lý lỗi
 
 Last synced with code: 2026-05-05.
 
-Tai lieu nay ghi cac quy uoc runtime, logging, error contract va nhung diem can chu y khi debug hieu nang.
+Tài liệu này ghi các quy ước runtime, logging, error contract và những điểm cần chú ý khi debug hiệu năng.
 
 ## Runtime knobs
 
-| Bien                           | Mac dinh                         | Tac dung                                                                 |
+| Biến                           | Mặc định                         | Tác dụng                                                                 |
 | ------------------------------ | -------------------------------- | ------------------------------------------------------------------------ |
-| `PORT`                         | `3000`                           | Port listen neu `process.env.PORT`/`envConfig.PORT` co gia tri.          |
+| `PORT`                         | `3000`                           | Port listen nếu `process.env.PORT`/`envConfig.PORT` có giá trị.          |
 | `CORS_ORIGINS`                 | `http://localhost:3000`          | Comma-separated allowed origins.                                         |
-| `DB_POOL_MAX`                  | `10`                             | So connection toi da cua PostgreSQL pool.                                |
-| `DB_POOL_IDLE_TIMEOUT_MS`      | `30000`                          | Thoi gian dong idle connection.                                          |
-| `PRISMA_QUERY_LOG`             | off                              | Set `1` de log query Prisma o local. Production chi log `warn`, `error`. |
-| `SLOW_REQUEST_MS`              | `1000`                           | Nguong request cham de logging middleware gan `slow=yes`.                |
-| `TRACKING_ACCESS_CACHE_TTL_MS` | `15000`                          | TTL cache quyen join tracking room.                                      |
+| `DB_POOL_MAX`                  | `10`                             | Số connection tối đa của PostgreSQL pool.                                |
+| `DB_POOL_IDLE_TIMEOUT_MS`      | `30000`                          | Thời gian đóng idle connection.                                          |
+| `PRISMA_QUERY_LOG`             | off                              | Set `1` để log query Prisma ở local. Production chỉ log `warn`, `error`. |
+| `SLOW_REQUEST_MS`              | `1000`                           | Ngưỡng request chậm để logging middleware gắn `slow=yes`.                |
+| `TRACKING_ACCESS_CACHE_TTL_MS` | `15000`                          | TTL cache quyền join tracking room.                                      |
 | `OSRM_BASE_URL`                | `http://router.project-osrm.org` | OSRM server cho route optimization.                                      |
 | `REDIS_URL`                    | none                             | Override Redis URL cho cache store.                                      |
 
-## Request id va log
+## Request id và log
 
-`RequestIdMiddleware` doc header `x-request-id` tu client hoac tao UUID moi. Response luon tra lai `x-request-id` de frontend/log collector doi chieu.
+`RequestIdMiddleware` đọc header `x-request-id` từ client hoặc tạo UUID mới. Response luôn trả lại `x-request-id` để frontend/log collector đối chiếu.
 
-`LoggingMiddleware` log request theo dang:
+`LoggingMiddleware` log request theo dạng:
 
 ```text
 [requestId] METHOD /path status durationMs | size=bytes uid=userId slow=yes|no ua="..."
@@ -31,14 +31,14 @@ Tai lieu nay ghi cac quy uoc runtime, logging, error contract va nhung diem can 
 Log level:
 
 - `error`: request `5xx`.
-- `warn`: request `4xx` hoac vuot `SLOW_REQUEST_MS`.
-- `log`: request binh thuong.
+- `warn`: request `4xx` hoặc vượt `SLOW_REQUEST_MS`.
+- `log`: request bình thường.
 
-Khong dua token, password, OTP, Stripe secret, Cloudinary secret, API key vao log.
+Không đưa token, password, OTP, Stripe secret, Cloudinary secret, API key vào log.
 
 ## Error envelope
 
-Moi exception HTTP di qua `AllExceptionsFilter`.
+Mọi exception HTTP đi qua `AllExceptionsFilter`.
 
 ```json
 {
@@ -52,101 +52,101 @@ Moi exception HTTP di qua `AllExceptionsFilter`.
 }
 ```
 
-Quy uoc:
+Quy ước:
 
 - `statusCode`: HTTP status.
-- `message`: thong diep hien thi hoac machine-readable message.
-- `errorCode`: optional, uu tien message dang `Error.*` hoac service-provided `errorCode`.
-- `errors`: validation detail hoac service error detail.
-- `requestId`: gia tri tu middleware.
+- `message`: thông điệp hiển thị hoặc machine-readable message.
+- `errorCode`: optional, ưu tiên message dạng `Error.*` hoặc service-provided `errorCode`.
+- `errors`: validation detail hoặc service error detail.
+- `requestId`: giá trị từ middleware.
 - `path`, `timestamp`: context debug.
 
-Frontend nen map theo `errorCode` neu co, fallback sang `message`.
+Frontend nên map theo `errorCode` nếu có, fallback sang `message`.
 
 ## Validation errors
 
-Request DTO dung Zod. Mot so rule dang chu y:
+Request DTO dùng Zod. Một số rule đáng chú ý:
 
-- Auth register/forgot password yeu cau confirm password khop.
-- Order create/quote yeu cau it nhat 1 item, item co `weight > 0`, kich thuoc neu co phai positive.
-- Tracking `STATUS_CHANGE` phai co `status`.
-- Tracking `EXCEPTION` phai co `failureReasonCode`.
-- Tracking status `DELIVERED` phai co POD.
-- Trip assignment approve phai co `tripId` hoac `vehicleId`.
-- Hub code chi cho chu in hoa, so va dau gach ngang.
-- Upload yeu cau file field dung ten: `file` hoac `files`.
+- Auth register/forgot password yêu cầu confirm password khớp.
+- Order create/quote yêu cầu ít nhất 1 item, item có `weight > 0`, kích thước nếu có phải positive.
+- Tracking `STATUS_CHANGE` phải có `status`.
+- Tracking `EXCEPTION` phải có `failureReasonCode`.
+- Tracking status `DELIVERED` phải có POD.
+- Trip assignment approve phải có `tripId` hoặc `vehicleId`.
+- Hub code chỉ cho chữ in hoa, số và dấu gạch ngang.
+- Upload yêu cầu file field đúng tên: `file` hoặc `files`.
 
 ## Auth, permission, throttling
 
-Default endpoint auth la Bearer. Public route phai duoc danh dau `@isPublic()`.
+Default endpoint auth là Bearer. Public route phải được đánh dấu `@isPublic()`.
 
-Permission path duoc normalize tu Express `baseUrl + route.path`, sau do check voi method trong role permissions. Khi them/sua route, chay:
+Permission path được normalize từ Express `baseUrl + route.path`, sau đó check với method trong role permissions. Khi thêm/sửa route, chạy:
 
 ```bash
 npm run p
 ```
 
-Global throttler: 100 requests / 60 giay. Endpoint throttling rieng:
+Global throttler: 100 requests / 60 giây. Endpoint throttling riêng:
 
 | Endpoint                                | Limit                 |
 | --------------------------------------- | --------------------- |
-| `POST /auth/otp`                        | 1 request / 60 giay   |
-| `POST /auth/login`                      | 5 requests / 60 giay  |
-| `POST /auth/forgot-password`            | 3 requests / 15 phut  |
-| `POST /orders/quote`                    | 10 requests / 60 giay |
-| `POST /orders`                          | 5 requests / 60 giay  |
-| `POST /payments/create-intent/:orderId` | 3 requests / 60 giay  |
+| `POST /auth/otp`                        | 1 request / 60 giây   |
+| `POST /auth/login`                      | 5 requests / 60 giây  |
+| `POST /auth/forgot-password`            | 3 requests / 15 phút  |
+| `POST /orders/quote`                    | 10 requests / 60 giây |
+| `POST /orders`                          | 5 requests / 60 giây  |
+| `POST /payments/create-intent/:orderId` | 3 requests / 60 giây  |
 
-## Query va response performance
+## Query và response performance
 
-Quy uoc API:
+Quy ước API:
 
-- List endpoint tra summary nhe.
-- Detail endpoint moi tra nested data.
-- Orders list khong keo receiver detail day du nhu detail response.
-- Trips list tra trip/stops summary; dispatch board co shape rieng de dashboard scan nhanh.
-- Dispatch board hot path co query limit mac dinh de tranh payload/query runaway:
+- List endpoint trả summary nhẹ.
+- Detail endpoint mới trả nested data.
+- Orders list không kéo receiver detail đầy đủ như detail response.
+- Trips list trả trip/stops summary; dispatch board có shape riêng để dashboard scan nhanh.
+- Dispatch board hot path có query limit mặc định để tránh payload/query runaway:
   `ordersLimit=100`, `pendingTripsLimit=50`, `driversLimit=200`, `vehiclesLimit=200`.
-  Driver board dung `assignableOrdersLimit=100`, `requestsLimit=12`.
-  Response co `limits` va `hasMore` de client biet danh sach da bi cat.
-- Notifications list filter theo current user va co `isRead`.
-- Analytics endpoint chi danh cho admin va nen co date range ro rang.
-- Observability list endpoints validate `page`/`limit` bang DTO; `limit=abc`, `page=0`, `limit>100` fail tai boundary thay vi truyen `NaN` xuong Prisma.
+  Driver board dùng `assignableOrdersLimit=100`, `requestsLimit=12`.
+  Response có `limits` và `hasMore` để client biết danh sách đã bị cắt.
+- Notifications list filter theo current user và có `isRead`.
+- Analytics endpoint chỉ dành cho admin và nên có date range rõ ràng.
+- Observability list endpoints validate `page`/`limit` bằng DTO; `limit=abc`, `page=0`, `limit>100` fail tại boundary thay vì truyền `NaN` xuống Prisma.
 
-Indexes lien quan den list/dashboard duoc them trong migrations gan day, gom order/notification/role request/driver assignment request/trip tracking use cases. Neu query cham bat thuong sau deploy, kiem tra migration da apply.
+Indexes liên quan đến list/dashboard được thêm trong migrations gần đây, gồm order/notification/role request/driver assignment request/trip tracking use cases. Nếu query chậm bất thường sau deploy, kiểm tra migration đã apply.
 
-## Database va Prisma
+## Database và Prisma
 
-`PrismaService` dung `PrismaPg` adapter voi PostgreSQL pool:
+`PrismaService` dùng `PrismaPg` adapter với PostgreSQL pool:
 
-- `DATABASE_URL` la connection string bat buoc.
-- `DB_POOL_MAX` va `DB_POOL_IDLE_TIMEOUT_MS` kiem soat pool.
-- Production khong log query mac dinh.
+- `DATABASE_URL` là connection string bắt buộc.
+- `DB_POOL_MAX` và `DB_POOL_IDLE_TIMEOUT_MS` kiểm soát pool.
+- Production không log query mặc định.
 
-Chi bat `PRISMA_QUERY_LOG=1` o local hoac trong thoi gian ngan khi debug. Khong bat dai han o production vi co the lo PII va tao log volume lon.
+Chỉ bật `PRISMA_QUERY_LOG=1` ở local hoặc trong thời gian ngắn khi debug. Không bật dài hạn ở production vì có thể lộ PII và tạo log volume lớn.
 
-Dung transaction khi nghiep vu:
+Dùng transaction khi nghiệp vụ:
 
-- Tao trip + stops + update order.
-- Cap nhat order status + tracking event + POD + COD settlement.
-- Approve/reject assignment request kem tao/cap nhat trip.
+- Tạo trip + stops + update order.
+- Cập nhật order status + tracking event + POD + COD settlement.
+- Approve/reject assignment request kèm tạo/cập nhật trip.
 - Reconcile wallet/COD.
 
-## Cache va queue
+## Cache và queue
 
 Cache:
 
-- Global cache TTL 60 giay qua Redis Keyv.
-- Role permission cache TTL 1 gio theo key `roleId:<id>`.
-- Tracking room access cache TTL default 15 giay.
+- Global cache TTL 60 giây qua Redis Keyv.
+- Role permission cache TTL 1 giờ theo key `roleId:<id>`.
+- Tracking room access cache TTL default 15 giây.
 
 Queue:
 
-- Trips auto-dispatch dung BullMQ.
-- Green-tech emission calculation dung BullMQ processor.
-- Redis connection cho BullMQ doc tu `REDIS_HOST`, `REDIS_PORT`, `REDIS_USERNAME`, `REDIS_PASSWORD`.
+- Trips auto-dispatch dùng BullMQ.
+- Green-tech emission calculation dùng BullMQ processor.
+- Redis connection cho BullMQ đọc từ `REDIS_HOST`, `REDIS_PORT`, `REDIS_USERNAME`, `REDIS_PASSWORD`.
 
-Khi Redis loi, auth permission cache, BullMQ va tracking performance deu co the bi anh huong.
+Khi Redis lỗi, auth permission cache, BullMQ và tracking performance đều có thể bị ảnh hưởng.
 
 ## Tracking realtime
 
@@ -154,10 +154,10 @@ Socket.IO namespace: `/tracking`.
 
 Performance notes:
 
-- Client nen dung transport `websocket`.
-- Dashboard chi join nhung trip dang hien thi hoac dang active.
-- Driver chi gui `driverLocationUpdate` cho active/owned trip.
-- Server cache quyen join room ngan han de tranh query lap khi dashboard sync nhieu trip.
+- Client nên dùng transport `websocket`.
+- Dashboard chỉ join những trip đang hiển thị hoặc đang active.
+- Driver chỉ gửi `driverLocationUpdate` cho active/owned trip.
+- Server cache quyền join room ngắn hạn để tránh query lặp khi dashboard sync nhiều trip.
 
 Events:
 
@@ -168,18 +168,18 @@ Events:
 
 `POST /trips/:id/optimize-route`:
 
-1. Lay hub xuat phat tu vehicle's hub.
+1. Lấy hub xuất phát từ vehicle's hub.
 2. Build waypoint theo stop type:
    - `PICKUP`: sender coordinates.
    - `HUB_TRANSFER`: hub coordinates.
    - Default/dropoff: receiver coordinates.
-3. Goi OSRM `/trip/v1/driving`.
-4. Neu OSRM fail, fallback sang Haversine.
-5. Update `TripStop.stopSequence` trong transaction va cap nhat `Trip.totalDistance`.
+3. Gọi OSRM `/trip/v1/driving`.
+4. Nếu OSRM fail, fallback sang Haversine.
+5. Update `TripStop.stopSequence` trong transaction và cập nhật `Trip.totalDistance`.
 
-Response co:
+Response có:
 
-- `provider`: `OSRM` hoac `HAVERSINE`.
+- `provider`: `OSRM` hoặc `HAVERSINE`.
 - `fallbackUsed`: boolean.
 - `totalDistance`: km.
 - `totalDuration`: seconds.
@@ -187,14 +187,14 @@ Response co:
 
 Debug route optimization:
 
-- Kiem tra vehicle co hub va hub co `latitude`/`longitude`.
-- Kiem tra moi stop co toa do phu hop.
-- Kiem tra `OSRM_BASE_URL` neu muon dung OSRM rieng.
-- Neu `fallbackUsed=true`, xem warn log cua `OsrmRoutingClient`.
+- Kiểm tra vehicle có hub và hub có `latitude`/`longitude`.
+- Kiểm tra mỗi stop có tọa độ phù hợp.
+- Kiểm tra `OSRM_BASE_URL` nếu muốn dùng OSRM riêng.
+- Nếu `fallbackUsed=true`, xem warn log của `OsrmRoutingClient`.
 
 ## Stripe webhook
 
-`main.ts` tao app voi raw body:
+`main.ts` tạo app với raw body:
 
 ```ts
 NestFactory.create(AppModule, { rawBody: true })
@@ -203,18 +203,18 @@ NestFactory.create(AppModule, { rawBody: true })
 Webhook endpoint:
 
 - Path: `POST /payments/webhook`
-- Public route nhung protect bang `stripe-signature`.
-- Payload uu tien `req.rawBody`, fallback `JSON.stringify(body)` cho unit test.
+- Public route nhưng protect bằng `stripe-signature`.
+- Payload ưu tiên `req.rawBody`, fallback `JSON.stringify(body)` cho unit test.
 
 Debug:
 
-- Thieu header tra `Missing stripe-signature header`.
-- Signature sai thuong do body bi parse/serialize lai truoc khi verify.
-- Kiem tra `STRIPE_WEBHOOK_SECRET`.
+- Thiếu header trả `Missing stripe-signature header`.
+- Signature sai thường do body bị parse/serialize lại trước khi verify.
+- Kiểm tra `STRIPE_WEBHOOK_SECRET`.
 
 ## Upload
 
-Cloudinary upload endpoints dung Multer options trong `upload.constants.ts`.
+Cloudinary upload endpoints dùng Multer options trong `upload.constants.ts`.
 
 - `POST /upload/image`: field `file`, allowed folder query `logistic_vehicles`, `logistic_hubs`, `logistic_general`.
 - `POST /upload/pod`: field `file`, folder `logistic_pod`.
@@ -222,27 +222,30 @@ Cloudinary upload endpoints dung Multer options trong `upload.constants.ts`.
 
 Debug upload:
 
-- Kiem tra field name tren multipart request.
-- Kiem tra MIME/size rule trong `uploadMulterOptions`.
-- Kiem tra Cloudinary env.
+- Kiểm tra field name trên multipart request.
+- Kiểm tra MIME/size rule trong `uploadMulterOptions`.
+- Kiểm tra Cloudinary env.
 
-## Checklist debug request cham
+## Checklist debug request chậm
 
-1. Lay `x-request-id` tu response.
-2. Tim backend log theo `[requestId]`.
-3. Neu `slow=yes`, xac dinh endpoint dang la list hay detail.
-4. Kiem tra user role/hub scope co gay query permission/resource lap khong.
-5. Bat tam `PRISMA_QUERY_LOG=1` o local de xem query.
-6. Kiem tra migration index da apply bang `npx prisma migrate status`.
-7. Voi Redis-related slowdown, kiem tra Redis latency va connection settings.
-8. Voi route optimization, xem `fallbackUsed` va warn log OSRM.
+1. Lấy `x-request-id` từ response.
+2. Tìm backend log theo `[requestId]`.
+3. Nếu `slow=yes`, xác định endpoint đang là list hay detail.
+4. Kiểm tra user role/hub scope có gây query permission/resource lặp không.
+5. Bật tạm `PRISMA_QUERY_LOG=1` ở local để xem query.
+6. Kiểm tra migration index đã apply bằng `npx prisma migrate status`.
+7. Với Redis-related slowdown, kiểm tra Redis latency và connection settings.
+8. Với route optimization, xem `fallbackUsed` và warn log OSRM.
 
-## Checklist khi them endpoint moi
+## Checklist khi thêm endpoint mới
 
-1. Dung Zod schema cho body/query/params.
-2. Xac dinh endpoint public hay Bearer.
-3. Them `@Roles` neu can role restriction.
-4. Them `@ResourceAccess` neu can owner/hub protection.
-5. Chay `npm run p` de sync permission.
-6. Cap nhat API docs.
-7. Them test cho validation, permission va loi nghiep vu.
+1. Dùng Zod schema cho body/query/params.
+2. Xác định endpoint public hay Bearer.
+3. Thêm `@Roles` nếu cần role restriction.
+4. Thêm `@ResourceAccess` nếu cần owner/hub protection.
+5. Chạy `npm run p` để sync permission.
+6. Cập nhật API docs.
+7. Thêm test cho validation, permission và lỗi nghiệp vụ.
+
+
+

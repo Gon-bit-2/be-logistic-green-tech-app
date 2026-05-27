@@ -10,7 +10,7 @@ type CalculateEmissionJobData = {
 
 /**
  * BullMQ Worker Processor for computing carbon emissions and green tech metrics in the background.
- * 
+ *
  * Worker Processor của BullMQ để tính toán lượng khí thải carbon và các chỉ số công nghệ xanh chạy ngầm.
  */
 @Processor(GREEN_TECH_QUEUE_NAME)
@@ -19,9 +19,9 @@ export class GreenTechProcessor extends WorkerHost {
 
   /**
    * Initializes the GreenTechProcessor.
-   * 
+   *
    * Khởi tạo GreenTechProcessor.
-   * 
+   *
    * @param greenTechService - Core GreenTech Service / Dịch vụ công nghệ xanh cốt lõi.
    */
   constructor(private readonly greenTechService: GreenTechService) {
@@ -31,10 +31,10 @@ export class GreenTechProcessor extends WorkerHost {
   /**
    * Processes a background emission calculation job from BullMQ.
    * Calculates actual and saved CO2 emissions and updates sustainability databases.
-   * 
+   *
    * Xử lý một công việc tính toán phát thải chạy ngầm từ BullMQ.
    * Tính toán lượng CO2 phát thải thực tế, tiết kiệm được và cập nhật cơ sở dữ liệu bền vững.
-   * 
+   *
    * @param job - The BullMQ job object containing trip ID / Đối tượng job BullMQ chứa ID chuyến đi.
    * @returns Detailed emissions log snapshot details / Chi tiết thông tin bản ghi phát thải được tính toán.
    * @throws Error if trip ID is missing or service execution fails / Error nếu thiếu ID chuyến đi hoặc dịch vụ thực thi thất bại.

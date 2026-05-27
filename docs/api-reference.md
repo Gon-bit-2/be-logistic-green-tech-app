@@ -2,12 +2,12 @@
 
 Last synced with code: 2026-05-05.
 
-Backend khong dung global prefix `/api`. Base URL local thuong la `http://localhost:<PORT>`, vi du `http://localhost:8386/orders`.
+Backend không dùng global prefix `/api`. Base URL local thường là `http://localhost:<PORT>`, ví dụ `http://localhost:8386/orders`.
 
 ## Contract chung
 
-- Success response tra ve truc tiep theo DTO cua endpoint, khong boc them envelope global.
-- Error response di qua `AllExceptionsFilter` va co dang on dinh:
+- Success response trả về trực tiếp theo DTO của endpoint, không bọc thêm envelope global.
+- Error response đi qua `AllExceptionsFilter` và có dạng ổn định:
 
 ```json
 {
@@ -21,13 +21,13 @@ Backend khong dung global prefix `/api`. Base URL local thuong la `http://localh
 }
 ```
 
-- `requestId` duoc doc tu header `x-request-id` hoac tu tao moi; response luon tra lai header nay.
-- Validation dung Zod. Validation error nam trong `errors`.
-- Pagination query dung chung: `page`, `limit`; tuy module co the chi tra `data` va `totalItems`.
+- `requestId` được đọc từ header `x-request-id` hoặc tự tạo mới; response luôn trả lại header này.
+- Validation dùng Zod. Validation error nằm trong `errors`.
+- Pagination query dùng chung: `page`, `limit`; tùy module có thể chỉ trả `data` và `totalItems`.
 
-## Auth va permission
+## Auth và permission
 
-Mac dinh moi endpoint can Bearer token, tru cac endpoint co `@isPublic()`.
+Mặc định mỗi endpoint cần Bearer token, trừ các endpoint có `@isPublic()`.
 
 Header:
 
@@ -35,12 +35,12 @@ Header:
 Authorization: Bearer <accessToken>
 ```
 
-Guard chinh:
+Guard chính:
 
-- `AuthenticationGuard`: xac thuc Bearer/API key/Payment API key theo metadata. Mac dinh la Bearer.
-- `AccessTokenGuard`: verify access token, sau do check permission theo `roleId + path + method`.
+- `AuthenticationGuard`: xác thực Bearer/API key/Payment API key theo metadata. Mặc định là Bearer.
+- `AccessTokenGuard`: verify access token, sau đó check permission theo `roleId + path + method`.
 - `RolesGuard`: check role metadata; `ADMIN` bypass role restriction.
-- `ResourceAccessGuard`: check owner/hub scope cho endpoint co `@ResourceAccess`.
+- `ResourceAccessGuard`: check owner/hub scope cho endpoint có `@ResourceAccess`.
 
 Public endpoints:
 
@@ -371,12 +371,12 @@ Response includes Cloudinary `url`, `public_id`, `format`, `bytes` where applica
 
 Notification types include role request, driver assignment request, and order status notifications.
 
-| Method | Path                          | Auth   | Body / query                                   |
-| ------ | ----------------------------- | ------ | ---------------------------------------------- | ------- |
-| GET    | `/notifications`              | Bearer | `page`, `limit`, optional `isRead=true         | false`. |
-| GET    | `/notifications/unread-count` | Bearer | Returns `{ "totalUnread": number }`.           |
-| PATCH  | `/notifications/read-all`     | Bearer | Mark all current user's notifications as read. |
-| PATCH  | `/notifications/:id/read`     | Bearer | Mark one notification as read.                 |
+| Method | Path                          | Auth   | Body / query                                             |
+| ------ | ----------------------------- | ------ | -------------------------------------------------------- |
+| GET    | `/notifications`              | Bearer | `page`, `limit`, optional `isRead=true` \| `false`.      |
+| GET    | `/notifications/unread-count` | Bearer | Returns `{ "totalUnread": number }`.                     |
+| PATCH  | `/notifications/read-all`     | Bearer | Mark all current user's notifications as read.           |
+| PATCH  | `/notifications/:id/read`     | Bearer | Mark one notification as read.                           |
 
 ## Role requests
 
@@ -434,13 +434,16 @@ All language endpoints require Bearer token and permission.
 | PUT    | `/language/:languageId` | `name`, `code`.                    |
 | DELETE | `/language/:languageId` | Soft delete.                       |
 
-## Business flow chinh
+## Business flow chính
 
-1. `POST /orders/quote` tinh phi, route va CO2 du kien.
-2. `POST /orders` tao order va payment record `STRIPE` hoac `COD`.
-3. `POST /payments/create-intent/:orderId` va Stripe webhook hoan tat online payment; COD chay dispatch binh thuong va duoc driver confirm khi giao.
-4. `GET /trips/dispatch-board`, `GET /trips/dispatch-preview`, `POST /trips/dispatch-approve` gom order thanh trip.
-5. Driver cap nhat trip/order status qua `PATCH /trips/:id/status` hoac `POST /tracking-events`.
-6. Khi giao thanh cong, POD duoc upload qua `/upload/pod` hoac `/upload/multiple-pod`, sau do gan vao tracking event/order status.
-7. `OrderStateService` ghi tracking event, validate state transition, settle COD neu can, emit notification.
-8. Green-tech queue tinh emission sau khi trip hoan tat hoac admin force calculation.
+1. `POST /orders/quote` tính phí, route và CO2 dự kiến.
+2. `POST /orders` tạo order và payment record `STRIPE` hoặc `COD`.
+3. `POST /payments/create-intent/:orderId` và Stripe webhook hoàn tất online payment; COD chạy dispatch bình thường và được driver confirm khi giao.
+4. `GET /trips/dispatch-board`, `GET /trips/dispatch-preview`, `POST /trips/dispatch-approve` gom order thành trip.
+5. Driver cập nhật trip/order status qua `PATCH /trips/:id/status` hoặc `POST /tracking-events`.
+6. Khi giao thành công, POD được upload qua `/upload/pod` hoặc `/upload/multiple-pod`, sau đó gắn vào tracking event/order status.
+7. `OrderStateService` ghi tracking event, validate state transition, settle COD nếu cần, emit notification.
+8. Green-tech queue tính emission sau khi trip hoàn tất hoặc admin force calculation.
+
+
+

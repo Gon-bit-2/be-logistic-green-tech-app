@@ -19,16 +19,16 @@ import {
 
 /**
  * Controller for managing green technology parameters, carbon emission tracking, and sustainable reports.
- * 
+ *
  * Controller quản lý các tham số công nghệ xanh, theo dõi lượng khí thải carbon và báo cáo phát triển bền vững.
  */
 @Controller('green-tech')
 export class GreenTechController {
   /**
    * Initializes the GreenTechController.
-   * 
+   *
    * Khởi tạo GreenTechController.
-   * 
+   *
    * @param greenTechService - The GreenTech service instance / Instance của dịch vụ công nghệ xanh.
    */
   constructor(private readonly greenTechService: GreenTechService) {}
@@ -36,10 +36,10 @@ export class GreenTechController {
   /**
    * Manually triggers or forces emission calculation logs for a completed trip.
    * Only accessible by Admin.
-   * 
+   *
    * Kích hoạt hoặc buộc tính toán các bản ghi phát thải carbon thủ công cho một chuyến đi đã hoàn thành.
    * Chỉ có thể truy cập bởi Admin.
-   * 
+   *
    * @param tripId - Trip ID / ID chuyến đi.
    * @returns Detailed emissions log result / Kết quả chi tiết bản ghi phát thải.
    */
@@ -55,10 +55,10 @@ export class GreenTechController {
   /**
    * Retrieves emission audit calculation logs history for a specific trip.
    * Accessible by Admin and Driver.
-   * 
+   *
    * Lấy lịch sử các bản ghi tính toán phát thải carbon để kiểm toán cho một chuyến đi cụ thể.
    * Có thể truy cập bởi Admin và Tài xế.
-   * 
+   *
    * @param tripId - Trip ID / ID chuyến đi.
    * @returns Array of emission log history entries / Mảng lịch sử các bản ghi phát thải.
    */
@@ -73,10 +73,10 @@ export class GreenTechController {
   /**
    * Retrieves green technology dashboard analytics.
    * Accessible by Admin and Warehouse Staff.
-   * 
+   *
    * Lấy phân tích dữ liệu tổng quan cho trang dashboard công nghệ xanh.
    * Có thể truy cập bởi Admin và Nhân viên kho.
-   * 
+   *
    * @param rawQuery - Query filters / Tham số bộ lọc truy vấn thô.
    * @returns Dashboard analytics metadata / Siêu dữ liệu phân tích trang dashboard.
    */
@@ -94,10 +94,10 @@ export class GreenTechController {
   /**
    * Retrieves carbon footprint statistics for a specific order.
    * Accessible by Admin, Warehouse Staff, and Customer.
-   * 
+   *
    * Lấy thống kê dấu chân carbon (lượng phát thải) của một đơn hàng cụ thể.
    * Có thể truy cập bởi Admin, Nhân viên kho và Khách hàng.
-   * 
+   *
    * @param user - Active user JWT payload / Payload JWT của người dùng đang đăng nhập.
    * @param orderId - Order ID / ID đơn hàng.
    * @returns Detailed carbon footprint of the order / Dấu chân carbon chi tiết của đơn hàng.
@@ -113,10 +113,10 @@ export class GreenTechController {
   /**
    * Retrieves the logged-in customer's cumulative carbon emission savings summary.
    * Only accessible by Customer.
-   * 
+   *
    * Lấy thông tin tóm tắt tổng lượng carbon tiết kiệm tích lũy của khách hàng đang đăng nhập.
    * Chỉ có thể truy cập bởi Khách hàng.
-   * 
+   *
    * @param user - Active customer JWT payload / Payload JWT của khách hàng đang đăng nhập.
    * @param rawQuery - Filter settings / Cấu hình bộ lọc.
    * @returns Sustainability statistics details / Chi tiết thống kê phát triển bền vững.
@@ -133,10 +133,10 @@ export class GreenTechController {
   /**
    * Exports sustainability metrics reports to a downloadable CSV format.
    * Accessible by Admin and Warehouse Staff.
-   * 
+   *
    * Xuất báo cáo các chỉ số bền vững thành tệp tải xuống định dạng CSV.
    * Có thể truy cập bởi Admin và Nhân viên kho.
-   * 
+   *
    * @param rawQuery - Search and filter settings / Cấu hình tìm kiếm và bộ lọc.
    * @param response - Express response object / Đối tượng response của Express.
    */
