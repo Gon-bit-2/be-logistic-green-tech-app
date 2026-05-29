@@ -1,5 +1,11 @@
 import { Module } from '@nestjs/common'
 import { AuthService } from 'src/modules/auth/service/auth.service'
+import { AuthAddressBookService } from 'src/modules/auth/service/auth-address-book.service'
+import { AuthOtpService } from 'src/modules/auth/service/auth-otp.service'
+import { AuthPasswordRecoveryService } from 'src/modules/auth/service/auth-password-recovery.service'
+import { AuthProfileService } from 'src/modules/auth/service/auth-profile.service'
+import { AuthRegistrationService } from 'src/modules/auth/service/auth-registration.service'
+import { AuthSessionService } from 'src/modules/auth/service/auth-session.service'
 import { AuthController } from 'src/modules/auth/controller/auth.controller'
 
 import { GoogleService } from 'src/modules/auth/service/google.service'
@@ -25,6 +31,12 @@ import { DatabaseModule } from 'src/database/database.module'
   controllers: [AuthController],
   providers: [
     AuthService,
+    AuthProfileService,
+    AuthAddressBookService,
+    AuthOtpService,
+    AuthRegistrationService,
+    AuthSessionService,
+    AuthPasswordRecoveryService,
     GoogleService,
     EmailService,
     TokenService,
