@@ -74,7 +74,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   private readonly logger = new Logger(TrackingGateway.name)
   private readonly tripAccessCache = new Map<string, { expiresAt: number; hasAccess: boolean }>()
-  private readonly tripAccessCacheTtlMs = Number(process.env.TRACKING_ACCESS_CACHE_TTL_MS ?? 15_000)
+  private readonly tripAccessCacheTtlMs = envConfig.TRACKING_ACCESS_CACHE_TTL_MS
 
   constructor(
     private readonly wsJwtGuard: WsJwtGuard,

@@ -54,6 +54,13 @@ describe('env config', () => {
 
       expect(envConfig.DATABASE_URL).toBe(REQUIRED_ENV.DATABASE_URL)
       expect(envConfig.REDIS_PORT).toBe(6379)
+      expect(envConfig.DB_POOL_IDLE_TIMEOUT_MS).toBe(30_000)
+      expect(envConfig.DB_POOL_MAX).toBe(10)
+      expect(envConfig.OSRM_BASE_URL).toBe('http://router.project-osrm.org')
+      expect(envConfig.PRISMA_QUERY_LOG).toBe(false)
+      expect(envConfig.SLOW_REQUEST_MS).toBe(1_000)
+      expect(envConfig.TRACKING_ACCESS_CACHE_TTL_MS).toBe(15_000)
+      expect(envConfig.PORT).toBe(3000)
     })
 
     expect(exitSpy).not.toHaveBeenCalled()
@@ -71,5 +78,31 @@ describe('env config', () => {
       })
     }).toThrow('process.exit:1')
     expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('coerces optional runtime tuning values', () => {
+    process.env = {
+      ...REQUIRED_ENV,
+      DB_POOL_IDLE_TIMEOUT_MS: '45000',
+      DB_POOL_MAX: '25',
+      OSRM_BASE_URL: 'http://localhost:5000',
+      PORT: '4000',
+      PRISMA_QUERY_LOG: '1',
+      SLOW_REQUEST_MS: '2500',
+      TRACKING_ACCESS_CACHE_TTL_MS: '30000',
+    } as NodeJS.ProcessEnv
+
+    jest.isolateModules(() => {
+      const configModule = jest.requireActual<typeof import('./config')>('./config')
+      const envConfig = configModule.default
+
+      expect(envConfig.DB_POOL_IDLE_TIMEOUT_MS).toBe(45_000)
+      expect(envConfig.DB_POOL_MAX).toBe(25)
+      expect(envConfig.OSRM_BASE_URL).toBe('http://localhost:5000')
+      expect(envConfig.PORT).toBe(4000)
+      expect(envConfig.PRISMA_QUERY_LOG).toBe(true)
+      expect(envConfig.SLOW_REQUEST_MS).toBe(2_500)
+      expect(envConfig.TRACKING_ACCESS_CACHE_TTL_MS).toBe(30_000)
+    })
   })
 })

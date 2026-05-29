@@ -5,11 +5,34 @@ jest.mock('@nestjs/core', () => ({
 }))
 
 jest.mock('helmet', () => jest.fn(() => 'helmet-middleware'))
+jest.mock('@nestjs/swagger', () => ({
+  DocumentBuilder: jest.fn().mockImplementation(() => ({
+    addBearerAuth: jest.fn().mockReturnThis(),
+    build: jest.fn().mockReturnValue({}),
+    setDescription: jest.fn().mockReturnThis(),
+    setTitle: jest.fn().mockReturnThis(),
+    setVersion: jest.fn().mockReturnThis(),
+  })),
+  SwaggerModule: {
+    createDocument: jest.fn().mockReturnValue({}),
+    setup: jest.fn(),
+  },
+}))
+jest.mock('nestjs-zod', () => {
+  const actual = jest.requireActual('nestjs-zod')
+  return {
+    ...actual,
+    ZodSerializerInterceptor: jest.fn(),
+    ZodValidationPipe: jest.fn(),
+    cleanupOpenApiDoc: jest.fn((document) => document),
+  }
+})
 
 import helmet from 'helmet'
 import { NestFactory } from '@nestjs/core'
 import { bootstrap } from './main'
 import { AppModule } from './app.module'
+import envConfig from './config/config'
 
 describe('bootstrap', () => {
   afterEach(() => {
@@ -36,7 +59,7 @@ describe('bootstrap', () => {
     expect(app.useGlobalPipes).toHaveBeenCalledTimes(1)
     expect(app.useGlobalInterceptors).toHaveBeenCalledTimes(1)
     expect(app.get).toHaveBeenCalledTimes(1)
-    expect(app.listen).toHaveBeenCalledWith(process.env.PORT ?? 3000)
+    expect(app.listen).toHaveBeenCalledWith(envConfig.PORT)
     expect(helmet).toHaveBeenCalledTimes(1)
   })
 })

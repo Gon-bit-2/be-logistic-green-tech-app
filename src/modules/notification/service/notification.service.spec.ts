@@ -5,6 +5,10 @@ import { NotificationRepository } from '../repository/notification.repo'
 import { NotFoundException } from '@nestjs/common'
 import { RoleRequestStatus } from 'src/common/constants/role-request.constant'
 import roleName from 'src/common/constants/role.constant'
+import { NotificationDispatchService } from './notification-dispatch.service'
+import { NotificationEnvelopeMapper } from './notification-envelope.mapper'
+import { NotificationPreferenceService } from './notification-preference.service'
+import { NotificationQueryService } from './notification-query.service'
 
 describe('NotificationService', () => {
   let service: NotificationService
@@ -18,11 +22,20 @@ describe('NotificationService', () => {
       markAsRead: jest.fn(),
       markAllAsRead: jest.fn(),
       createManyForUsers: jest.fn(),
+      findPreference: jest.fn(),
+      createDelivery: jest.fn(),
+      createForUserIdempotent: jest.fn(),
+      listPreferences: jest.fn(),
+      upsertPreferences: jest.fn(),
     }
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationService,
+        NotificationQueryService,
+        NotificationPreferenceService,
+        NotificationEnvelopeMapper,
+        NotificationDispatchService,
         {
           provide: NotificationRepository,
           useValue: notificationRepoMock,

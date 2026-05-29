@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common'
 import { TripsService } from './service/trips.service'
 import { TripsController } from './controller/trips.controller'
 import { TripRepository } from './repository/trip.repository'
+import { TripAvailabilityRepository } from './repository/trip-availability.repository'
+import { TripReadRepository } from './repository/trip-read.repository'
+import { TripWriteRepository } from './repository/trip-write.repository'
 import { BullModule } from '@nestjs/bullmq'
 import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
 import { TripsProcessor } from './processor/trips.processor'
@@ -11,6 +14,10 @@ import { DispatchService } from './service/dispatch.service'
 import { DispatchBoardService } from './service/dispatch-board.service'
 import { DriverAssignmentService } from './service/driver-assignment.service'
 import { TripExecutionService } from './service/trip-execution.service'
+import { TripLifecycleService } from './service/trip-lifecycle.service'
+import { TripOrderMutationService } from './service/trip-order-mutation.service'
+import { TripQueryService } from './service/trip-query.service'
+import { TripVehicleAssignmentService } from './service/trip-vehicle-assignment.service'
 import { TripHubHelper } from './service/trip-hub.helper'
 import { DriverAssignmentHelper } from './service/driver-assignment.helper'
 import { SharedServicesModule } from 'src/common/services/shared-services.module'
@@ -54,6 +61,10 @@ import { EtaService } from './service/eta.service'
     DispatchBoardService, // Dispatch board cho Admin/Staff/Driver
     DriverAssignmentService, // Driver assignment request CRUD
     TripExecutionService, // Trip lifecycle (start, cancel, query)
+    TripQueryService,
+    TripVehicleAssignmentService,
+    TripLifecycleService,
+    TripOrderMutationService,
     TripRouteOptimizationService, // Route optimization + totalDistance source
     EtaService, // ETA/SLA calculation based on optimized route duration
 
@@ -64,6 +75,9 @@ import { EtaService } from './service/eta.service'
     OsrmRoutingClient, // OSRM API client, fallback Haversine
 
     // === Repositories ===
+    TripAvailabilityRepository,
+    TripReadRepository,
+    TripWriteRepository,
     TripRepository,
     TrackingRepository,
     TripsProcessor,

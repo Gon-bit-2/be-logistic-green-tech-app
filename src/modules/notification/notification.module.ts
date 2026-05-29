@@ -4,6 +4,10 @@ import { JwtModule } from '@nestjs/jwt'
 import { NOTIFICATION_QUEUE_NAME } from 'src/common/constants/queue.constant'
 import { WsJwtGuard } from 'src/common/guards/ws-jwt.guard'
 import { NotificationService } from './service/notification.service'
+import { NotificationDispatchService } from './service/notification-dispatch.service'
+import { NotificationEnvelopeMapper } from './service/notification-envelope.mapper'
+import { NotificationPreferenceService } from './service/notification-preference.service'
+import { NotificationQueryService } from './service/notification-query.service'
 import { NotificationController } from './controller/notification.controller'
 import { NotificationRepository } from './repository/notification.repo'
 import { NotificationEventListener } from './listener/notification.event.listener'
@@ -28,6 +32,10 @@ import { NotificationGateway } from './gateway/notification.gateway'
   controllers: [NotificationController],
   providers: [
     NotificationService,
+    NotificationQueryService,
+    NotificationPreferenceService,
+    NotificationEnvelopeMapper,
+    NotificationDispatchService,
     NotificationRepository,
     NotificationEventListener,
     NotificationProcessor,

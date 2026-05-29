@@ -52,7 +52,7 @@ export async function bootstrap() {
     },
   })
 
-  await app.listen(process.env.PORT ?? envConfig.PORT ?? 3000)
+  await app.listen(envConfig.PORT)
 }
 
 if (require.main === module) {
