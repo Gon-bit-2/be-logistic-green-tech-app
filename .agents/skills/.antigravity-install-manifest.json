@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-05-08T07:27:55.452Z",
+  "entries": [
+    "api-endpoint-builder",
+    "audit-skills",
+    "brooks-lint",
+    "bug-hunter",
+    "codebase-audit-pre-push",
+    "docs",
+    "global-chat-agent-discovery",
+    "hono",
+    "jq",
+    "logic-lens",
+    "mise-configurator",
+    "performance-optimizer",
+    "production-audit",
+    "python-pptx-generator",
+    "rayden-code",
+    "security/aws-compliance-checker",
+    "security/aws-iam-best-practices",
+    "security/aws-secrets-rotation",
+    "security/aws-security-audit",
+    "skill-audit",
+    "skill-check",
+    "squirrel",
+    "technical-change-tracker",
+    "tmux"
+  ]
+}

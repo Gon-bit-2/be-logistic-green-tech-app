@@ -19,9 +19,7 @@ import { OrderRepository } from '../repository/order.repo'
 import { MapsService } from 'src/modules/maps/service/maps.service'
 import { calculateHaversineDistance } from 'src/common/utils/geo.util'
 import { PrismaService } from 'src/database/prisma.service'
-import {
-  NotificationEventName,
-} from 'src/modules/notification/events/notification.event'
+import { NotificationEventName } from 'src/modules/notification/events/notification.event'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import roleName from 'src/common/constants/role.constant'
 import { EVENT_SOURCE } from 'src/common/constants/tracking.constant'
@@ -472,5 +470,4 @@ export class OrdersService {
     if (actor.roleName === roleName.CUSTOMER) return EVENT_SOURCE.CUSTOMER_APP
     return EVENT_SOURCE.ADMIN_PORTAL
   }
-
 }
