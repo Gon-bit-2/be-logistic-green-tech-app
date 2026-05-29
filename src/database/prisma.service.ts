@@ -2,44 +2,18 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Prisma, PrismaClient } from 'generated/prisma'
 import { Pool } from 'pg'
+import envConfig from 'src/config/config'
 
 /**
- * Helper function to parse a string into a positive integer.
- * Hàm bổ trợ để phân tích một chuỗi thành một số nguyên dương.
- *
- * If parsing fails or the parsed value is not greater than 0, it returns the provided fallback value.
- * Nếu phân tích thất bại hoặc giá trị được phân tích không lớn hơn 0, nó sẽ trả về giá trị dự phòng được cung cấp.
- *
- * @param {string | undefined} value - The raw string value to parse.
- * @param {string | undefined} value - Giá trị chuỗi thô cần phân tích.
- * @param {number} fallback - The fallback value if parsing fails.
- * @param {number} fallback - Giá trị dự phòng nếu phân tích thất bại.
- * @returns {number} The parsed positive integer or the fallback value.
- * @returns {number} Số nguyên dương được phân tích hoặc giá trị dự phòng.
- */
-function parsePositiveInt(value: string | undefined, fallback: number) {
-  const parsed = Number(value)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
-}
-
-/**
- * Helper function to determine the Prisma client log levels based on the environment.
- * Hàm bổ trợ để xác định các mức độ log của Prisma client dựa trên môi trường.
- *
- * In production, it only logs 'warn' and 'error'.
- * In development, it logs 'query', 'warn', and 'error' if PRISMA_QUERY_LOG is set to '1'.
- * Trong môi trường production, nó chỉ log 'warn' và 'error'.
- * Trong môi trường development, nó log thêm 'query' nếu biến PRISMA_QUERY_LOG được đặt là '1'.
- *
- * @returns {Prisma.LogLevel[]} Array of Prisma log levels.
- * @returns {Prisma.LogLevel[]} Mảng chứa các mức độ log của Prisma.
+ * Resolves Prisma log levels from validated runtime config.
+ * Xác định mức log Prisma từ cấu hình runtime đã được kiểm chứng.
  */
 function resolvePrismaLogLevels(): Prisma.LogLevel[] {
-  if (process.env.NODE_ENV === 'production') {
+  if (envConfig.NODE_ENV === 'production') {
     return ['warn', 'error']
   }
 
-  return process.env.PRISMA_QUERY_LOG === '1' ? ['query', 'warn', 'error'] : ['warn', 'error']
+  return envConfig.PRISMA_QUERY_LOG ? ['query', 'warn', 'error'] : ['warn', 'error']
 }
 
 /**
@@ -55,9 +29,9 @@ function resolvePrismaLogLevels(): Prisma.LogLevel[] {
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
     const pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      idleTimeoutMillis: parsePositiveInt(process.env.DB_POOL_IDLE_TIMEOUT_MS, 30_000),
-      max: parsePositiveInt(process.env.DB_POOL_MAX, 10),
+      connectionString: envConfig.DATABASE_URL,
+      idleTimeoutMillis: envConfig.DB_POOL_IDLE_TIMEOUT_MS,
+      max: envConfig.DB_POOL_MAX,
     })
     const adapter = new PrismaPg(pool)
     super({

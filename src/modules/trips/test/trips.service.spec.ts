@@ -20,6 +20,10 @@ import { DriverAssignmentHelper } from '../service/driver-assignment.helper'
 import { TripCapacityService } from '../service/trip-capacity.service'
 import { OrderStateService } from 'src/common/services/order-state.service'
 import { TripRouteOptimizationService } from '../service/trip-route-optimization.service'
+import { TripLifecycleService } from '../service/trip-lifecycle.service'
+import { TripOrderMutationService } from '../service/trip-order-mutation.service'
+import { TripQueryService } from '../service/trip-query.service'
+import { TripVehicleAssignmentService } from '../service/trip-vehicle-assignment.service'
 
 describe('TripsService', () => {
   let service: TripsService
@@ -137,6 +141,10 @@ describe('TripsService', () => {
         DispatchBoardService,
         DriverAssignmentService,
         TripExecutionService,
+        TripQueryService,
+        TripVehicleAssignmentService,
+        TripLifecycleService,
+        TripOrderMutationService,
         TripHubHelper,
         DriverAssignmentHelper,
         TripCapacityService,

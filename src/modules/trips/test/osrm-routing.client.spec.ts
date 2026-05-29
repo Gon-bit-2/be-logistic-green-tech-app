@@ -6,6 +6,40 @@ describe('OsrmRoutingClient', () => {
   afterEach(() => {
     global.fetch = originalFetch
     jest.clearAllMocks()
+    jest.resetModules()
+  })
+
+  it('dùng OSRM_BASE_URL từ envConfig', async () => {
+    jest.doMock('src/config/config', () => ({
+      __esModule: true,
+      default: { OSRM_BASE_URL: 'http://osrm.local' },
+    }))
+
+    let assertion: Promise<void>
+    jest.isolateModules(() => {
+      const { OsrmRoutingClient: IsolatedClient } =
+        jest.requireActual<typeof import('../service/osrm-routing.client')>('../service/osrm-routing.client')
+      global.fetch = jest.fn().mockResolvedValue({
+        json: jest.fn().mockResolvedValue({
+          code: 'Ok',
+          trips: [{ distance: 10, duration: 2 }],
+          waypoints: [{ waypoint_index: 0 }, { waypoint_index: 1 }],
+        }),
+        ok: true,
+        status: 200,
+      }) as any
+
+      const client = new IsolatedClient()
+      assertion = client
+        .optimizeRoute([
+          { id: 'start', lat: 10, lng: 106 },
+          { id: 'stop-a', lat: 10.1, lng: 106.1 },
+        ])
+        .then(() => {
+          expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('http://osrm.local/trip/v1/driving'))
+        })
+    })
+    await assertion!
   })
 
   it('giữ inputIndex để caller map waypoint về stop gốc', async () => {

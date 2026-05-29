@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { calculateHaversineDistance } from 'src/common/utils/geo.util'
+import envConfig from 'src/config/config'
 import { OsrmTripResponse, RouteOptimizationResult, RouteWaypoint } from '../types/osrm.type'
 
 /**
@@ -12,7 +13,7 @@ import { OsrmTripResponse, RouteOptimizationResult, RouteWaypoint } from '../typ
 @Injectable()
 export class OsrmRoutingClient {
   private readonly logger = new Logger(OsrmRoutingClient.name)
-  private readonly baseUrl = process.env.OSRM_BASE_URL ?? 'http://router.project-osrm.org'
+  private readonly baseUrl = envConfig.OSRM_BASE_URL
 
   /**
    * Requests route optimization from OSRM for a sequence of waypoints.

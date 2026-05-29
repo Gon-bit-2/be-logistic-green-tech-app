@@ -1,10 +1,10 @@
 import { BadRequestException } from '@nestjs/common'
 import { PrismaService } from 'src/database/prisma.service'
-import { TripRepository } from '../repository/trip.repository'
 import { OrderStateService } from 'src/common/services/order-state.service'
+import { TripWriteRepository } from '../repository/trip-write.repository'
 
 describe('TripRepository', () => {
-  let repository: TripRepository
+  let repository: TripWriteRepository
   let tx: any
   let prismaService: { $transaction: jest.Mock }
   let orderStateService: { transitionOrdersInTransaction: jest.Mock; transitionOrderStatus: jest.Mock }
@@ -31,7 +31,7 @@ describe('TripRepository', () => {
       transitionOrdersInTransaction: jest.fn().mockResolvedValue({ count: 1 }),
       transitionOrderStatus: jest.fn().mockResolvedValue({ event: { id: 1 } }),
     }
-    repository = new TripRepository(
+    repository = new TripWriteRepository(
       prismaService as unknown as PrismaService,
       orderStateService as unknown as OrderStateService,
     )

@@ -2,6 +2,7 @@ import { Injectable, Logger, NestMiddleware } from '@nestjs/common'
 import { NextFunction, Response } from 'express'
 import { RequestWithId } from './request-id.middleware'
 import { PrismaService } from 'src/database/prisma.service'
+import envConfig from 'src/config/config'
 
 /**
  * Middleware that provides structured logging for every incoming HTTP request.
@@ -20,7 +21,7 @@ import { PrismaService } from 'src/database/prisma.service'
 @Injectable()
 export class LoggingMiddleware implements NestMiddleware {
   private readonly logger = new Logger(LoggingMiddleware.name)
-  private readonly slowRequestMs = Number(process.env.SLOW_REQUEST_MS ?? 1_000)
+  private readonly slowRequestMs = envConfig.SLOW_REQUEST_MS
 
   constructor(private readonly prisma: PrismaService) {}
 

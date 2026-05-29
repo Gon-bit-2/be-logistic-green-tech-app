@@ -2,6 +2,7 @@ import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, Logge
 import { HttpAdapterHost } from '@nestjs/core'
 import { ZodError } from 'zod'
 import { RequestWithId } from 'src/common/middlewares/request-id.middleware'
+import envConfig from 'src/config/config'
 
 type ExceptionResponseBody = {
   errorCode?: unknown
@@ -164,7 +165,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = exception.issues.map((err) => err.message).join(', ')
       errors = exception.issues
     } else if (exception instanceof Error) {
-      message = process.env.NODE_ENV === 'production' ? 'Internal server error' : exception.message
+      message = envConfig.NODE_ENV === 'production' ? 'Internal server error' : exception.message
     }
 
     return { errorCode, httpStatus, message, errors }
