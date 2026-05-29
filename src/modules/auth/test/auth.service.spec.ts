@@ -12,6 +12,12 @@ import { TypeOfVerificationCode } from 'src/common/constants/auth.constant'
 import { RegisterResSchema } from '../model/auth.model'
 import { addMilliseconds } from 'date-fns'
 import { RoleRepository } from 'src/modules/role/repository/role.repo'
+import { AuthAddressBookService } from '../service/auth-address-book.service'
+import { AuthOtpService } from '../service/auth-otp.service'
+import { AuthPasswordRecoveryService } from '../service/auth-password-recovery.service'
+import { AuthProfileService } from '../service/auth-profile.service'
+import { AuthRegistrationService } from '../service/auth-registration.service'
+import { AuthSessionService } from '../service/auth-session.service'
 
 type PrismaServiceMock = {
   $transaction: jest.Mock
@@ -78,6 +84,12 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
+        AuthProfileService,
+        AuthAddressBookService,
+        AuthOtpService,
+        AuthRegistrationService,
+        AuthSessionService,
+        AuthPasswordRecoveryService,
         { provide: RoleRepository, useValue: roleRepoMock },
         { provide: EmailService, useValue: emailServiceMock },
         { provide: TokenService, useValue: tokenServiceMock },
@@ -253,8 +265,8 @@ describe('AuthService', () => {
           createdById: null,
           updatedById: null,
           deletedAt: null,
-          createdAt: new Date('2026-04-20T00:00:00.000Z'),
-          updatedAt: new Date('2026-04-20T00:00:00.000Z'),
+          createdAt: '2026-04-20T00:00:00.000Z',
+          updatedAt: '2026-04-20T00:00:00.000Z',
         },
       ])
 
