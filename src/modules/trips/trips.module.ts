@@ -6,9 +6,12 @@ import { TripAvailabilityRepository } from './repository/trip-availability.repos
 import { TripReadRepository } from './repository/trip-read.repository'
 import { TripWriteRepository } from './repository/trip-write.repository'
 import { BullModule } from '@nestjs/bullmq'
-import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
+import {
+  AUTO_DISPATCH_QUEUE_NAME,
+  GREEN_TECH_CALCULATE_EMISSION_JOB_OPTIONS,
+  GREEN_TECH_QUEUE_NAME,
+} from 'src/common/constants/queue.constant'
 import { TripsProcessor } from './processor/trips.processor'
-import { GreenTechModule } from '../green-tech/green-tech.module'
 import { TrackingRepository } from 'src/modules/tracking/repository/tracking.repo'
 import { DispatchService } from './service/dispatch.service'
 import { DispatchBoardService } from './service/dispatch-board.service'
@@ -18,6 +21,7 @@ import { TripLifecycleService } from './service/trip-lifecycle.service'
 import { TripOrderMutationService } from './service/trip-order-mutation.service'
 import { TripQueryService } from './service/trip-query.service'
 import { TripVehicleAssignmentService } from './service/trip-vehicle-assignment.service'
+import { TripCreationService } from './service/trip-creation.service'
 import { TripHubHelper } from './service/trip-hub.helper'
 import { DriverAssignmentHelper } from './service/driver-assignment.helper'
 import { SharedServicesModule } from 'src/common/services/shared-services.module'
@@ -31,25 +35,30 @@ import { EtaService } from './service/eta.service'
   imports: [
     DatabaseModule,
     SharedServicesModule,
-    GreenTechModule,
-    BullModule.registerQueue({
-      name: AUTO_DISPATCH_QUEUE_NAME,
-      defaultJobOptions: {
-        attempts: 3, // Retry tối đa 3 lần nếu worker crash/throw error
-        backoff: {
-          type: 'exponential', // Tăng dần thời gian chờ: 5s, 10s, 20s
-          delay: 5000,
-        },
-        removeOnComplete: {
-          age: 3600, // Giữ job thành công trong 1 giờ để Admin có thể xem (thay vì lưu vĩnh viễn)
-          count: 100, // Hoặc tối đa 100 job
-        },
-        removeOnFail: {
-          age: 86400, // Giữ job thất bại trong 24 giờ như một dạng Dead Letter Queue tạm thời
-          count: 500, // Tránh đẩy tràn Redis memory
+    BullModule.registerQueue(
+      {
+        name: AUTO_DISPATCH_QUEUE_NAME,
+        defaultJobOptions: {
+          attempts: 3, // Retry tối đa 3 lần nếu worker crash/throw error
+          backoff: {
+            type: 'exponential', // Tăng dần thời gian chờ: 5s, 10s, 20s
+            delay: 5000,
+          },
+          removeOnComplete: {
+            age: 3600, // Giữ job thành công trong 1 giờ để Admin có thể xem (thay vì lưu vĩnh viễn)
+            count: 100, // Hoặc tối đa 100 job
+          },
+          removeOnFail: {
+            age: 86400, // Giữ job thất bại trong 24 giờ như một dạng Dead Letter Queue tạm thời
+            count: 500, // Tránh đẩy tràn Redis memory
+          },
         },
       },
-    }),
+      {
+        name: GREEN_TECH_QUEUE_NAME,
+        defaultJobOptions: GREEN_TECH_CALCULATE_EMISSION_JOB_OPTIONS,
+      },
+    ),
   ],
   controllers: [TripsController],
   providers: [
@@ -65,6 +74,7 @@ import { EtaService } from './service/eta.service'
     TripVehicleAssignmentService,
     TripLifecycleService,
     TripOrderMutationService,
+    TripCreationService,
     TripRouteOptimizationService, // Route optimization + totalDistance source
     EtaService, // ETA/SLA calculation based on optimized route duration
 

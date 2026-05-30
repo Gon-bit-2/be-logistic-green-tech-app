@@ -12,6 +12,7 @@ import { DISPATCHABLE_PAYMENT_FILTER } from 'src/common/constants/order-query.co
 import { TripCapacityService } from './trip-capacity.service'
 import { EVENT_SOURCE } from 'src/common/constants/tracking.constant'
 import { OrderStateService } from 'src/common/services/order-state.service'
+import { TripWriteRepository } from '../repository/trip-write.repository'
 
 @Injectable()
 export class TripOrderMutationService {
@@ -21,6 +22,7 @@ export class TripOrderMutationService {
     private readonly hubHelper: TripHubHelper,
     private readonly tripCapacityService: TripCapacityService,
     private readonly orderStateService: OrderStateService,
+    private readonly tripWriteRepository: TripWriteRepository,
   ) {}
 
   async addOrdersToTrip(tripId: number, dto: AddOrdersToTripType, actor: AccessTokenPayload) {
@@ -125,6 +127,39 @@ export class TripOrderMutationService {
     const trip = await this.tripRepo.findById(tripId)
     if (!trip) throw new NotFoundException(`Không tìm thấy chuyến #${tripId}`)
 
-    return this.tripRepo.cancelOrderFromTrip(tripId, orderId)
+    return this.prismaService.$transaction(async (tx) => {
+      await this.tripWriteRepository.deleteStopsForOrder(tx, tripId, orderId)
+
+      await this.orderStateService.transitionOrderStatus({
+        createdById: null,
+        description: `Đơn hàng #${orderId} bị hủy khỏi chuyến #${tripId}.`,
+        nextOrderData: {
+          currentTripId: null,
+        },
+        orderId,
+        source: EVENT_SOURCE.SYSTEM,
+        status: ORDER_STATUS.CANCELLED,
+        tx,
+        validationMode: 'system',
+      })
+
+      const remainingOrderStops = await this.tripWriteRepository.findRemainingOrderStops(tx, tripId)
+
+      if (remainingOrderStops.length === 0) {
+        await this.tripWriteRepository.deleteStopsForTrip(tx, tripId)
+        await this.tripWriteRepository.updateTripStatusInTransaction(tx, tripId, TRIP_STATUS.CANCELLED)
+        return { tripCancelled: true }
+      }
+
+      const allRemainingStops = await this.tripWriteRepository.findStopsForTrip(tx, tripId)
+
+      for (let i = 0; i < allRemainingStops.length; i++) {
+        if (allRemainingStops[i].stopSequence !== i + 1) {
+          await this.tripWriteRepository.updateStopSequence(tx, allRemainingStops[i].id, i + 1)
+        }
+      }
+
+      return { tripCancelled: false }
+    })
   }
 }

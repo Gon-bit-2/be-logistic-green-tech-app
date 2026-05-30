@@ -2,46 +2,43 @@ import { BadRequestException } from '@nestjs/common'
 import { PrismaService } from 'src/database/prisma.service'
 import { OrderStateService } from 'src/common/services/order-state.service'
 import { TripWriteRepository } from '../repository/trip-write.repository'
+import { TripCreationService } from '../service/trip-creation.service'
 
-describe('TripRepository', () => {
-  let repository: TripWriteRepository
+describe('TripCreationService', () => {
+  let service: TripCreationService
   let tx: any
   let prismaService: { $transaction: jest.Mock }
-  let orderStateService: { transitionOrdersInTransaction: jest.Mock; transitionOrderStatus: jest.Mock }
+  let tripWriteRepository: jest.Mocked<TripWriteRepository>
+  let orderStateService: { transitionOrdersInTransaction: jest.Mock }
 
   beforeEach(() => {
-    tx = {
-      driverAssignmentRequest: {
-        update: jest.fn(),
-        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
-      },
-      order: {
-        findMany: jest.fn(),
-        updateMany: jest.fn(),
-      },
-      trip: {
-        create: jest.fn(),
-        findFirst: jest.fn().mockResolvedValue(null),
-      },
-    }
+    tx = {}
     prismaService = {
       $transaction: jest.fn((callback) => callback(tx)),
     }
+    tripWriteRepository = {
+      approveAssignmentRequest: jest.fn(),
+      cancelPendingAssignmentRequests: jest.fn().mockResolvedValue({ count: 0 }),
+      createTripRecord: jest.fn(),
+      findActiveTripByDriver: jest.fn().mockResolvedValue(null),
+      findActiveTripByVehicle: jest.fn().mockResolvedValue(null),
+      findDispatchableOrderIds: jest.fn(),
+    } as unknown as jest.Mocked<TripWriteRepository>
     orderStateService = {
       transitionOrdersInTransaction: jest.fn().mockResolvedValue({ count: 1 }),
-      transitionOrderStatus: jest.fn().mockResolvedValue({ event: { id: 1 } }),
     }
-    repository = new TripWriteRepository(
+    service = new TripCreationService(
       prismaService as unknown as PrismaService,
+      tripWriteRepository,
       orderStateService as unknown as OrderStateService,
     )
   })
 
   it('strict mặc định: không tạo trip một phần nếu thiếu order khả dụng', async () => {
-    tx.order.findMany.mockResolvedValue([{ id: 1 }])
+    tripWriteRepository.findDispatchableOrderIds.mockResolvedValue([1])
 
     await expect(
-      repository.createTripWithStops(
+      service.createTripWithStops(
         21,
         12,
         [1, 2],
@@ -52,15 +49,14 @@ describe('TripRepository', () => {
       ),
     ).rejects.toThrow(BadRequestException)
 
-    expect(tx.trip.create).not.toHaveBeenCalled()
+    expect(tripWriteRepository.createTripRecord).not.toHaveBeenCalled()
   })
 
   it('allowPartial: tạo trip với phần order còn khả dụng và lọc stops stale', async () => {
-    tx.order.findMany.mockResolvedValue([{ id: 1 }])
-    tx.trip.create.mockResolvedValue({ id: 88, stops: [] })
-    tx.order.updateMany.mockResolvedValue({ count: 1 })
+    tripWriteRepository.findDispatchableOrderIds.mockResolvedValue([1])
+    tripWriteRepository.createTripRecord.mockResolvedValue({ id: 88, stops: [] } as any)
 
-    const result = await repository.createTripWithStops(
+    const result = await service.createTripWithStops(
       21,
       12,
       [1, 2],
@@ -73,13 +69,10 @@ describe('TripRepository', () => {
     )
 
     expect(result).toEqual({ id: 88, stops: [] })
-    expect(tx.trip.create).toHaveBeenCalledWith(
+    expect(tripWriteRepository.createTripRecord).toHaveBeenCalledWith(
+      tx,
       expect.objectContaining({
-        data: expect.objectContaining({
-          stops: {
-            create: [{ hubId: null, orderId: 1, stopSequence: 1, stopType: 'DROPOFF' }],
-          },
-        }),
+        stopsData: [{ hubId: null, orderId: 1, stopSequence: 1, stopType: 'DROPOFF' }],
       }),
     )
     expect(orderStateService.transitionOrdersInTransaction).toHaveBeenCalledWith(
@@ -92,14 +85,48 @@ describe('TripRepository', () => {
   })
 
   it('chặn tạo trip nếu vehicle đã có trip active trong transaction', async () => {
-    tx.trip.findFirst.mockResolvedValueOnce({ id: 77 }).mockResolvedValueOnce(null)
+    tripWriteRepository.findActiveTripByVehicle.mockResolvedValue({ id: 77 } as any)
 
     await expect(
-      repository.createTripWithStops(21, 12, [1], [
+      service.createTripWithStops(21, 12, [1], [
         { hubId: null, orderId: 1, stopSequence: 1, stopType: 'DROPOFF' },
       ]),
     ).rejects.toThrow('Xe #21 đang bận ở chuyến #77')
 
-    expect(tx.order.findMany).not.toHaveBeenCalled()
+    expect(tripWriteRepository.findDispatchableOrderIds).not.toHaveBeenCalled()
+  })
+})
+
+describe('TripWriteRepository', () => {
+  it('createTripRecord maps trip and nested stops to Prisma create', async () => {
+    const prismaService = { trip: { update: jest.fn() } } as unknown as PrismaService
+    const repository = new TripWriteRepository(prismaService)
+    const tx = {
+      trip: {
+        create: jest.fn().mockResolvedValue({ id: 1 }),
+      },
+    }
+
+    await repository.createTripRecord(tx as any, {
+      driverId: 12,
+      stopsData: [{ hubId: null, orderId: 1, stopSequence: 1, stopType: 'DROPOFF' }],
+      totalDistance: 42,
+      vehicleId: 21,
+    })
+
+    expect(tx.trip.create).toHaveBeenCalledWith({
+      data: {
+        driverId: 12,
+        status: 'PENDING',
+        stops: {
+          create: [{ hubId: null, orderId: 1, stopSequence: 1, stopType: 'DROPOFF' }],
+        },
+        totalDistance: 42,
+        vehicleId: 21,
+      },
+      include: {
+        stops: true,
+      },
+    })
   })
 })

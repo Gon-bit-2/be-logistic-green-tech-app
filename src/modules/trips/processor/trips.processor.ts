@@ -10,6 +10,7 @@ import { TripStopType } from '../model/trip.model'
 import { acquireLock, releaseLock } from 'src/common/utils/redis-lock.util'
 import Redis from 'ioredis'
 import envConfig from 'src/config/config'
+import { TripCreationService } from '../service/trip-creation.service'
 
 /**
  * BullMQ processor responsible for automated trip dispatching.
@@ -28,6 +29,7 @@ export class TripsProcessor extends WorkerHost {
   constructor(
     private readonly tripRepository: TripRepository,
     private readonly prismaService: PrismaService,
+    private readonly tripCreationService: TripCreationService,
   ) {
     super()
     // Khởi tạo Redis client riêng cho Distributed Lock (tách biệt với BullMQ connection)
@@ -329,7 +331,7 @@ export class TripsProcessor extends WorkerHost {
         }))
 
         try {
-          const createdTrip = await this.tripRepository.createTripWithStops(
+          const createdTrip = await this.tripCreationService.createTripWithStops(
             vehicle.id,
             driverId,
             assignedOrders.map((o) => o.id),

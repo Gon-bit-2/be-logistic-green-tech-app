@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common'
-import { TripRepository } from '../repository/trip.repository'
 import {
   AddOrdersToTripType,
   CancelTripBodyType,
@@ -17,17 +16,18 @@ import { TripQueryService } from './trip-query.service'
 import { TripVehicleAssignmentService } from './trip-vehicle-assignment.service'
 import { TripLifecycleService } from './trip-lifecycle.service'
 import { TripOrderMutationService } from './trip-order-mutation.service'
+import { TripCreationService } from './trip-creation.service'
 
 @Injectable()
 export class TripExecutionService {
   constructor(
-    private readonly tripRepo: TripRepository,
     private readonly hubHelper: TripHubHelper,
     private readonly tripCapacityService: TripCapacityService,
     private readonly queryService: TripQueryService,
     private readonly vehicleAssignmentService: TripVehicleAssignmentService,
     private readonly lifecycleService: TripLifecycleService,
     private readonly orderMutationService: TripOrderMutationService,
+    private readonly tripCreationService: TripCreationService,
   ) {}
 
   getTrips(query: GetTripsQueryType, actor: AccessTokenPayload) {
@@ -54,7 +54,7 @@ export class TripExecutionService {
       stopType: STOP_TYPE.DROPOFF,
     }))
 
-    return this.tripRepo.createTripWithStops(dto.vehicleId, dto.driverId, dto.orderIds, stops, undefined, {
+    return this.tripCreationService.createTripWithStops(dto.vehicleId, dto.driverId, dto.orderIds, stops, undefined, {
       stateCreatedById: actor.userId,
       stateSource: actor.roleName === roleName.WAREHOUSE_STAFF ? EVENT_SOURCE.HUB_SCANNER : EVENT_SOURCE.ADMIN_PORTAL,
     })

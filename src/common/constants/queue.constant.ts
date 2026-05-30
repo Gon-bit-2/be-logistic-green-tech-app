@@ -1,3 +1,5 @@
+import type { JobsOptions } from 'bullmq'
+
 export const PAYMENT_QUEUE_NAME = 'payment'
 export const CANCEL_PAYMENT_JOB_NAME = 'cancel-payment'
 
@@ -9,3 +11,19 @@ export const DELIVER_NOTIFICATION_JOB_NAME = 'deliver-notification'
 // Phase 4: Green Tech — BullMQ queue tính CO₂ emission sau khi Trip hoàn thành
 export const GREEN_TECH_QUEUE_NAME = 'green-tech'
 export const CALCULATE_EMISSION_JOB_NAME = 'calculate-emission'
+export const buildCalculateEmissionJobId = (tripId: number) => `${CALCULATE_EMISSION_JOB_NAME}:${tripId}`
+export const GREEN_TECH_CALCULATE_EMISSION_JOB_OPTIONS: JobsOptions = {
+  attempts: 3,
+  backoff: {
+    delay: 5000,
+    type: 'exponential',
+  },
+  removeOnComplete: {
+    age: 3600,
+    count: 100,
+  },
+  removeOnFail: {
+    age: 86400,
+    count: 500,
+  },
+}
