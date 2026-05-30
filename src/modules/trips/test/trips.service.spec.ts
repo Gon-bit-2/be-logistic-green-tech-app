@@ -3,9 +3,14 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { TripsService } from '../service/trips.service'
 import { TripRepository } from '../repository/trip.repository'
 import { PrismaService } from 'src/database/prisma.service'
-import { GamificationService } from '../../green-tech/service/gamification.service'
 import { getQueueToken } from '@nestjs/bullmq'
-import { AUTO_DISPATCH_QUEUE_NAME } from 'src/common/constants/queue.constant'
+import {
+  AUTO_DISPATCH_QUEUE_NAME,
+  buildCalculateEmissionJobId,
+  CALCULATE_EMISSION_JOB_NAME,
+  GREEN_TECH_CALCULATE_EMISSION_JOB_OPTIONS,
+  GREEN_TECH_QUEUE_NAME,
+} from 'src/common/constants/queue.constant'
 import { NotFoundException } from '@nestjs/common'
 import { Queue } from 'bullmq'
 import { EventEmitter2 } from '@nestjs/event-emitter'
@@ -24,13 +29,16 @@ import { TripLifecycleService } from '../service/trip-lifecycle.service'
 import { TripOrderMutationService } from '../service/trip-order-mutation.service'
 import { TripQueryService } from '../service/trip-query.service'
 import { TripVehicleAssignmentService } from '../service/trip-vehicle-assignment.service'
+import { TripCreationService } from '../service/trip-creation.service'
+import { TripWriteRepository } from '../repository/trip-write.repository'
 
 describe('TripsService', () => {
   let service: TripsService
   let tripRepo: jest.Mocked<TripRepository>
   let prismaService: any
   let queueMock: jest.Mocked<Queue>
-  let gamificationServiceMock: any
+  let greenTechQueueMock: jest.Mocked<Queue>
+  let tripWriteRepositoryMock: any
   let tripRouteOptimizationServiceMock: any
 
   beforeEach(async () => {
@@ -113,8 +121,16 @@ describe('TripsService', () => {
       emitSafe: jest.fn().mockResolvedValue(undefined),
     }
 
-    gamificationServiceMock = {
-      processTripEmission: jest.fn().mockResolvedValue(undefined),
+    greenTechQueueMock = {
+      add: jest.fn().mockResolvedValue({ id: 'green-tech-job' } as any),
+    } as any
+    tripWriteRepositoryMock = {
+      deleteStopsForOrder: jest.fn().mockResolvedValue({ count: 1 }),
+      deleteStopsForTrip: jest.fn().mockResolvedValue({ count: 0 }),
+      findRemainingOrderStops: jest.fn().mockResolvedValue([{ id: 1, stopSequence: 1 }]),
+      findStopsForTrip: jest.fn().mockResolvedValue([{ id: 1, stopSequence: 1 }]),
+      updateStopSequence: jest.fn().mockResolvedValue({ id: 1 }),
+      updateTripStatusInTransaction: jest.fn().mockResolvedValue({ id: 3 }),
     }
     tripRouteOptimizationServiceMock = {
       optimizeRouteForTrip: jest.fn().mockResolvedValue({
@@ -157,12 +173,12 @@ describe('TripsService', () => {
           useValue: prismaServiceMock,
         },
         {
-          provide: GamificationService,
-          useValue: gamificationServiceMock,
-        },
-        {
           provide: getQueueToken(AUTO_DISPATCH_QUEUE_NAME),
           useValue: queueFactoryMock,
+        },
+        {
+          provide: getQueueToken(GREEN_TECH_QUEUE_NAME),
+          useValue: greenTechQueueMock,
         },
         {
           provide: EventEmitter2,
@@ -183,6 +199,16 @@ describe('TripsService', () => {
         {
           provide: TripRouteOptimizationService,
           useValue: tripRouteOptimizationServiceMock,
+        },
+        {
+          provide: TripCreationService,
+          useValue: {
+            createTripWithStops: jest.fn(),
+          },
+        },
+        {
+          provide: TripWriteRepository,
+          useValue: tripWriteRepositoryMock,
         },
       ],
     }).compile()
@@ -454,7 +480,14 @@ describe('TripsService', () => {
       )
 
       expect(res).toEqual({ id: 1, status: 'COMPLETED' })
-      expect(gamificationServiceMock.processTripEmission).toHaveBeenCalledWith(1)
+      expect(greenTechQueueMock.add).toHaveBeenCalledWith(
+        CALCULATE_EMISSION_JOB_NAME,
+        { tripId: 1 },
+        {
+          ...GREEN_TECH_CALCULATE_EMISSION_JOB_OPTIONS,
+          jobId: buildCalculateEmissionJobId(1),
+        },
+      )
     })
   })
 
@@ -752,13 +785,12 @@ describe('TripsService', () => {
   })
 
   describe('cancelOrderFromTrip', () => {
-    it('hủy order khỏi trip qua repository', async () => {
+    it('hủy order khỏi trip qua write repository persistence methods', async () => {
       tripRepo.findById.mockResolvedValue({ id: 3 } as any)
-      tripRepo.cancelOrderFromTrip = jest.fn().mockResolvedValue({ tripCancelled: false } as any)
 
       const res = await service.cancelOrderFromTrip(3, 99)
 
-      expect(tripRepo.cancelOrderFromTrip).toHaveBeenCalledWith(3, 99)
+      expect(tripWriteRepositoryMock.deleteStopsForOrder).toHaveBeenCalled()
       expect(res).toEqual({ tripCancelled: false })
     })
 

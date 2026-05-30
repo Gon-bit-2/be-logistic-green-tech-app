@@ -12,6 +12,7 @@ import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import roleName from 'src/common/constants/role.constant'
 import { TripCapacityService } from './trip-capacity.service'
 import { EVENT_SOURCE } from 'src/common/constants/tracking.constant'
+import { TripCreationService } from './trip-creation.service'
 
 /**
  * Service xử lý logic điều phối tự động (Auto-Dispatch).
@@ -42,6 +43,7 @@ export class DispatchService {
     private readonly prismaService: PrismaService,
     private readonly hubHelper: TripHubHelper,
     private readonly tripCapacityService: TripCapacityService,
+    private readonly tripCreationService: TripCreationService,
   ) {}
 
   /**
@@ -253,7 +255,7 @@ export class DispatchService {
 
     const stops = this.normalizeAndValidateApproveStops(dto)
 
-    return this.tripRepo.createTripWithStops(dto.vehicleId, dto.driverId, dto.orderIds, stops, undefined, {
+    return this.tripCreationService.createTripWithStops(dto.vehicleId, dto.driverId, dto.orderIds, stops, undefined, {
       stateCreatedById: actor.userId,
       stateSource: actor.roleName === roleName.WAREHOUSE_STAFF ? EVENT_SOURCE.HUB_SCANNER : EVENT_SOURCE.ADMIN_PORTAL,
     })

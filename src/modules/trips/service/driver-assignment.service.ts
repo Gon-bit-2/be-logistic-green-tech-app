@@ -24,6 +24,7 @@ import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import { TripCapacityService } from './trip-capacity.service'
 import { OrderStateService } from 'src/common/services/order-state.service'
 import { EVENT_SOURCE } from 'src/common/constants/tracking.constant'
+import { TripCreationService } from './trip-creation.service'
 
 type PendingAssignmentTrip = Prisma.TripGetPayload<{
   include: {
@@ -61,6 +62,7 @@ export class DriverAssignmentService {
     private readonly assignmentHelper: DriverAssignmentHelper,
     private readonly tripCapacityService: TripCapacityService,
     private readonly orderStateService: OrderStateService,
+    private readonly tripCreationService: TripCreationService,
   ) {}
 
   /**
@@ -335,7 +337,7 @@ export class DriverAssignmentService {
         vehicleId: dto.vehicleId,
       })
 
-      const createdTrip = await this.tripRepo.createTripWithStops(
+      const createdTrip = await this.tripCreationService.createTripWithStops(
         dto.vehicleId,
         request.driverId,
         [request.orderId],

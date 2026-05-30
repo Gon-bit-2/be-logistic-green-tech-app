@@ -3,6 +3,7 @@ import { Job } from 'bullmq'
 import { Logger } from '@nestjs/common'
 import { GreenTechService } from '../service/green-tech.service'
 import { GREEN_TECH_QUEUE_NAME, CALCULATE_EMISSION_JOB_NAME } from 'src/common/constants/queue.constant'
+import { GamificationService } from '../service/gamification.service'
 
 type CalculateEmissionJobData = {
   tripId: number
@@ -24,7 +25,10 @@ export class GreenTechProcessor extends WorkerHost {
    *
    * @param greenTechService - Core GreenTech Service / Dịch vụ công nghệ xanh cốt lõi.
    */
-  constructor(private readonly greenTechService: GreenTechService) {
+  constructor(
+    private readonly greenTechService: GreenTechService,
+    private readonly gamificationService: GamificationService,
+  ) {
     super()
   }
 
@@ -53,6 +57,17 @@ export class GreenTechProcessor extends WorkerHost {
         }
 
         const result = await this.greenTechService.calculateTripEmission(tripId)
+
+        try {
+          await this.gamificationService.processTripEmission(tripId)
+        } catch (gamificationError) {
+          this.logger.warn(
+            `Gamification failed for Trip #${tripId}: ${
+              gamificationError instanceof Error ? gamificationError.message : String(gamificationError)
+            }`,
+          )
+        }
+
         this.logger.log(`✅ Tính toán GreenTech thành công cho Trip #${tripId}`)
         return result
       }

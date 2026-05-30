@@ -1,4 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common'
+import { InjectQueue } from '@nestjs/bullmq'
+import { Queue } from 'bullmq'
 import { PrismaService } from 'src/database/prisma.service'
 import { CancelTripBodyType } from '../model/trip.model'
 import { TRIP_STATUS } from 'src/common/constants/trip.constant'
@@ -7,10 +9,15 @@ import { calculateHaversineDistance } from 'src/common/utils/geo.util'
 import { TripHubHelper } from './trip-hub.helper'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
 import roleName from 'src/common/constants/role.constant'
-import { GamificationService } from 'src/modules/green-tech/service/gamification.service'
 import { EVENT_SOURCE } from 'src/common/constants/tracking.constant'
 import { OrderStateService } from 'src/common/services/order-state.service'
 import { AuditLogService } from 'src/common/services/audit-log.service'
+import {
+  buildCalculateEmissionJobId,
+  CALCULATE_EMISSION_JOB_NAME,
+  GREEN_TECH_CALCULATE_EMISSION_JOB_OPTIONS,
+  GREEN_TECH_QUEUE_NAME,
+} from 'src/common/constants/queue.constant'
 
 @Injectable()
 export class TripLifecycleService {
@@ -19,7 +26,7 @@ export class TripLifecycleService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly hubHelper: TripHubHelper,
-    private readonly gamificationService: GamificationService,
+    @InjectQueue(GREEN_TECH_QUEUE_NAME) private readonly greenTechQueue: Queue,
     private readonly orderStateService: OrderStateService,
     @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
@@ -231,11 +238,18 @@ export class TripLifecycleService {
 
     try {
       if (trip.vehicle) {
-        await this.gamificationService.processTripEmission(tripId)
+        await this.greenTechQueue.add(
+          CALCULATE_EMISSION_JOB_NAME,
+          { tripId },
+          {
+            ...GREEN_TECH_CALCULATE_EMISSION_JOB_OPTIONS,
+            jobId: buildCalculateEmissionJobId(tripId),
+          },
+        )
       }
     } catch (error) {
       this.logger.warn(
-        `Gamification failed for trip #${tripId}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to enqueue green-tech job for trip #${tripId}: ${error instanceof Error ? error.message : String(error)}`,
       )
     }
 

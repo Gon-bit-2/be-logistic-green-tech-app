@@ -5,7 +5,12 @@ import { PrismaService } from 'src/database/prisma.service'
 import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
 import { EVENT_SOURCE, TRACKING_EVENT_TYPE, MAX_DELIVERY_ATTEMPTS } from 'src/common/constants/tracking.constant'
-import { GREEN_TECH_QUEUE_NAME, CALCULATE_EMISSION_JOB_NAME } from 'src/common/constants/queue.constant'
+import {
+  buildCalculateEmissionJobId,
+  CALCULATE_EMISSION_JOB_NAME,
+  GREEN_TECH_CALCULATE_EMISSION_JOB_OPTIONS,
+  GREEN_TECH_QUEUE_NAME,
+} from 'src/common/constants/queue.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
 import roleName from 'src/common/constants/role.constant'
 import type { AccessTokenPayload } from 'src/common/types/jwt.type'
@@ -204,10 +209,23 @@ export class TrackingService {
       )
 
       // Phase 4: Enqueue BullMQ job "calculate-emission" Trigger Green Tech Calculation
-      await this.greenTechQueue.add(CALCULATE_EMISSION_JOB_NAME, {
-        tripId: tripId,
-      })
-      this.logger.log(`[TRACKING] Đã đẩy job tính CO2 lên queue cho Trip #${tripId}.`)
+      try {
+        await this.greenTechQueue.add(
+          CALCULATE_EMISSION_JOB_NAME,
+          { tripId },
+          {
+            ...GREEN_TECH_CALCULATE_EMISSION_JOB_OPTIONS,
+            jobId: buildCalculateEmissionJobId(tripId),
+          },
+        )
+        this.logger.log(`[TRACKING] Đã đẩy job tính CO2 lên queue cho Trip #${tripId}.`)
+      } catch (error) {
+        this.logger.warn(
+          `[TRACKING] Không thể đẩy job tính CO2 cho Trip #${tripId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      }
     }
   }
 

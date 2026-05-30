@@ -4,7 +4,12 @@ import { TrackingService } from '../service/tracking.service'
 import { TrackingRepository } from '../repository/tracking.repo'
 import { PrismaService } from 'src/database/prisma.service'
 import { getQueueToken } from '@nestjs/bullmq'
-import { CALCULATE_EMISSION_JOB_NAME, GREEN_TECH_QUEUE_NAME } from 'src/common/constants/queue.constant'
+import {
+  buildCalculateEmissionJobId,
+  CALCULATE_EMISSION_JOB_NAME,
+  GREEN_TECH_CALCULATE_EMISSION_JOB_OPTIONS,
+  GREEN_TECH_QUEUE_NAME,
+} from 'src/common/constants/queue.constant'
 import { BadRequestException, NotFoundException } from '@nestjs/common'
 import { TRACKING_EVENT_TYPE } from 'src/common/constants/tracking.constant'
 import { ORDER_STATUS } from 'src/common/constants/order.constant'
@@ -221,7 +226,14 @@ describe('TrackingService', () => {
         data: expect.objectContaining({ status: 'COMPLETED' }),
       })
       // Test GreenTech Queue added
-      expect(greenTechQueue.add).toHaveBeenCalledWith(CALCULATE_EMISSION_JOB_NAME, { tripId: 100 })
+      expect(greenTechQueue.add).toHaveBeenCalledWith(
+        CALCULATE_EMISSION_JOB_NAME,
+        { tripId: 100 },
+        {
+          ...GREEN_TECH_CALCULATE_EMISSION_JOB_OPTIONS,
+          jobId: buildCalculateEmissionJobId(100),
+        },
+      )
     })
 
     it('gộp thu COD khi driver xác nhận DELIVERED cho đơn COD', async () => {
