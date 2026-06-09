@@ -38,7 +38,8 @@ RUN npm install --omit=dev
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 # Copy mã nguồn đã được biên dịch xong (thư mục dist) từ Giai đoạn 1
 COPY --from=builder --chown=node:node /app/dist ./dist
-
+#Copy thư mục Prisma client đặc chế (custom)
+COPY --from=builder --chown=node:node /app/generated ./generated
 #User node để tăng cường bảo mật 
 USER node
 
